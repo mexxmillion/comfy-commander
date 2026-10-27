@@ -73,7 +73,17 @@
       </section>
 
       <section>
-        <div class="section-title"><span class="step">04</span><div><h2>Choose a focused profile</h2><p>Community Edition ships Qwen Image and public MiniMax H3 paths. Your registered LoRAs remain an explicit personal layer.</p></div></div>
+        <div class="section-title"><span class="step">04</span><div><h2>Use it from your phone</h2><p>Keep Tensor Master on localhost and let Tailscale Serve provide private HTTPS access inside your tailnet.</p></div></div>
+        <article class="phone-card">
+          <div><span class="status connected">PRIVATE HTTPS</span><h3>No router port forwarding</h3><p>Install Tailscale on this computer and your phone, sign into the same tailnet, then run:</p></div>
+          <code>tailscale serve --bg --yes http://127.0.0.1:8000</code>
+          <div class="phone-steps"><span>1 · Create the password once on this host</span><span>2 · Open the printed https://…ts.net URL on your phone</span><span>3 · Sign in and drive the studio</span></div>
+          <p class="note">Use Tailscale <strong>Serve</strong>, not Telnet or Funnel. Serve stays private to the tailnet; Funnel is public internet exposure.</p>
+        </article>
+      </section>
+
+      <section>
+        <div class="section-title"><span class="step">05</span><div><h2>Choose a focused profile</h2><p>Community Edition ships Qwen Image and public MiniMax H3 paths. Your registered LoRAs remain an explicit personal layer.</p></div></div>
         <div class="profile-grid">
           {% for id, profile in profiles.items() %}
           <article><span>{{ profile.kind }}</span><h3>{{ profile.name }}</h3><p>{{ profile.summary }}</p><small>Minimum {{ profile.minimum_vram_gb }} GB VRAM{% if profile.gated %} · may require accepted upstream terms{% endif %}</small></article>
@@ -82,7 +92,7 @@
       </section>
 
       <section class="replacement-card">
-        <div><span class="step">05</span><p>FEATURED WORKFLOW</p><h2>Character replacement,<br>without anchor guesswork.</h2></div>
+        <div><span class="step">06</span><p>FEATURED WORKFLOW</p><h2>Character replacement,<br>without anchor guesswork.</h2></div>
         <ol><li>Prepare identity references with Qwen.</li><li>Track one performer with a reviewed SAM3 video mask.</li><li>Invert only that target and pass the aligned video to H3 Ref2VA.</li><li>Review expressions, choreography and seams before delivery.</li></ol>
         <p class="note">The default accepted route uses the tracked video guide and no Add Guide image nodes.</p>
       </section>

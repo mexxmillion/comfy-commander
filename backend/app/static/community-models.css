@@ -16,7 +16,13 @@
 .registered-list article div { display: grid; gap: 5px; }
 .registered-list span, .registered-list small { color: var(--muted); font-size: .78rem; }
 code { color: var(--lime); }
+.phone-card { display: grid; gap: 18px; border: 1px solid var(--line); border-radius: 20px; padding: 24px; background: linear-gradient(135deg, rgba(34, 37, 40, .96), rgba(25, 32, 24, .96)); }
+.phone-card > code { display: block; overflow-x: auto; padding: 16px; border: 1px solid #465231; border-radius: 14px; background: #10140d; color: var(--lime); }
+.phone-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; color: var(--muted); font-size: .85rem; }
+.phone-steps span { border-top: 1px solid var(--line); padding-top: 12px; }
+.phone-card .note { margin: 0; }
 @media (max-width: 760px) {
   .lora-grid, .registered-card { grid-template-columns: 1fr; }
   .management-card fieldset { grid-template-columns: 1fr; }
+  .phone-steps { grid-template-columns: 1fr; }
 }

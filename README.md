@@ -42,6 +42,33 @@ docker compose up --build
 The published port is bound to localhost by default. Put an authenticated HTTPS
 proxy or private network in front of it before allowing remote access.
 
+## Open it securely on a phone
+
+The recommended personal deployment uses
+[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve). Keep the
+controller bound to `127.0.0.1:8000`; Serve adds a private HTTPS `*.ts.net` URL
+that is reachable only through the tailnet and remains subject to its access
+rules.
+
+Install Tailscale on the controller and phone, sign both into the same tailnet,
+create the Tensor Master password once on the host, then run:
+
+```powershell
+.\tools\share_phone.ps1
+```
+
+The equivalent direct command is:
+
+```powershell
+tailscale serve --bg --yes http://127.0.0.1:8000
+tailscale serve status
+```
+
+Open the printed HTTPS URL on the phone and sign in. Do not use Telnet, expose
+port 8000 on a router, change the Compose binding to all interfaces, or use
+Tailscale Funnel for normal private access. Funnel makes the service public.
+See [the complete phone-access and troubleshooting guide](docs/PHONE_ACCESS.md).
+
 ## First-run onboarding
 
 The setup page handles four independent credentials:

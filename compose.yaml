@@ -10,6 +10,9 @@ services:
       CLOUD_OUTPUT_DIR: /data/outputs
       COMMUNITY_LORA_MANIFEST: /data/community-loras.json
       MODEL_DIRECTORIES: '["/models"]'
+      # Safe because the published port below remains localhost-only. This lets
+      # a host-local Tailscale Serve proxy mark HTTPS requests correctly.
+      FORWARDED_ALLOW_IPS: '*'
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
