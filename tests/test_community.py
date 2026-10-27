@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from backend.app import character_replacement, community_loras
+from backend.app import character_replacement, community_loras, credential_paths
 from backend.app.character_replacement import PrepareRequest
 from backend.app.community import COMMUNITY_PROFILES, character_replacement_recipe
 from backend.app.community_loras import RegisterLora, read_manifest, save_manifest
@@ -117,3 +117,17 @@ def test_agent_workflow_analysis_builds_unresolved_safe_profile():
     assert analysis["node_types"] == ["LoraLoaderModelOnly"]
     assert analysis["model_references"] == ["personal/style.safetensors"]
     assert analysis["profile_draft"]["models"][0]["source"] == "unresolved"
+
+
+def test_environment_provider_secret_precedes_private_file(tmp_path, monkeypatch):
+    saved = tmp_path / "runpod"
+    saved.write_text("file-value", encoding="utf-8")
+    monkeypatch.setenv("RUNPOD_API_KEY", "environment-value")
+    assert credential_paths.provider_secret("runpod", saved) == "environment-value"
+    assert credential_paths.provider_secret_source("runpod", saved) == "environment"
+
+
+def test_huggingface_accepts_standard_environment_alias(tmp_path, monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setenv("HUGGINGFACE_TOKEN", "alias-value")
+    assert credential_paths.provider_secret("huggingface", tmp_path / "missing") == "alias-value"

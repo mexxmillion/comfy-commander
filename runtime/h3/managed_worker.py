@@ -75,7 +75,8 @@ def log(message: str) -> None:
 
 
 def vast() -> VastAI:
-    return VastAI(api_key=settings().vast_api_key_file.read_text(encoding="utf-8").strip(), raw=True)
+    from backend.app.credential_paths import provider_secret
+    return VastAI(api_key=provider_secret("vast", settings().vast_api_key_file), raw=True)
 
 
 MAX_DOWNLOAD_COST_PER_GB = 0.01   # default for callers without settings; see Settings.max_download_cost_per_gb
@@ -203,8 +204,12 @@ def validate_bundle_manifest(bundle: Path | None = None, manifest_path: Path | N
 
 def preflight() -> None:
     configured = settings()
-    for path in (configured.vast_api_key_file, SSH_KEY, SSH_PUBLIC_KEY, BUNDLE,
-                 configured.huggingface_token_file):
+    from backend.app.credential_paths import provider_secret
+    if not provider_secret("vast", configured.vast_api_key_file):
+        raise RuntimeError("Missing Vast API key")
+    if not provider_secret("huggingface", configured.huggingface_token_file):
+        raise RuntimeError("Missing Hugging Face token")
+    for path in (SSH_KEY, SSH_PUBLIC_KEY, BUNDLE):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
     validate_bundle_manifest(community_path=configured.community_lora_manifest)
@@ -251,6 +256,18 @@ def transfer(record: dict, local: Path, remote_name: str) -> None:
     with LOG.open("a", encoding="utf-8") as output:
         result = subprocess.run(args, stdout=output, stderr=subprocess.STDOUT,
                                 timeout=300, creationflags=flags, check=False)
+    if result.returncode:
+        raise RuntimeError(f"Transfer of {remote_name} failed")
+
+
+def transfer_secret(record: dict, value: str, remote_name: str) -> None:
+    """Send a secret over SSH stdin so it never appears in args or logs."""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    args = ["ssh", *ssh_arguments(record), f"umask 077; cat > /workspace/{remote_name}"]
+    with LOG.open("a", encoding="utf-8") as output:
+        result = subprocess.run(args, input=value + "\n", text=True, stdout=output,
+                                stderr=subprocess.STDOUT, timeout=60,
+                                creationflags=flags, check=False)
     if result.returncode:
         raise RuntimeError(f"Transfer of {remote_name} failed")
 
@@ -482,9 +499,10 @@ def launch(record: dict) -> None:
             (ROOT / "runtime/h3/remote_prepare.sh", "remote_prepare.sh"),
             (ROOT / "runtime/h3/remote_sync.sh", "remote_sync.sh"),
             (ROOT / "runtime/h3/remote_start.sh", "remote_start.sh"),
-            (settings().huggingface_token_file, "hf_read.txt"),
         ] + credential_files(record):
             transfer(record, path, remote_name)
+        from backend.app.credential_paths import provider_secret
+        transfer_secret(record, provider_secret("huggingface", settings().huggingface_token_file), "hf_read.txt")
         run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token",
                 timeout=60, logfile=LOG)
         provision_prompt_key(record)

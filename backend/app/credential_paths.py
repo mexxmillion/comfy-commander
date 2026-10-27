@@ -4,6 +4,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_CREDENTIALS = ROOT / "state" / "credentials"
+PROVIDER_ENVIRONMENTS = {
+    "runpod": ("RUNPOD_API_KEY",),
+    "vast": ("VAST_API_KEY",),
+    "huggingface": ("HF_TOKEN", "HUGGINGFACE_TOKEN"),
+}
 
 
 def credential_directory() -> Path:
@@ -21,6 +26,27 @@ def provider_secret_file(provider: str) -> Path:
     if provider not in {"runpod", "vast", "huggingface"}:
         raise ValueError("Unsupported secret provider")
     return credential_directory() / f"{provider}_api_key"
+
+
+def provider_secret(provider: str, path: Path | None = None) -> str:
+    """Read a provider key without exposing its source or value to callers."""
+    if provider not in PROVIDER_ENVIRONMENTS:
+        raise ValueError("Unsupported secret provider")
+    for name in PROVIDER_ENVIRONMENTS[provider]:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    candidate = path or provider_secret_file(provider)
+    try:
+        return candidate.read_text(encoding="utf-8").strip() if candidate.is_file() else ""
+    except OSError:
+        return ""
+
+
+def provider_secret_source(provider: str, path: Path | None = None) -> str | None:
+    if any(os.getenv(name, "").strip() for name in PROVIDER_ENVIRONMENTS[provider]):
+        return "environment"
+    return "private file" if provider_secret(provider, path) else None
 
 
 def openrouter_secret_file() -> Path:

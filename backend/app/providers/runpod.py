@@ -10,6 +10,7 @@ import re
 import httpx
 
 from ..config import get_settings
+from ..credential_paths import provider_secret
 from ..rental_cost import MIN_CLOUD_VRAM_GB, RUNPOD_GPU_NAMES
 
 REST = "https://rest.runpod.io/v1"
@@ -28,14 +29,13 @@ exec /usr/sbin/sshd -D -e -o PermitRootLogin=prohibit-password -o PasswordAuthen
 
 
 def configured() -> bool:
-    path = get_settings().runpod_api_key_file
-    return path.is_file() and bool(path.read_text(encoding="utf-8").strip())
+    return bool(provider_secret("runpod", get_settings().runpod_api_key_file))
 
 
 def client() -> RunpodProvider:
     if not configured():
         raise RuntimeError("Save your Runpod API key in runpod.txt on the Tensor Master PC first")
-    return RunpodProvider(get_settings().runpod_api_key_file.read_text(encoding="utf-8").strip())
+    return RunpodProvider(provider_secret("runpod", get_settings().runpod_api_key_file))
 
 
 class RunpodProvider:

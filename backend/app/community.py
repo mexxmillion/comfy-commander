@@ -27,7 +27,7 @@ from .community_loras import (
     upload_lora,
 )
 from .config import get_settings
-from .credential_paths import openrouter_secret_file
+from .credential_paths import openrouter_secret_file, provider_secret, provider_secret_source
 from .identity import authority
 from .providers.runpod import RunpodProvider
 from .rental_ui import require_admin
@@ -96,9 +96,9 @@ def setup_status() -> dict:
         password = False
     return {
         "password": password,
-        "runpod": _configured(settings.runpod_api_key_file),
-        "vast": bool(settings.vast_api_key) or _configured(settings.vast_api_key_file),
-        "huggingface": _configured(settings.huggingface_token_file),
+        "runpod": bool(provider_secret("runpod", settings.runpod_api_key_file)),
+        "vast": bool(provider_secret("vast", settings.vast_api_key_file)),
+        "huggingface": bool(provider_secret("huggingface", settings.huggingface_token_file)),
         "openrouter": _configured(openrouter_secret_file()) or bool(os.getenv("OPENROUTER_API_KEY", "").strip()),
         "ready": password,
     }
@@ -170,7 +170,15 @@ async def setup_page(request: Request) -> HTMLResponse:
 
 @router.get("/api/v1/setup/status")
 async def status() -> dict:
-    return {"services": setup_status(), "profiles": COMMUNITY_PROFILES}
+    settings = get_settings()
+    sources = {
+        "runpod": provider_secret_source("runpod", settings.runpod_api_key_file),
+        "vast": provider_secret_source("vast", settings.vast_api_key_file),
+        "huggingface": provider_secret_source("huggingface", settings.huggingface_token_file),
+        "openrouter": "environment" if os.getenv("OPENROUTER_API_KEY", "").strip() else
+                      ("private file" if setup_status()["openrouter"] else None),
+    }
+    return {"services": setup_status(), "credential_sources": sources, "profiles": COMMUNITY_PROFILES}
 
 
 def _local_diagnostics() -> dict:

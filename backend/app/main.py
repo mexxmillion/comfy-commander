@@ -939,9 +939,8 @@ async def view_task_output(task_id: str, filename: str, store: QueueStore = STOR
 async def vast_offers(gpu: Literal["rtx5090", "rtxpro6000ws"] = "rtx5090") -> dict:
     """Read-only marketplace search; never returns the API key or raw provider metadata."""
     settings = get_settings()
-    key = settings.vast_api_key
-    if not key and settings.vast_api_key_file.is_file():
-        key = settings.vast_api_key_file.read_text(encoding="utf-8").strip()
+    from .credential_paths import provider_secret
+    key = provider_secret("vast", settings.vast_api_key_file)
     if not key:
         raise HTTPException(status_code=409, detail="Vast API key is not configured")
     gpu_name, min_vram_gb = VAST_GPU_PROFILES[gpu]

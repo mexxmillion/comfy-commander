@@ -389,7 +389,8 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
                     f"No supported Runpod Secure Cloud GPU is in stock under the ${settings.max_gpu_price_per_hour:.2f}/hr safety cap. Refresh later or choose Vast.ai."}
         except (RuntimeError, OSError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
-    key = settings.vast_api_key or settings.vast_api_key_file.read_text(encoding="utf-8").strip()
+    from .credential_paths import provider_secret
+    key = provider_secret("vast", settings.vast_api_key_file)
     results = VastProvider(key).search_offers(OfferSearch(
         VAST_GPUS, MIN_CLOUD_VRAM_GB, settings.max_gpu_price_per_hour, 0.98, 150,
         extra_query=f"inet_down>={VAST_MIN_INET_DOWN} direct_port_count>=1 cuda_max_good>=13"))

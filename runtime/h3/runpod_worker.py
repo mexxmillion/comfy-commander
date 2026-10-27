@@ -21,8 +21,11 @@ from runtime.h3 import managed_worker as shared
 
 def preflight():
     client()
+    from backend.app.credential_paths import provider_secret
+    if not provider_secret("huggingface", get_settings().huggingface_token_file):
+        raise RuntimeError("Missing Hugging Face token")
     for path in (shared.SSH_KEY, Path(str(shared.SSH_KEY) + ".pub"), shared.BUNDLE,
-                 get_settings().huggingface_token_file, get_settings().token_file):
+                 get_settings().token_file):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
     shared.validate_bundle_manifest(community_path=get_settings().community_lora_manifest)
@@ -136,9 +139,10 @@ def launch(record):
         for path, name in [(shared.BUNDLE, "h3-cloud-runtime.tar.gz"),
             (ROOT / "runtime/h3/remote_prepare.sh", "remote_prepare.sh"),
             (ROOT / "runtime/h3/remote_sync.sh", "remote_sync.sh"),
-            (ROOT / "runtime/h3/remote_start.sh", "remote_start.sh"),
-            (get_settings().huggingface_token_file, "hf_read.txt")] + shared.credential_files(record):
+            (ROOT / "runtime/h3/remote_start.sh", "remote_start.sh")] + shared.credential_files(record):
             shared.transfer(record, path, name)
+        from backend.app.credential_paths import provider_secret
+        shared.transfer_secret(record, provider_secret("huggingface", get_settings().huggingface_token_file), "hf_read.txt")
         shared.run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token", timeout=60, logfile=shared.LOG)
         shared.provision_prompt_key(record)
         shared.update(status="preparing")

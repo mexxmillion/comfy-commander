@@ -214,8 +214,8 @@ def _metadata(repo_id: str, revision: str, filename: str, token: str) -> tuple[s
 
 
 def huggingface_token() -> str:
-    path = get_settings().huggingface_token_file
-    token = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+    from .credential_paths import provider_secret
+    token = provider_secret("huggingface", get_settings().huggingface_token_file)
     if not token:
         raise ValueError("Connect Hugging Face before managing cloud LoRAs")
     return token

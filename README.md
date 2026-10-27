@@ -88,6 +88,20 @@ Keys are validated server-side, written to the configured private credential
 directory with restrictive permissions, and never returned by the API. Do not
 put credentials in prompts, Comfy graphs, recipes or agent instructions.
 
+Keys may instead come from system or container environment variables. These
+are read at process startup and take precedence over private files:
+
+| Service | Environment variable |
+|---|---|
+| RunPod | `RUNPOD_API_KEY` |
+| Vast.ai | `VAST_API_KEY` |
+| Hugging Face | `HF_TOKEN` (or `HUGGINGFACE_TOKEN`) |
+| OpenRouter | `OPENROUTER_API_KEY` |
+
+The setup API reports only `environment` or `private file` as the source; it
+never returns the value. Removing a saved local credential cannot remove a
+system-provided variable. Restart the controller after changing its environment.
+
 `/setup` remains available after onboarding as **Setup & Models**. An admin can
 replace or remove locally stored credentials there. Provider-side revocation is
 still performed at the provider.
