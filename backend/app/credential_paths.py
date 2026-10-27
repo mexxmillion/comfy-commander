@@ -28,9 +28,17 @@ def openrouter_secret_file() -> Path:
     if explicit:
         return Path(explicit)
     stable = credential_directory() / "openrouter_api_key.dpapi"
-    if os.name == "nt" and stable.is_file():
+    try:
+        stable_exists = stable.is_file()
+    except OSError:
+        stable_exists = False
+    if os.name == "nt" and stable_exists:
         return stable
     portable = credential_directory() / "openrouter_api_key"
-    if portable.is_file() or os.name != "nt":
+    try:
+        portable_exists = portable.is_file()
+    except OSError:
+        portable_exists = False
+    if portable_exists or os.name != "nt":
         return portable
     return Path(os.getenv("APPDATA", "")) / "ComfyUI" / "openrouter_api_key.dpapi"

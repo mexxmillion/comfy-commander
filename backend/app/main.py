@@ -27,7 +27,9 @@ from pydantic import BaseModel, Field
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import character_replacement, creative, krea, ltx, qwen_prompt, reference_preprocess
-from .community import router as community_router, setup_status
+from .community import router as community_router
+from .community import setup_status
+from .community_loras import entries_for_profile
 from .config import get_settings
 from .creative_prompts import PROMPT_VERSION
 from .generator import router as generator_router
@@ -54,6 +56,7 @@ from .rental_ui import (
     router as rental_router,
 )
 from .store import DEFAULT_PRIORITY, MAX_PRIORITY, MIN_PRIORITY, QueueStore
+from .studio_agent import router as studio_agent_router
 from .version import TENSOR_MASTER_VERSION
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -74,6 +77,7 @@ app.include_router(rental_router)
 app.include_router(generator_router)
 app.include_router(media_router)
 app.include_router(community_router)
+app.include_router(studio_agent_router)
 app.add_middleware(GalleryCompression, minimum_size=1000)
 
 
@@ -567,6 +571,7 @@ def cloud_profile_for_graph(graph: dict[str, dict[str, Any]]) -> str:
         manifest = json.loads((Path(__file__).resolve().parents[2] / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
         groups = set(manifest["profiles"][profile])
         available = {Path(item["file"]).name for item in manifest["artifacts"] if item["group"] in groups}
+        available.update(item["file"].replace("\\", "/") for item in entries_for_profile(profile))
         requested = {node.get("inputs", {}).get("lora_name") for node in graph.values()
                      if node.get("class_type") in {"LoraLoaderModelOnly", "ViggleTurboLora"}}
         if not requested <= available:
@@ -613,6 +618,7 @@ def cloud_profile_for_graph(graph: dict[str, dict[str, Any]]) -> str:
             continue
         installed = (str(item["local_dir"]).rstrip("/.") + "/" + item["file"]).lstrip("/").replace("\\", "/")
         available.add(installed.removeprefix("loras/") if installed.startswith("loras/") else Path(item["file"]).name)
+    available.update(item["file"].replace("\\", "/") for item in entries_for_profile(profile))
     requested = {str(node.get("inputs", {}).get("gate_file" if node.get("class_type") == "Ref2VAVSAGatePatch" else "lora_name")).replace("\\", "/")
                  for node in graph.values()
                  if node.get("class_type") in {"LoraLoaderModelOnly", "Ref2VAVSAGatePatch"}}

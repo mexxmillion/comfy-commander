@@ -8,8 +8,9 @@ charge for data transfer.
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 from pathlib import Path
+
+from .config import get_settings
 
 # Cloud GPUs Tensor Master rents for H3. 24 GB (RTX 4090) runs the 768x1344 Eros graph like the local 3090 does.
 VAST_GPUS = ("RTX_5090", "RTX_4090", "RTX_6000Ada")
@@ -19,12 +20,16 @@ MIN_CLOUD_VRAM_GB = 24
 LOCK = Path(__file__).resolve().parents[2] / "runtime" / "h3" / "models.lock.json"
 
 
-@lru_cache
 def profile_sync_gb(profile: str) -> float:
-    """Gigabytes a fresh worker downloads for this runtime profile (models.lock.json)."""
+    """Gigabytes a fresh worker downloads, including the user's pinned LoRAs."""
     manifest = json.loads(LOCK.read_text(encoding="utf-8"))
     groups = set(manifest["profiles"].get(profile, ()))
     size = sum(int(item.get("size") or 0) for item in manifest["artifacts"] if item.get("group") in groups)
+    personal = get_settings().community_lora_manifest
+    if personal.is_file():
+        community = json.loads(personal.read_text(encoding="utf-8"))
+        size += sum(int(item.get("size") or 0) for item in community.get("loras", [])
+                    if profile in item.get("profiles", []))
     return round(size / 1e9, 1)
 
 

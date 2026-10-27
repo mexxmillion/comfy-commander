@@ -25,7 +25,7 @@ def preflight():
                  get_settings().huggingface_token_file, get_settings().token_file):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
-    shared.validate_bundle_manifest()
+    shared.validate_bundle_manifest(community_path=get_settings().community_lora_manifest)
 
 
 def destroy(record, reason):

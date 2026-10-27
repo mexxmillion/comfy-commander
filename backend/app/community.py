@@ -14,6 +14,15 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from .character_replacement import PrepareRequest, build_graph
+from .community_loras import (
+    RegisterLora,
+    UploadLora,
+    local_candidates,
+    read_manifest,
+    register_lora,
+    remove_entry,
+    upload_lora,
+)
 from .config import get_settings
 from .credential_paths import openrouter_secret_file
 from .identity import authority
@@ -173,6 +182,74 @@ async def save_secret(payload: SecretSetup, request: Request) -> dict:
     return {"ok": True, "service": payload.service, "message": message}
 
 
+@router.delete("/api/v1/setup/secret/{service}")
+async def delete_secret(service: Literal["runpod", "vast", "huggingface", "openrouter"], request: Request) -> dict:
+    require_admin(request, mutation=True)
+    settings = get_settings()
+    paths = [_secret_path(service)]
+    if service == "openrouter":
+        # Remove the portable community credential, but never delete a DPAPI file
+        # that another ComfyUI installation may own.
+        paths = [settings.token_file.parent / "openrouter_api_key"]
+    removed = False
+    for path in paths:
+        try:
+            if path.is_file():
+                path.unlink()
+                removed = True
+        except OSError as exc:
+            raise HTTPException(500, "Could not remove the local credential") from exc
+    still_connected = bool(setup_status()[service])
+    message = ("Local credential removed. An environment-provided credential is still active."
+               if still_connected else
+               "Local credential removed. Provider-side revocation is separate.")
+    return {"ok": True, "service": service, "removed": removed,
+            "connected": still_connected, "message": message}
+
+
+@router.get("/api/v1/setup/loras")
+async def list_loras(request: Request) -> dict:
+    require_admin(request)
+    return {
+        "local": local_candidates(),
+        "registered": read_manifest()["loras"],
+        "profiles": [key for key in COMMUNITY_PROFILES if key != "h3-character-replacement"],
+        "huggingface_connected": setup_status()["huggingface"],
+    }
+
+
+@router.post("/api/v1/setup/loras/register")
+async def add_registered_lora(payload: RegisterLora, request: Request) -> dict:
+    require_admin(request, mutation=True)
+    try:
+        item = register_lora(payload)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Hugging Face could not verify that LoRA") from exc
+    return {"ok": True, "lora": item}
+
+
+@router.post("/api/v1/setup/loras/upload")
+async def add_uploaded_lora(payload: UploadLora, request: Request) -> dict:
+    require_admin(request, mutation=True)
+    try:
+        item = upload_lora(payload)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Hugging Face could not upload that LoRA") from exc
+    return {"ok": True, "lora": item}
+
+
+@router.delete("/api/v1/setup/loras/{entry_id}")
+async def unregister_lora(entry_id: str, request: Request) -> dict:
+    require_admin(request, mutation=True)
+    if not remove_entry(entry_id):
+        raise HTTPException(404, "LoRA registration not found")
+    return {"ok": True, "message": "Removed from future workers; no local or Hugging Face file was deleted."}
+
+
 @router.get("/api/v1/community/profiles")
 async def profiles() -> dict:
     return {"profiles": COMMUNITY_PROFILES}
@@ -186,11 +263,16 @@ async def agent_manifest() -> dict:
         "read_only": ["GET /health", "GET /api/v1/community/profiles", "GET /api/v1/jobs/{job_id}"],
         "builders": ["POST /api/v1/community/character-replacement/prepare"],
         "mutations": ["POST /api/v1/jobs"],
+        "human_admin_only": [
+            "POST/DELETE /api/v1/setup/secret/*",
+            "POST/DELETE /api/v1/setup/loras/*",
+        ],
         "rules": [
             "Never place credentials in prompts, graphs, recipes, logs, or command arguments.",
             "Validate a selected profile and inputs before submission.",
             "A timed-out submission may have succeeded; reconcile before retrying.",
             "Rentals require an authenticated human session and explicit cost limits.",
+            "Agents must not upload LoRAs or change credentials unless a human explicitly requests that exact action.",
         ],
     }
 

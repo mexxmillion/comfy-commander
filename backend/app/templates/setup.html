@@ -3,25 +3,28 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Set up Tensor Master Community</title>
+    <title>Setup & Models · Tensor Master Community</title>
     <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/community.css?v=1">
+    <link rel="stylesheet" href="/static/community-models.css?v=1">
+    <link rel="stylesheet" href="/static/agent-widget.css?v=1">
     <script defer src="/static/community.js?v=1"></script>
+    <script defer src="/static/agent-widget.js?v=1"></script>
   </head>
   <body>
     <main class="setup-shell">
       <header class="setup-hero">
         <span class="mark">TM</span>
-        <div><p>OPEN COMFY STUDIO</p><h1>Bring a GPU.<br><em>Or launch one.</em></h1></div>
+        <div><p>SETUP & MODELS</p><h1>Your studio.<br><em>Your credentials.</em></h1></div>
         <a href="/">Open studio →</a>
       </header>
 
       <section class="intro-card">
-        <div><span class="step">01</span><h2>Protect your studio</h2><p>Create the password used for rentals and configuration. First-time password creation is available only from localhost.</p></div>
-        <form id="password-form">
-          <label>Admin password<input id="password" type="password" minlength="12" autocomplete="new-password" required></label>
-          <label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>
-          <button type="submit">{{ 'Password configured ✓' if status.password else 'Create password' }}</button>
+        <div><span class="step">01</span><h2>{{ 'Unlock settings' if status.password else 'Protect your studio' }}</h2><p>{{ 'Sign in to replace credentials and manage the LoRAs included in future workers.' if status.password else 'Create the password used for rentals and configuration. First-time password creation is available only from localhost.' }}</p></div>
+        <form id="password-form" data-mode="{{ 'login' if status.password else 'setup' }}">
+          <label>Admin password<input id="password" type="password" minlength="12" autocomplete="{{ 'current-password' if status.password else 'new-password' }}" required></label>
+          {% if not status.password %}<label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>{% endif %}
+          <button type="submit">{{ 'Sign in' if status.password else 'Create password' }}</button>
         </form>
       </section>
 
@@ -36,15 +39,41 @@
           ] %}
           <article class="service-card" data-service="{{ id }}">
             <div><span class="status {{ 'connected' if status[id] else '' }}">{{ 'Connected' if status[id] else optional }}</span><h3>{{ label }}</h3><p>{{ detail }}</p></div>
-            <form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste credential" autocomplete="off"><button type="submit">Connect & test</button></form>
+            <form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste new credential" autocomplete="off"><button type="submit">{{ 'Replace & test' if status[id] else 'Connect & test' }}</button></form>
+            <button class="quiet remove-secret" type="button" {% if not status[id] %}hidden{% endif %}>Remove local credential</button>
             <small role="status"></small>
           </article>
           {% endfor %}
         </div>
       </section>
 
+      <section id="lora-management">
+        <div class="section-title"><span class="step">03</span><div><h2>Your LoRAs, on your workers</h2><p>Upload a local LoRA to your Hugging Face account or register an existing repository file. Only pinned, verified entries are included in newly built cloud workers.</p></div></div>
+        <p class="callout">Nothing uploads automatically. Uploading requires this page, an authenticated admin session, and a deliberate click. Running workers are unchanged.</p>
+        <div class="lora-grid">
+          <form id="lora-upload-form" class="management-card">
+            <div><span class="status">LOCAL → HUGGING FACE</span><h3>Upload a local LoRA</h3><p>Select a file already inside a configured ComfyUI <code>models/loras</code> directory.</p></div>
+            <label>Local LoRA<select id="local-lora" required><option value="">Loading local LoRAs…</option></select></label>
+            <label>Hugging Face repository<input id="upload-repo" placeholder="your-name/your-model" required></label>
+            <label>Path in repository<input id="upload-path" placeholder="my-style.safetensors" required></label>
+            <label class="check"><input id="upload-private" type="checkbox" checked> Keep repository private</label>
+            <fieldset data-profile-picker="upload"><legend>Use with profiles</legend></fieldset>
+            <button type="submit">Upload & pin for workers</button><small role="status"></small>
+          </form>
+          <form id="lora-register-form" class="management-card">
+            <div><span class="status">EXISTING HUGGING FACE FILE</span><h3>Register an existing LoRA</h3><p>Use an immutable commit SHA so every worker receives exactly the reviewed file.</p></div>
+            <label>Repository<input id="register-repo" placeholder="owner/model" required></label>
+            <label>Commit SHA<input id="register-revision" minlength="40" maxlength="64" placeholder="40-character commit SHA" required></label>
+            <label>File in repository<input id="register-file" placeholder="my-style.safetensors" required></label>
+            <fieldset data-profile-picker="register"><legend>Use with profiles</legend></fieldset>
+            <button type="submit">Verify & register</button><small role="status"></small>
+          </form>
+        </div>
+        <div class="registered-card"><div><h3>Registered for future workers</h3><p>Unregistering does not delete files locally or on Hugging Face.</p></div><div id="registered-loras" class="registered-list"><p>Sign in to load your LoRAs.</p></div></div>
+      </section>
+
       <section>
-        <div class="section-title"><span class="step">03</span><div><h2>Choose a focused profile</h2><p>Community Edition ships Qwen Image and public MiniMax H3 paths. Private personalities and personal LoRAs are intentionally excluded.</p></div></div>
+        <div class="section-title"><span class="step">04</span><div><h2>Choose a focused profile</h2><p>Community Edition ships Qwen Image and public MiniMax H3 paths. Your registered LoRAs remain an explicit personal layer.</p></div></div>
         <div class="profile-grid">
           {% for id, profile in profiles.items() %}
           <article><span>{{ profile.kind }}</span><h3>{{ profile.name }}</h3><p>{{ profile.summary }}</p><small>Minimum {{ profile.minimum_vram_gb }} GB VRAM{% if profile.gated %} · may require accepted upstream terms{% endif %}</small></article>
@@ -53,7 +82,7 @@
       </section>
 
       <section class="replacement-card">
-        <div><span class="step">04</span><p>FEATURED WORKFLOW</p><h2>Character replacement,<br>without anchor guesswork.</h2></div>
+        <div><span class="step">05</span><p>FEATURED WORKFLOW</p><h2>Character replacement,<br>without anchor guesswork.</h2></div>
         <ol><li>Prepare identity references with Qwen.</li><li>Track one performer with a reviewed SAM3 video mask.</li><li>Invert only that target and pass the aligned video to H3 Ref2VA.</li><li>Review expressions, choreography and seams before delivery.</li></ol>
         <p class="note">The default accepted route uses the tracked video guide and no Add Guide image nodes.</p>
       </section>

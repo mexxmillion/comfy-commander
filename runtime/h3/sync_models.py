@@ -5,15 +5,39 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 
-
 LOCK_FILE = Path(__file__).with_name("models.lock.json")
+COMMUNITY_FILE = Path(__file__).with_name("community-loras.json")
+HEX_REVISION = re.compile(r"^[0-9a-fA-F]{40,64}$")
+HEX_SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
+def community_artifacts(profile: str) -> list[dict]:
+    if not COMMUNITY_FILE.is_file():
+        return []
+    data = json.loads(COMMUNITY_FILE.read_text(encoding="utf-8"))
+    if data.get("version") != 1 or not isinstance(data.get("loras"), list):
+        raise ValueError("Unsupported community LoRA manifest")
+    selected = []
+    for item in data["loras"]:
+        if profile not in item.get("profiles", []):
+            continue
+        if (item.get("local_dir") != "loras"
+                or not HEX_SHA256.fullmatch(str(item.get("sha256", "")))
+                or not HEX_REVISION.fullmatch(str(item.get("revision", "")))
+                or not isinstance(item.get("size"), int) or item["size"] <= 0):
+            raise ValueError("Invalid community LoRA manifest entry")
+        selected.append({key: item[key] for key in ("repo", "revision", "file", "local_dir", "size", "sha256")})
+    return selected
+
+
 def selected_artifacts(profile: str) -> list[dict]:
     manifest = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
     groups = set(manifest["profiles"][profile])
-    return [item for item in manifest["artifacts"] if item["group"] in groups]
+    return [item for item in manifest["artifacts"] if item["group"] in groups] + community_artifacts(profile)
 
 
 def target_path(models_dir: Path, artifact: dict) -> Path:
@@ -49,6 +73,16 @@ def main() -> None:
     args = parser.parse_args()
 
     artifacts = manifest['artifacts'] if args.all else selected_artifacts(args.profile)
+    if args.all and COMMUNITY_FILE.is_file():
+        dynamic = []
+        for profile in manifest["profiles"]:
+            dynamic.extend(community_artifacts(profile))
+        known = {(item["repo"], item["revision"], item["file"]) for item in artifacts}
+        for item in dynamic:
+            identity = (item["repo"], item["revision"], item["file"])
+            if identity not in known:
+                artifacts.append(item)
+                known.add(identity)
     total = sum(item["size"] for item in artifacts)
     print(f"{args.profile or 'all profiles'}: {len(artifacts)} files, {total / 1024**3:.1f} GiB")
     if args.list:

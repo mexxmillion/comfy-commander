@@ -2,6 +2,7 @@ param(
     [string]$ComfyRoot = $env:COMFYUI_ROOT,
     [string]$Image = 'tensor-master/pocket-h3:dev',
     [string]$LocalPython = $env:COMFYUI_PYTHON,
+    [string]$CommunityLoraManifest = $env:COMMUNITY_LORA_MANIFEST,
     [switch]$BundleOnly
 )
 
@@ -72,6 +73,10 @@ try {
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $runtimeDir
         }
         $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+        if (-not $CommunityLoraManifest) { $CommunityLoraManifest = Join-Path $repoRoot 'state\community-loras.json' }
+        if (Test-Path -LiteralPath $CommunityLoraManifest) {
+            Copy-Item -LiteralPath $CommunityLoraManifest -Destination (Join-Path $runtimeDir 'community-loras.json')
+        }
         foreach ($name in @('__init__.py','worker.py','worker_recovery.py')) {
             Copy-Item -LiteralPath (Join-Path $repoRoot (Join-Path 'backend' $name)) -Destination $backendDir
         }

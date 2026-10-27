@@ -1,0 +1,23 @@
+.tm-agent-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 1000; width: 58px; height: 58px; border-radius: 20px; border: 1px solid #4f5c37; background: #b7ef4a; color: #111; font: 900 13px/1 system-ui; box-shadow: 0 16px 45px #0009; cursor: pointer; }
+.tm-agent { position: fixed; right: 24px; bottom: 94px; z-index: 1000; width: min(420px, calc(100vw - 32px)); height: min(680px, calc(100vh - 120px)); display: grid; grid-template-rows: auto auto 1fr auto; overflow: hidden; border: 1px solid #3b403d; border-radius: 24px; background: #17191b; color: #f4f5f2; box-shadow: 0 28px 90px #000c; font-family: Inter, system-ui, sans-serif; }
+.tm-agent[hidden] { display: none; }
+.tm-agent header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid #34383b; }
+.tm-agent header div { display: grid; gap: 3px; }
+.tm-agent header strong { font-size: 15px; }
+.tm-agent header small { color: #a9afa9; }
+.tm-agent button { border: 0; border-radius: 12px; padding: 10px 13px; background: #b7ef4a; color: #111; font-weight: 800; cursor: pointer; }
+.tm-agent button:disabled { opacity: .45; }
+.tm-agent .tm-agent-close { background: transparent; color: #a9afa9; font-size: 20px; }
+.tm-agent-controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #34383b; }
+.tm-agent select, .tm-agent textarea { background: #101214; color: #f4f5f2; border: 1px solid #34383b; border-radius: 12px; padding: 10px; font: inherit; }
+.tm-agent-controls label { cursor: pointer; border: 1px solid #34383b; border-radius: 12px; padding: 10px; color: #a9afa9; font-size: 12px; }
+.tm-agent-controls input { display: none; }
+.tm-agent-messages { overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.tm-agent-message { max-width: 88%; border-radius: 15px; padding: 11px 13px; white-space: pre-wrap; line-height: 1.45; font-size: 14px; background: #24272a; }
+.tm-agent-message.user { align-self: flex-end; background: #34401f; }
+.tm-agent-message small { display: block; margin-top: 7px; color: #a9afa9; }
+.tm-agent-action { display: grid; gap: 8px; max-width: 92%; padding: 12px; border: 1px solid #526535; border-radius: 15px; background: #20251b; }
+.tm-agent-action span { color: #a9afa9; font-size: 12px; line-height: 1.4; }
+.tm-agent-compose { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px; border-top: 1px solid #34383b; }
+.tm-agent textarea { resize: none; min-height: 46px; max-height: 120px; }
+@media (max-width: 600px) { .tm-agent-launcher { right: 16px; bottom: 16px; } .tm-agent { right: 16px; bottom: 84px; height: calc(100vh - 104px); } }

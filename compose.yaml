@@ -8,10 +8,13 @@ services:
       DATABASE_URL: sqlite:////data/dispatcher.sqlite3
       TENSOR_MASTER_CREDENTIAL_DIR: /data/credentials
       CLOUD_OUTPUT_DIR: /data/outputs
+      COMMUNITY_LORA_MANIFEST: /data/community-loras.json
+      MODEL_DIRECTORIES: '["/models"]'
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - tensor_master_data:/data
+      - ${COMFYUI_MODELS_DIR:-./models}:/models:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s

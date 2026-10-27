@@ -225,7 +225,7 @@ def _admin(request: Request, *, mutation: bool = False) -> None:
         valid_time = False
         timestamp = signature = ""
     if not valid_time or not hmac.compare_digest(_signature(timestamp), signature):
-        raise HTTPException(status_code=401, detail="Unlock GPU controls first")
+        raise HTTPException(status_code=401, detail="Sign in to admin controls first")
     request.state.legacy_session = (value, max(1, int(timestamp) + 12 * 3600 - int(time.time())))
 
 
@@ -313,7 +313,9 @@ def _state_path(rental_id: str) -> Path:
 
 def build_bundle() -> None:
     script = ROOT / "runtime" / "h3" / "build_local.ps1"
-    result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-BundleOnly"],
+    manifest = str(get_settings().community_lora_manifest)
+    result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-BundleOnly",
+                             "-CommunityLoraManifest", manifest],
                             cwd=ROOT, capture_output=True, text=True, timeout=180, check=False,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if result.returncode:

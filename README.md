@@ -10,12 +10,13 @@ This competition edition intentionally ships a small public surface:
 - MiniMax H3 Ref2VA INT8, Singularity and FastH3 Omni profiles
 - native, public ACC and bring-your-own 4/8-step Turbo recipes
 - RunPod and Vast.ai worker launch controls with explicit cost limits
-- optional Hugging Face credentials for gated and private models
-- optional OpenRouter prompt enhancement
+- optional Hugging Face credentials plus pinned personal-LoRA deployment
+- a BYOK OpenRouter studio copilot with Gemini and DeepSeek Flash choices
 - a reviewed SAM3 to H3 character-replacement workflow
 
-Private identities, personal LoRAs, Eros, Dolores and other studio-only assets
-are not part of this repository.
+Private identities, Eros, Dolores and other studio-only assets are not part of
+this repository. A user's own LoRAs can be registered at runtime without being
+committed to the project.
 
 ## Quick start
 
@@ -56,6 +57,50 @@ Keys are validated server-side, written to the configured private credential
 directory with restrictive permissions, and never returned by the API. Do not
 put credentials in prompts, Comfy graphs, recipes or agent instructions.
 
+`/setup` remains available after onboarding as **Setup & Models**. An admin can
+replace or remove locally stored credentials there. Provider-side revocation is
+still performed at the provider.
+
+## Personal LoRAs and cloud workers
+
+Setup & Models supports two explicit routes:
+
+- choose a LoRA already under a configured ComfyUI `models/loras` directory,
+  upload it to the user's Hugging Face repository, verify the remote copy, and
+  pin it for selected community profiles;
+- register an existing Hugging Face LoRA by repository, file and immutable
+  commit SHA.
+
+The private runtime manifest stores only repository coordinates, immutable
+revision, size, SHA-256 and selected profiles. Tokens and model bytes are never
+stored in Git. New runtime bundles include the manifest; workers download the
+LoRA into their own `models/loras` tree. Already-running workers do not change.
+Unregistering removes the entry from future workers but deletes neither local
+nor Hugging Face files.
+
+For Docker, set `COMFYUI_MODELS_DIR` in `.env` to a host models directory. It is
+mounted read-only; an upload is a deliberate copy to Hugging Face, not a local
+move or deletion.
+
+## Built-in studio copilot
+
+The **AI** button opens the same copilot on the dashboard and Setup & Models.
+It uses the controller-owned OpenRouter credential and lets the user choose:
+
+- `google/gemini-3.8-flash` for a broad multimodal studio planner;
+- `deepseek/deepseek-v4.1-flash-1017` for an economical agent workflow.
+
+The model never receives the OpenRouter key. It can inspect an attached ComfyUI
+JSON workflow, identify node classes and model references, and draft a custom
+deployment profile. Unknown custom-node repositories, licenses, model sources,
+checksums and download paths stay marked `unresolved`; they are not guessed.
+
+The copilot can propose queueing the attached graph, open the correct rental
+profile, or navigate to setup. Proposals appear as confirmation cards. Graphs
+still pass the normal node/model allowlists, and rentals still require a live
+offer plus the existing price, fleet and lifetime confirmations. There is no
+shell tool and no automatic credential, LoRA-upload or rental action.
+
 ## Character replacement
 
 The public workflow uses the source performance without asking H3 to infer the
@@ -87,6 +132,7 @@ An agent can discover the narrow API at:
 - `GET /api/v1/community/agent-manifest`
 - `GET /api/v1/community/profiles`
 - `GET /api/v1/community/workflows/character-replacement`
+- `GET /api/v1/agent/models`
 - `GET /health`
 
 The normal submission loop is: inspect profiles, prepare or supply an
@@ -121,9 +167,10 @@ their own ComfyUI API and return output receipts. Tensor Master never exposes a
 rented ComfyUI port as the product UI. Arbitrary user graphs are rejected; each
 supported workflow has an allowlist and bounded inputs.
 
-The runtime model inventory is pinned by repository revision, size and SHA-256
-in `runtime/h3/models.lock.json`. The public profile list is intentionally
-smaller than the production studio.
+The base runtime inventory is pinned by repository revision, size and SHA-256
+in `runtime/h3/models.lock.json`. User entries live in the private
+`state/community-loras.json` manifest and use the same immutable fields. The
+public profile list is intentionally smaller than the production studio.
 
 ## Development
 

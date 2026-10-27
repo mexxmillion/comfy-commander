@@ -5,9 +5,11 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from backend.app import character_replacement
+from backend.app import character_replacement, community_loras
 from backend.app.character_replacement import PrepareRequest
 from backend.app.community import COMMUNITY_PROFILES, character_replacement_recipe
+from backend.app.community_loras import RegisterLora, read_manifest, save_manifest
+from backend.app.studio_agent import analyze_workflow
 
 
 def request(**overrides):
@@ -72,3 +74,44 @@ def test_model_manifest_has_only_public_profiles_and_pinned_sam3():
     sam3 = [item for item in manifest["artifacts"] if item["group"] == "sam3"]
     assert len(sam3) == 1
     assert sam3[0]["sha256"] == "9ba99c92703c2e8b4f47de2d34a539bb8e18923049e238b780d70dbe6368eb03"
+
+
+def test_community_lora_manifest_round_trip(tmp_path):
+    path = tmp_path / "community-loras.json"
+    entry = {
+        "id": "demo", "name": "Demo", "repo": "owner/model", "revision": "a" * 40,
+        "file": "styles/demo.safetensors", "local_dir": "loras", "size": 123,
+        "sha256": "b" * 64, "profiles": ["ref2v-int8"], "source": "registered",
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    save_manifest({"version": 1, "loras": [entry]}, path)
+    assert read_manifest(path)["loras"] == [entry]
+
+
+def test_community_lora_registration_requires_immutable_safe_reference():
+    with pytest.raises(ValidationError, match="at least 40"):
+        RegisterLora(repo_id="owner/model", revision="main", file="demo.safetensors",
+                     profiles=["ref2v-int8"])
+    with pytest.raises(ValidationError, match="relative"):
+        RegisterLora(repo_id="owner/model", revision="a" * 40, file="../demo.safetensors",
+                     profiles=["ref2v-int8"])
+
+
+def test_local_lora_candidates_do_not_expose_absolute_paths(tmp_path, monkeypatch):
+    models = tmp_path / "models"
+    (models / "loras").mkdir(parents=True)
+    (models / "loras" / "safe.safetensors").write_bytes(b"safe")
+    (models / "loras" / "ignore.txt").write_text("no", encoding="utf-8")
+    settings = type("Settings", (), {"model_directories": [models]})()
+    monkeypatch.setattr(community_loras, "get_settings", lambda: settings)
+    candidates = community_loras.local_candidates()
+    assert [item["name"] for item in candidates] == ["safe.safetensors"]
+    assert str(tmp_path) not in json.dumps(candidates)
+
+
+def test_agent_workflow_analysis_builds_unresolved_safe_profile():
+    analysis = analyze_workflow({"1": {"class_type": "LoraLoaderModelOnly", "inputs": {
+        "lora_name": "personal/style.safetensors"}}})
+    assert analysis["node_types"] == ["LoraLoaderModelOnly"]
+    assert analysis["model_references"] == ["personal/style.safetensors"]
+    assert analysis["profile_draft"]["models"][0]["source"] == "unresolved"

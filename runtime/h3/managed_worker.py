@@ -166,11 +166,15 @@ def check_credit(price_per_hour: float, profile: str) -> None:
                            f"{settings.min_credit_gpu_hours:g} h of GPU; add credit at console.vast.ai/billing")
 
 
-def validate_bundle_manifest(bundle: Path | None = None, manifest_path: Path | None = None) -> None:
+def validate_bundle_manifest(bundle: Path | None = None, manifest_path: Path | None = None,
+                             community_path: Path | None = None) -> None:
     """Reject stale model payloads before either provider creates a paid instance."""
     bundle = bundle or BUNDLE
     manifest_path = manifest_path or ROOT / 'runtime/h3/models.lock.json'
     expected = json.loads(manifest_path.read_text(encoding='utf-8'))
+    community_path = community_path or ROOT / 'state/community-loras.json'
+    expected_community = (json.loads(community_path.read_text(encoding='utf-8'))
+                          if community_path.is_file() else None)
     with tarfile.open(bundle, 'r:gz') as archive:
         member = next((item for item in archive.getmembers()
                        if item.name.replace('\\', '/').removeprefix('./') == 'h3-runtime/models.lock.json'), None)
@@ -181,8 +185,20 @@ def validate_bundle_manifest(bundle: Path | None = None, manifest_path: Path | N
             raise RuntimeError('Cloud runtime bundle model manifest is not a file')
         with stream:
             bundled = json.load(stream)
+        community_member = next((item for item in archive.getmembers()
+                                 if item.name.replace('\\', '/').removeprefix('./') ==
+                                 'h3-runtime/community-loras.json'), None)
+        bundled_community = None
+        if community_member is not None:
+            community_stream = archive.extractfile(community_member)
+            if community_stream is None:
+                raise RuntimeError('Cloud runtime community LoRA manifest is not a file')
+            with community_stream:
+                bundled_community = json.load(community_stream)
     if bundled != expected:
         raise RuntimeError('Cloud runtime bundle model manifest is stale; rebuild with build_local.ps1 -BundleOnly before renting')
+    if bundled_community != expected_community:
+        raise RuntimeError('Cloud runtime bundle community LoRAs are stale; rebuild with build_local.ps1 -BundleOnly before renting')
 
 
 def preflight() -> None:
@@ -191,7 +207,7 @@ def preflight() -> None:
                  configured.huggingface_token_file):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
-    validate_bundle_manifest()
+    validate_bundle_manifest(community_path=configured.community_lora_manifest)
     sys.path.insert(0, str(ROOT))
     from backend.app.auth import ensure_token
     from backend.app.config import get_settings
