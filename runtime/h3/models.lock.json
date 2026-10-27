@@ -1,0 +1,300 @@
+{
+  "version": 2,
+  "edition": "community",
+  "profiles": {
+    "qwen-image-21": [
+      "qwen-image-21",
+      "reference-isolate"
+    ],
+    "ref2v-int8": [
+      "common",
+      "ref2v-int8",
+      "ref2v-turbo",
+      "sam3",
+      "vsa",
+      "face-refine",
+      "reference-isolate",
+      "veda-r2va"
+    ],
+    "ref2v-singularity": [
+      "common",
+      "ref2v-singularity",
+      "ref2v-turbo",
+      "sam3",
+      "vsa",
+      "face-refine",
+      "reference-isolate",
+      "veda-r2va"
+    ],
+    "fasth3-omni": [
+      "common",
+      "fasth3-omni",
+      "sam3",
+      "reference-isolate",
+      "veda-r2va"
+    ]
+  },
+  "artifacts": [
+    {
+      "group": "qwen-image-21",
+      "repo": "Comfy-Org/Qwen-Image-2.1",
+      "revision": "9a44dbdb47cefd046be9c0a13476192f34c8db8e",
+      "file": "diffusion_models/qwen_image_2.1_int8_convrot.safetensors",
+      "local_dir": ".",
+      "size": 7256783064,
+      "sha256": "cb74113cb03faecd79611b01fd7fd642f0aa60d6f0b95086abee214d75eaa57d"
+    },
+    {
+      "group": "qwen-image-21",
+      "repo": "Comfy-Org/Qwen-Image-2.1",
+      "revision": "9a44dbdb47cefd046be9c0a13476192f34c8db8e",
+      "file": "text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+      "local_dir": ".",
+      "size": 9350798360,
+      "sha256": "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"
+    },
+    {
+      "group": "qwen-image-21",
+      "repo": "Comfy-Org/Qwen-Image-2.1",
+      "revision": "9a44dbdb47cefd046be9c0a13476192f34c8db8e",
+      "file": "vae/qwen_image_2.1_vae_bf16.safetensors",
+      "local_dir": ".",
+      "size": 675509688,
+      "sha256": "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"
+    },
+    {
+      "group": "qwen-image-21",
+      "repo": "Viggle/Qwen-Image-2.1-viggle-turbo",
+      "revision": "b77064be8b3f0b1a13c6a212067cb3d281c60c84",
+      "file": "Qwen-Image-2.1-viggle-turbo-v0.2.1-6step-lora-r128.safetensors",
+      "local_dir": "loras",
+      "size": 679604800,
+      "sha256": "bafb91d0047df3f9b8a5a850b0c967f051164314d8aad778dfa34d9c24ec345b"
+    },
+    {
+      "group": "common",
+      "repo": "Comfy-Org/MiniMax-H3",
+      "revision": "7e75982b97cd5a41d2dcfa1904ee88d0686d6fd1",
+      "file": "vae/minimax_h3_audio_vae_fp32.safetensors",
+      "local_dir": ".",
+      "size": 605254808,
+      "sha256": "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+    },
+    {
+      "group": "common",
+      "repo": "Kijai/MiniMax-H3-experimental",
+      "revision": "7f5705937cc106963a9dd77c322f7631e3610e89",
+      "file": "minimax_h3_video_vae_int8_convrot.safetensors",
+      "local_dir": "vae",
+      "size": 3171670912,
+      "sha256": "9bb2d96f218c76babd85e0611b85ca8fb330a90546c01a0005e8a58a59593410"
+    },
+    {
+      "group": "common",
+      "repo": "Comfy-Org/MiniMax-H3",
+      "revision": "e5eb578a89295337b8ff433a035929ce0279e0b6",
+      "file": "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "local_dir": ".",
+      "size": 15687142551,
+      "sha256": "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+    },
+    {
+      "group": "vsa",
+      "repo": "barelymining/ComfyUI-MiniMax-H3-FastVideo",
+      "revision": "aa554050fe27ec3c62e20e57519beb46741c9000",
+      "file": "fasth3_vsa_gate.safetensors",
+      "local_dir": "loras",
+      "size": 3853522616,
+      "sha256": "bf95408e335c4b0d6a1a44946a428a3e12849e6eab2de9566ecedae4a0043420"
+    },
+    {
+      "group": "ref2v-int8",
+      "repo": "Comfy-Org/MiniMax-H3",
+      "revision": "7e75982b97cd5a41d2dcfa1904ee88d0686d6fd1",
+      "file": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "local_dir": ".",
+      "size": 20970379616,
+      "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779"
+    },
+    {
+      "group": "ref2v-turbo",
+      "repo": "Kijai/MiniMax-H3-experimental",
+      "revision": "a32d8b8b86bf649eb949db63727e5456d1af8611",
+      "file": "loras/MiniMax-H3-Ref2VA-Acc-8Step_pruned_comfy.safetensors",
+      "local_dir": ".",
+      "size": 1725921392,
+      "sha256": "6f18e1c2eccb14b37322607730f26b16bf1169b56cd098ea006cffaec43d1e39"
+    },
+    {
+      "group": "face-refine",
+      "repo": "Bingsu/adetailer",
+      "revision": "53cc19de382014514d9d4038601d261a7faa9b7b",
+      "file": "face_yolov8m.pt",
+      "local_dir": "ultralytics/bbox",
+      "size": 52026019,
+      "sha256": "717923c19b3f4bbf5250b728f1fa6b2cb72a33aed1d236ea9caf0e21ad943e5f"
+    },
+    {
+      "group": "ref2v-singularity",
+      "repo": "WarmBloodAban/Minimax-h3_Singularity",
+      "revision": "af671d9214a6e41ab8c2f43e9f871ea56246115f",
+      "file": "Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors",
+      "local_dir": "diffusion_models",
+      "size": 20967647456,
+      "sha256": "412a7b126595a958964193f3b42513d7cf2df4196ef04223a0f05e3622949cce"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "config.json",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 1644,
+      "sha256": "eec82c5ab66e16df12a9a212e68ac011779927c2536cf9078658e35d85f0c67a"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "model.safetensors",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 689359096,
+      "sha256": "1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "preprocessor_config.json",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 457,
+      "sha256": "8454179ba95e2ad22947835aad7b45862a601fc0055ab88bf1ee70892d3aea60"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "special_tokens_map.json",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 125,
+      "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "tokenizer.json",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 711396,
+      "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "tokenizer_config.json",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 1237,
+      "sha256": "d40ab645b68211910b9170d22433d43186a6ec8ee6fd10ba170524b25bf4fb56"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "file": "vocab.txt",
+      "local_dir": "tensor-master-preprocessors/grounding-dino-tiny",
+      "size": 231508,
+      "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "facebook/sam2.1-hiera-tiny",
+      "revision": "de431c4043854a71d8101e17995dfe596bf101a5",
+      "file": "config.json",
+      "local_dir": "tensor-master-preprocessors/sam2.1-hiera-tiny",
+      "size": 5695,
+      "sha256": "860aff9751b139d83a4ad7df1e5535416fded533e0ead02625edbefcb9953cce"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "facebook/sam2.1-hiera-tiny",
+      "revision": "de431c4043854a71d8101e17995dfe596bf101a5",
+      "file": "model.safetensors",
+      "local_dir": "tensor-master-preprocessors/sam2.1-hiera-tiny",
+      "size": 155908064,
+      "sha256": "48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "facebook/sam2.1-hiera-tiny",
+      "revision": "de431c4043854a71d8101e17995dfe596bf101a5",
+      "file": "preprocessor_config.json",
+      "local_dir": "tensor-master-preprocessors/sam2.1-hiera-tiny",
+      "size": 683,
+      "sha256": "6ebf229ee259368ce4a8d4f2fe893a72b053023710853e257253939e601f583d"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "facebook/sam2.1-hiera-tiny",
+      "revision": "de431c4043854a71d8101e17995dfe596bf101a5",
+      "file": "processor_config.json",
+      "local_dir": "tensor-master-preprocessors/sam2.1-hiera-tiny",
+      "size": 95,
+      "sha256": "f8a68e865cfad115c1c2763f3d93eca7b1c622da06da2a9273eb437fb2389b6d"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "depth-anything/Depth-Anything-V2-Small-hf",
+      "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "file": "config.json",
+      "local_dir": "tensor-master-preprocessors/depth-anything-v2-small",
+      "size": 950,
+      "sha256": "c56698d3643dde1f83ea2212759e6b31a22b8f827246a36dd007ee8a22b3ff75"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "depth-anything/Depth-Anything-V2-Small-hf",
+      "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "file": "model.safetensors",
+      "local_dir": "tensor-master-preprocessors/depth-anything-v2-small",
+      "size": 99173660,
+      "sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70"
+    },
+    {
+      "group": "reference-isolate",
+      "repo": "depth-anything/Depth-Anything-V2-Small-hf",
+      "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "file": "preprocessor_config.json",
+      "local_dir": "tensor-master-preprocessors/depth-anything-v2-small",
+      "size": 775,
+      "sha256": "d41175c0d889477ca8fc67191e540faef14baf6275157b3fdecf78469e6bbf84"
+    },
+    {
+      "group": "sam3",
+      "repo": "Comfy-Org/sam3.1",
+      "revision": "7bb8374780a725b4353ed31f3a9395c9742b5621",
+      "file": "checkpoints/sam3.1_multiplex_fp16.safetensors",
+      "local_dir": ".",
+      "size": 1745546848,
+      "sha256": "9ba99c92703c2e8b4f47de2d34a539bb8e18923049e238b780d70dbe6368eb03"
+    },
+    {
+      "group": "fasth3-omni",
+      "repo": "FastVideo/FastH3-Omni-Comfy",
+      "revision": "82eff2a6eee6c962846879f4bab52610a4df24d3",
+      "file": "diffusion_models/fasth3_omniref_8step_pruned_int8_convrot.safetensors",
+      "local_dir": ".",
+      "size": 22213723064,
+      "sha256": "851b2dc9670ed864b7f1e951ac9da047d83b1c04ded9bfcc1a9e5bba0ee33f80"
+    },
+    {
+      "group": "veda-r2va",
+      "repo": "Veda-Sparse/Minimax-H3-R2VA-Veda-Preview",
+      "revision": "1598b407905b7c0af85aa0c13acdfa6f01ff2982",
+      "file": "minimax_h3_r2va_veda_preview_fp8.safetensors",
+      "local_dir": "veda",
+      "size": 275415752,
+      "sha256": "23edace948693772be33d5cc945d302d2b037a29bd44bd57071bfbdd8b02517d"
+    }
+  ]
+}

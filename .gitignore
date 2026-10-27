@@ -1,0 +1,11 @@
+.env
+.env.local
+vast.txt
+hf_read.txt
+runpod.txt
+.venv*/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.sqlite3
+state/

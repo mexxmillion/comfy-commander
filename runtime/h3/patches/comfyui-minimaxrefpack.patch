@@ -1,0 +1,199 @@
+diff --git a/minimax_refpack/nodes.py b/minimax_refpack/nodes.py
+index 9473a32..12ebaa3 100644
+--- a/minimax_refpack/nodes.py
++++ b/minimax_refpack/nodes.py
+@@ -215,6 +215,13 @@ class MiniMaxH3ReferencePack:
+                                "arrives huge and every sampling step pays for it. "
+                                "Reference videos are already capped by the core node.",
+                 }),
++                "disable_local_thinking": ("BOOLEAN", {
++                    "default": False,
++                    "tooltip": "Only used when prompt_provider is 'local'. Sends the "
++                               "OpenAI-compatible chat-template option that disables "
++                               "Qwen-style hidden reasoning. Enable it for llama.cpp or "
++                               "another server that supports chat_template_kwargs.",
++                }),
+                 "prompt": ("STRING", {
+                     "forceInput": True,
+                     "tooltip": "Optional prompt passthrough. When connected, this text is "
+@@ -235,6 +242,7 @@ class MiniMaxH3ReferencePack:
+         prompt_provider=endpoint.DEFAULT_PROVIDER,
+         reasoning_effort=prompt_module.DEFAULT_REASONING_EFFORT, job_type="auto",
+         max_reference_edge=DEFAULT_MAX_REFERENCE_EDGE, api_base="", local_model_slug="",
++        disable_local_thinking=False,
+         prompt=None, use_openrouter=None, model=None, model_override=None, **kwargs
+     ):
+         openrouter_model = openrouter_model or (model or "")
+@@ -255,7 +263,7 @@ class MiniMaxH3ReferencePack:
+             str(width), str(height), str(length_seconds),
+             _provider_of(prompt_provider, use_openrouter),
+             str(reasoning_effort), str(job_type), str(max_reference_edge),
+-            str(api_base), str(local_model_slug),
++            str(api_base), str(local_model_slug), str(disable_local_thinking),
+         ])
+ 
+     def build(
+@@ -264,6 +272,7 @@ class MiniMaxH3ReferencePack:
+         prompt_provider=endpoint.DEFAULT_PROVIDER,
+         reasoning_effort=prompt_module.DEFAULT_REASONING_EFFORT, job_type="auto",
+         max_reference_edge=DEFAULT_MAX_REFERENCE_EDGE, api_base="", local_model_slug="",
++        disable_local_thinking=False,
+         prompt=None, use_openrouter=None, model=None, model_override=None,
+     ):
+         # Legacy kwarg names, for an API client replaying a prompt stored before 0.3.2.
+@@ -330,6 +339,7 @@ class MiniMaxH3ReferencePack:
+             f"width: {width or '(unspecified)'}  height: {height or '(unspecified)'}  "
+             f"length_seconds: {length_seconds or '(unspecified)'}",
+             f"reasoning_effort: {reasoning_effort}",
++            f"disable_local_thinking: {bool(disable_local_thinking)}",
+             f"max_reference_edge: {max_reference_edge or 'off'}",
+             f"job_type: {job_type}",   # rewritten below once auto has resolved
+             f"system_prompt: {'workflow override' if (system_prompt or '').strip() else 'packaged default'}",
+@@ -378,6 +388,7 @@ class MiniMaxH3ReferencePack:
+                     debug=debug_sink,
+                     provider=provider,
+                     api_base=api_base,
++                    disable_local_thinking=disable_local_thinking,
+                 )
+             except ValueError as e:
+                 # endpoint.resolve raises this for "local with no api_base". It is a user
+diff --git a/minimax_refpack/prompt.py b/minimax_refpack/prompt.py
+index 9d51e10..fdcc81e 100644
+--- a/minimax_refpack/prompt.py
++++ b/minimax_refpack/prompt.py
+@@ -367,7 +367,10 @@ def _read_system_prompt(mode: str = "standard") -> str:
+         return f.read()
+ 
+ 
+-def classify_mode(*, direction: str, references, api_key: str, model: str = "", ep=None) -> str:
++def classify_mode(
++    *, direction: str, references, api_key: str, model: str = "", ep=None,
++    disable_local_thinking: bool = False,
++) -> str:
+     """'replacement' or 'standard' for a direction. Never raises.
+ 
+     Replacement is only reachable with at least one video AND one image to swap between,
+@@ -398,18 +401,21 @@ def classify_mode(*, direction: str, references, api_key: str, model: str = "",
+         return "standard"
+     try:
+         key = _key_for(ep, api_key)
++        payload = {
++            "model": classifier,
++            "max_tokens": 6,
++            "temperature": 0,
++            "messages": [
++                {"role": "system", "content": _CLASSIFY_SYSTEM},
++                {"role": "user", "content": direction},
++            ],
++        }
++        if disable_local_thinking and not ep.is_openrouter:
++            payload["chat_template_kwargs"] = {"enable_thinking": False}
+         resp = requests.post(
+             ep.chat_url,
+             headers=_auth_header(key),
+-            json={
+-                "model": classifier,
+-                "max_tokens": 6,
+-                "temperature": 0,
+-                "messages": [
+-                    {"role": "system", "content": _CLASSIFY_SYSTEM},
+-                    {"role": "user", "content": direction},
+-                ],
+-            },
++            json=payload,
+             timeout=ep.classify_timeout,
+         )
+         if resp.status_code != 200:
+@@ -645,7 +651,7 @@ def render_payload(payload: dict, ep=None) -> str:
+     """
+     ep = ep or _DEFAULT_ENDPOINT
+     lines: list[str] = [f"POST {ep.chat_url}", f"model: {payload.get('model')}"]
+-    for extra in ("reasoning", "temperature", "max_tokens"):
++    for extra in ("reasoning", "chat_template_kwargs", "temperature", "max_tokens"):
+         if extra in payload:
+             lines.append(f"{extra}: {payload[extra]}")
+     if "reasoning" not in payload:
+@@ -739,6 +745,7 @@ def write_prompt(
+     reasoning_effort: str = DEFAULT_REASONING_EFFORT, job_type: str = "auto",
+     classifier_model: str = "", debug: list | None = None,
+     provider: str = "openrouter", api_base: str = "",
++    disable_local_thinking: bool = False,
+ ) -> str:
+     """Pass a list as `debug` to have the rendered payload appended to it. A sink rather
+     than a second return value, so the frozen `-> str` contract and every existing caller
+@@ -758,7 +765,7 @@ def write_prompt(
+         classifier = classifier_model or ("" if ep.is_openrouter else model)
+         resolved = classify_mode(
+             direction=direction, references=references, api_key=api_key,
+-            model=classifier, ep=ep,
++            model=classifier, ep=ep, disable_local_thinking=disable_local_thinking,
+         )
+ 
+     # Non-blank (after strip) -> the workflow's own edited prompt, used verbatim (not
+@@ -787,6 +794,8 @@ def write_prompt(
+     # turn a working local setup into a 400 nobody can explain.
+     if ep.sends_reasoning and reasoning_effort in REASONING_EFFORTS:
+         payload["reasoning"] = {"effort": reasoning_effort}
++    if disable_local_thinking and not ep.is_openrouter:
++        payload["chat_template_kwargs"] = {"enable_thinking": False}
+ 
+     # Filled before the call, so a failed request still leaves the caller the payload
+     # that caused it - that's when it's worth the most.
+diff --git a/minimax_refpack/system_prompt.md b/minimax_refpack/system_prompt.md
+index e91dd61..acc000f 100644
+--- a/minimax_refpack/system_prompt.md
++++ b/minimax_refpack/system_prompt.md
+@@ -121,7 +121,9 @@ One to three sentences describing score only the audience hears: instrumentation
+ 
+ All six sections are written in English. Only dialogue inside `<d>` and text visibly present in the scene keep another language.
+ 
+-This is the exact shape, with the structural tokens written literally. Match it:
++This is the exact shape, with the structural tokens written literally. Match it. Text
++inside `{curly braces}` is an instruction placeholder, never output text: replace every
++placeholder with specific observed or directed details, and return no curly braces:
+ 
+ subject_definitions:
+ <Subject 1> is the woman in <Picture 1> and <Picture 2>, {features}.
+@@ -156,7 +158,7 @@ Geometry, light and flesh are in front of the lens. They render. Grain, noise, c
+ 
+ --- SKIN, HAIR AND CLOTH. This is where realism actually comes from, and it should be the longest thread running through `detailed_description`.
+ 
+-Skin is not one colour and not smooth. For the specific person in front of the lens, describe: visible pore texture across the nose, cheeks and shoulders; fine downy hair catching the light along the forearms and the jawline; uneven tone, a redder flush across the chest and throat, paler where clothing has covered her, a freckle field, a small mole, a healed scar, a faded bruise; what contact does to flesh, the pink line a waistband left and how it fades, how a thigh flattens against a mattress, how a breast moves and settles under its own weight rather than holding a shape; a slight natural sheen on the forehead, upper lip and sternum, never a full-body gloss; goosebumps, a shiver, a rising ribcage, a pulse in the throat.
++Skin is not one colour and not smooth. For the specific person in front of the lens, describe: visible pore texture across the nose, cheeks and shoulders; fine downy hair catching the light along the forearms and the jawline; natural complexion variation, paler where clothing has covered her, a freckle field, a small mole, a healed scar, a faded bruise; what contact does to flesh, how a thigh flattens against a mattress, how a breast moves and settles under its own weight rather than holding a shape; a slight natural sheen on the forehead, upper lip and sternum, never a full-body gloss; goosebumps, a shiver, a rising ribcage, a pulse in the throat. Do not introduce or describe skin redness, flushing, blushing, rosy cheeks or pink patches; keep skin colour faithful to the reference without a red cast.
+ 
+ Hair behaves as many separate strands, not a helmet: flyaways lit against the background, a section stuck to a damp neck, strands that settle a beat after the head turns.
+ 
+diff --git a/minimax_refpack/system_prompt_replacement.md b/minimax_refpack/system_prompt_replacement.md
+index de63d54..7b6cfba 100644
+--- a/minimax_refpack/system_prompt_replacement.md
++++ b/minimax_refpack/system_prompt_replacement.md
+@@ -27,6 +27,7 @@ Read the plate video and the reference image, then settle:
+ - THE PLATE'S OPTICS AND LIGHT — shot size, depth of field, motion blur, key direction and softness, grade.
+ 
+ Everything you write must be traceable to the references or the direction. Do not invent a logo the image doesn't have, or a camera move the plate doesn't have.
++Do not introduce or describe skin redness, flushing, blushing, rosy cheeks or pink patches. Keep the replacement's skin colour consistent with its reference without adding a red cast.
+ 
+ === WHEN A REFERENCE WAS WITHHELD ===
+ 
+diff --git a/web/refpack.js b/web/refpack.js
+index 08ad22e..4cfea6e 100644
+--- a/web/refpack.js
++++ b/web/refpack.js
+@@ -154,7 +154,7 @@ const ORDER_0_3_3 = [
+     "direction", "references_json", "system_prompt", "prompt_provider",
+     "openrouter_api_key", "openrouter_model", "reasoning_effort", "api_base",
+     "local_model_slug", "job_type", "width", "height", "length_seconds",
+-    "max_reference_edge",
++    "max_reference_edge", "disable_local_thinking",
+ ];
+ 
+ function detectLayout(values) {
+@@ -2382,7 +2382,7 @@ function setWidgetVisible(w, visible) {
+ // that let a local model id sit in a field OpenRouter then read.
+ const PROVIDER_FIELDS = {
+     openrouter: ["openrouter_api_key", "openrouter_model", "reasoning_effort"],
+-    local: ["api_base", "local_model_slug"],
++    local: ["api_base", "local_model_slug", "disable_local_thinking"],
+ };
+ // <<< MMRP-VISIBILITY
+ 

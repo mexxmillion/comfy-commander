@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: sqlite:////data/dispatcher.sqlite3
+      TENSOR_MASTER_CREDENTIAL_DIR: /data/credentials
+      CLOUD_OUTPUT_DIR: /data/outputs
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - tensor_master_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+volumes:
+  tensor_master_data:

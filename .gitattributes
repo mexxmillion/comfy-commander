@@ -1,0 +1,5 @@
+*.sh text eol=lf
+
+# Preserve exact whitespace in captured patches and upstream source snapshots.
+runtime/h3/patches/*.patch -whitespace
+runtime/h3/source-overlays/** -whitespace

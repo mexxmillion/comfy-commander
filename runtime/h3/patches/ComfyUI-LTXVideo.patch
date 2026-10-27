@@ -1,0 +1,96 @@
+diff --git a/__init__.py b/__init__.py
+index 928ef28..16390de 100644
+--- a/__init__.py
++++ b/__init__.py
+@@ -52,7 +52,14 @@ from .nodes_registry import (
+ from .nodes_registry import NODES_DISPLAY_NAME_PREFIX, camel_case_to_spaces
+ from .prompt_enhancer_nodes import LTXVPromptEnhancer, LTXVPromptEnhancerLoader
+ from .pyramid_blending import LTXVLaplacianPyramidBlend
+-from .q8_nodes import LTXVQ8LoraModelLoader, LTXVQ8Patch
++try:
++    from .q8_nodes import LTXVQ8LoraModelLoader, LTXVQ8Patch
++    _Q8_AVAILABLE = True
++except (ImportError, OSError) as _q8_err:
++    print(f"[LTXVideo] q8_kernels unavailable, disabling Q8 nodes: {_q8_err}")
++    LTXVQ8LoraModelLoader = None
++    LTXVQ8Patch = None
++    _Q8_AVAILABLE = False
+ from .sparse_tracks import LTXVDrawTracks, LTXVSparseTrackEditor
+ from .stg import (
+     LTXVApplySTG,
+@@ -88,8 +95,6 @@ NODE_CLASS_MAPPINGS = {
+     "LTXVPatcherVAE": LTXVPatcherVAE,
+     "LTXVPromptEnhancer": LTXVPromptEnhancer,
+     "LTXVPromptEnhancerLoader": LTXVPromptEnhancerLoader,
+-    "LTXQ8Patch": LTXVQ8Patch,
+-    "LTXVQ8LoraModelLoader": LTXVQ8LoraModelLoader,
+     "LTXVSelectLatents": LTXVSelectLatents,
+     "LTXVSetVideoLatentNoiseMasks": LTXVSetVideoLatentNoiseMasks,
+     "LTXVTiledSampler": LTXVTiledSampler,
+@@ -136,6 +141,10 @@ NODE_CLASS_MAPPINGS = {
+ 
+ # Consistent display names between static and dynamic node mappings in nodes_registry.py,
+ # to prevent ComfyUI initializing them with default display names.
++if _Q8_AVAILABLE:
++    NODE_CLASS_MAPPINGS["LTXQ8Patch"] = LTXVQ8Patch
++    NODE_CLASS_MAPPINGS["LTXVQ8LoraModelLoader"] = LTXVQ8LoraModelLoader
++
+ NODE_DISPLAY_NAME_MAPPINGS = {
+     name: f"{NODES_DISPLAY_NAME_PREFIX} {camel_case_to_spaces(name)}"
+     for name in NODE_CLASS_MAPPINGS.keys()
+diff --git a/hdr_nodes.py b/hdr_nodes.py
+index 808c14c..da9f7e3 100644
+--- a/hdr_nodes.py
++++ b/hdr_nodes.py
+@@ -13,6 +13,7 @@ from __future__ import annotations
+ 
+ import logging
+ import os
++import copy
+ from pathlib import Path
+ 
+ import folder_paths
+@@ -40,6 +41,32 @@ from .nodes_registry import comfy_node
+ 
+ logger = logging.getLogger("LTXVideo.hdr_nodes")
+ 
++
++def _no_tiled_vae(*args, **kwargs):
++    raise RuntimeError("Full-frame LTX VAE ran out of memory; tiled fallback is disabled. Use a shorter clip or more memory.")
++
++
++@comfy_node(name="LTXVUntiledVAE")
++class LTXVUntiledVAE:
++    """Keep VAE memory fallback from silently splitting a full-frame recipe."""
++    @classmethod
++    def INPUT_TYPES(cls):
++        return {"required": {"vae": ("VAE",)}}
++
++    RETURN_TYPES = ("VAE",)
++    FUNCTION = "apply"
++    CATEGORY = "Lightricks/HDR"
++
++    def apply(self, vae):
++        result = copy.copy(vae)
++        result.encode_tiled = _no_tiled_vae
++        result.encode_tiled_3d = _no_tiled_vae
++        result._encode_tiled_owned = _no_tiled_vae
++        result.decode_tiled = _no_tiled_vae
++        result.decode_tiled_3d = _no_tiled_vae
++        result._decode_tiled_owned = _no_tiled_vae
++        return (result,)
++
+ _EXR_COLOR_SPACE_CHOICES = ["linear", "acescct", "srgb_linear", "acescg"]
+ _SDR_COLOR_SPACE_CHOICES = [c.value for c in SDRColorSpace]
+ _COLOR_SPACE_CHOICES = [c.value for c in HDRColorSpace]
+@@ -672,4 +699,9 @@ class LTXVSaveHLG:
+             hlg_path,
+             " (with audio)" if audio is not None else "",
+         )
+-        return {}
++        return {"ui": {"videos": [{
++            "filename": hlg_path.name,
++            "subfolder": _subfolder,
++            "type": "output",
++            "format": "video/mp4",
++        }]}}

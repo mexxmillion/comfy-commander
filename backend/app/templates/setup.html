@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Set up Tensor Master Community</title>
+    <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/community.css?v=1">
+    <script defer src="/static/community.js?v=1"></script>
+  </head>
+  <body>
+    <main class="setup-shell">
+      <header class="setup-hero">
+        <span class="mark">TM</span>
+        <div><p>OPEN COMFY STUDIO</p><h1>Bring a GPU.<br><em>Or launch one.</em></h1></div>
+        <a href="/">Open studio →</a>
+      </header>
+
+      <section class="intro-card">
+        <div><span class="step">01</span><h2>Protect your studio</h2><p>Create the password used for rentals and configuration. First-time password creation is available only from localhost.</p></div>
+        <form id="password-form">
+          <label>Admin password<input id="password" type="password" minlength="12" autocomplete="new-password" required></label>
+          <label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>
+          <button type="submit">{{ 'Password configured ✓' if status.password else 'Create password' }}</button>
+        </form>
+      </section>
+
+      <section>
+        <div class="section-title"><span class="step">02</span><div><h2>Connect only what you use</h2><p>Keys are validated server-side, stored in the private credential volume, and never returned to this page.</p></div></div>
+        <div class="service-grid">
+          {% for id, label, detail, optional in [
+            ('runpod','RunPod','Launch compatible Secure Cloud GPU workers.','Choose RunPod or Vast'),
+            ('vast','Vast.ai','Search and rent compatible marketplace workers.','Choose RunPod or Vast'),
+            ('huggingface','Hugging Face','Download gated models and your own private model repositories.','Recommended for SAM3'),
+            ('openrouter','OpenRouter','Optional prompt enhancement and Creative Engine planning.','Optional')
+          ] %}
+          <article class="service-card" data-service="{{ id }}">
+            <div><span class="status {{ 'connected' if status[id] else '' }}">{{ 'Connected' if status[id] else optional }}</span><h3>{{ label }}</h3><p>{{ detail }}</p></div>
+            <form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste credential" autocomplete="off"><button type="submit">Connect & test</button></form>
+            <small role="status"></small>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title"><span class="step">03</span><div><h2>Choose a focused profile</h2><p>Community Edition ships Qwen Image and public MiniMax H3 paths. Private personalities and personal LoRAs are intentionally excluded.</p></div></div>
+        <div class="profile-grid">
+          {% for id, profile in profiles.items() %}
+          <article><span>{{ profile.kind }}</span><h3>{{ profile.name }}</h3><p>{{ profile.summary }}</p><small>Minimum {{ profile.minimum_vram_gb }} GB VRAM{% if profile.gated %} · may require accepted upstream terms{% endif %}</small></article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="replacement-card">
+        <div><span class="step">04</span><p>FEATURED WORKFLOW</p><h2>Character replacement,<br>without anchor guesswork.</h2></div>
+        <ol><li>Prepare identity references with Qwen.</li><li>Track one performer with a reviewed SAM3 video mask.</li><li>Invert only that target and pass the aligned video to H3 Ref2VA.</li><li>Review expressions, choreography and seams before delivery.</li></ol>
+        <p class="note">The default accepted route uses the tracked video guide and no Add Guide image nodes.</p>
+      </section>
+    </main>
+  </body>
+</html>

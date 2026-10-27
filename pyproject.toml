@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-dispatcher"
+version = "0.3.0"
+description = "Self-hosted control plane for disposable GPU workers and ComfyUI jobs"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg[binary]>=3.2,<4",
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "pillow>=12,<13",
+  "psutil>=5.9,<8",
+  "jinja2>=3.1,<4",
+  "pydantic-settings>=2.10,<3",
+  "python-multipart>=0.0.20,<1",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.35,<1",
+  "vastai>=1.7,<2",
+]
+
+[project.optional-dependencies]
+higgsfield = [
+  "higgsfield-client>=0.2,<0.3",
+  "python-dotenv>=1,<2",
+]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "ruff>=0.12,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

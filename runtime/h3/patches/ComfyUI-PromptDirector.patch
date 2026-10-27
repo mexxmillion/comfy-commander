@@ -1,0 +1,30 @@
+diff --git a/nodes.py b/nodes.py
+index 94dc2d9..a770abd 100644
+--- a/nodes.py
++++ b/nodes.py
+@@ -439,17 +439,23 @@ class VideoFramesForVL(io.ComfyNode):
+         return io.NodeOutput(sampled, context, count)
+ 
+ 
+-NODE_CLASS_MAPPINGS = {"PromptDirector": PromptDirector, "VideoFramesForVL": VideoFramesForVL}
++try:
++    from .vlm_describe import LocalVLMDescribe
++except ImportError:
++    from vlm_describe import LocalVLMDescribe
++
++NODE_CLASS_MAPPINGS = {"PromptDirector": PromptDirector, "VideoFramesForVL": VideoFramesForVL, "LocalVLMDescribe": LocalVLMDescribe}
+ NODE_DISPLAY_NAME_MAPPINGS = {
+     "PromptDirector": "Prompt Director",
+     "VideoFramesForVL": "Video Frames for VL",
++    "LocalVLMDescribe": "VLM Describe (Local LLM)",
+ }
+ 
+ 
+ class PromptDirectorExtension(ComfyExtension):
+     @override
+     async def get_node_list(self) -> list[type[io.ComfyNode]]:
+-        return [PromptDirector, VideoFramesForVL]
++        return [PromptDirector, VideoFramesForVL, LocalVLMDescribe]
+ 
+ 
+ async def comfy_entrypoint() -> PromptDirectorExtension:

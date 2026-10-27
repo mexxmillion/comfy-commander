@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "comfyui": {
+    "url": "https://github.com/comfyanonymous/ComfyUI.git",
+    "revision": "36c0b0a687e5e6d7b55e3e61ab24262ffc0f2508",
+    "untracked_source_files": [
+      "comfy/attention_sparse.py",
+      "comfy/ops_sparse.py",
+      "comfy/sparse.py"
+    ]
+  },
+  "custom_nodes": {
+    "ComfyUI-Ref2VA-VSA": {
+      "url": "https://github.com/Kablex/ComfyUI-Ref2VA-VSA.git",
+      "revision": "92e3f8357c626f63cfe3813ec914f2cf3fbc500c",
+      "untracked_source_files": []
+    },
+    "comfyui-krea2edit": {
+      "url": "https://github.com/lbouaraba/comfyui-krea2edit",
+      "revision": "86f886dac23013d88996e3a2e99093ba44d322fb",
+      "untracked_source_files": []
+    },
+    "h3_mobile": {
+      "url": "https://github.com/mexxmillion/ComfyUI-Pocket-Studio.git",
+      "revision": "1cbdc82c133cd10ab462e20f65e30f307a3141af",
+      "untracked_source_files": []
+    },
+    "comfyui-kjnodes": {
+      "url": "https://github.com/kijai/ComfyUI-KJNodes.git",
+      "revision": "3f20054214fec9f9234fd3841ae6f1e4287948f6",
+      "untracked_source_files": []
+    },
+    "comfyui-minimaxrefpack": {
+      "url": "https://github.com/mexxmillion/ComfyUI-MiniMaxRefPack.git",
+      "revision": "0eb8fdc6a7af671e31613ae454edcf16e5231bb8",
+      "patch": "patches/comfyui-minimaxrefpack.patch",
+      "untracked_source_files": []
+    },
+    "ComfyUI-PromptDirector": {
+      "url": "https://github.com/mexxmillion/ComfyUI-PromptDirector.git",
+      "revision": "c2891bd17739605accb2d5a2e0341e48cf184776",
+      "patch": "patches/ComfyUI-PromptDirector.patch",
+      "untracked_source_files": [
+        "vlm_describe.py"
+      ]
+    },
+    "ComfyUI-H3-NativeAudioLock": {
+      "type": "snapshot",
+      "overlay": "source-overlays/custom_nodes/ComfyUI-H3-NativeAudioLock"
+    },
+    "comfyui-fizgig-h3-still": {
+      "url": "https://github.com/shootthesound/ComfyUI-Fizgig-H3-Still.git",
+      "revision": "10d5171f6e45b0757a03df977f53a660e060c33d",
+      "untracked_source_files": []
+    },
+    "comfyui-videohelpersuite": {
+      "type": "registry",
+      "name": "comfyui-videohelpersuite",
+      "version": "1.7.9",
+      "publisher": "kosinkadink",
+      "url": "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite"
+    },
+    "comfyui-unload-model": {
+      "type": "registry",
+      "name": "comfyui-unload-model",
+      "version": "1.0.2",
+      "publisher": "seanscripts",
+      "url": "https://github.com/SeanScripts/ComfyUI-Unload-Model"
+    },
+    "comfyui-h3-facerefine": {
+      "url": "https://github.com/Carasibana/ComfyUI-H3-FaceRefine.git",
+      "revision": "d8521d14fe0d721d80cd9417fff5a559cbc21aba",
+      "untracked_source_files": []
+    },
+    "ComfyUI-LTXVideo": {
+      "url": "https://github.com/Lightricks/ComfyUI-LTXVideo",
+      "revision": "3bf3ca62595f1764c47d01c35c8e5dfe47e1a88f",
+      "patch": "patches/ComfyUI-LTXVideo.patch",
+      "untracked_source_files": []
+    },
+    "comfyui-frame-interpolation": {
+      "type": "registry",
+      "name": "comfyui-frame-interpolation",
+      "version": "1.0.11",
+      "publisher": "fannovel16",
+      "url": "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation"
+    },
+    "ComfyUI-TensorMaster-Preprocessors": {
+      "url": "https://github.com/mexxmillion/ComfyUI-TensorMaster-Preprocessors.git",
+      "revision": "6c82578ec4343f9c1c9d5fd88a50f42ad7a939d3",
+      "untracked_source_files": []
+    },
+    "Veda-on-ComfyUI": {
+      "url": "https://github.com/veda-sparse/Veda-on-ComfyUI.git",
+      "revision": "67e4eb5541b648555563144401ebaba832bd73ec",
+      "untracked_source_files": []
+    }
+  }
+}

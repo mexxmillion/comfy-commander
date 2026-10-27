@@ -1,0 +1,17 @@
+{
+  "comfyui_revision": "36c0b0a687e5e6d7b55e3e61ab24262ffc0f2508",
+  "packages": {
+    "torch": "2.10.0+cu130",
+    "torchvision": "0.25.0+cu130",
+    "torchaudio": "2.10.0+cu130",
+    "transformers": "5.8.0",
+    "huggingface-hub": "1.14.0",
+    "comfy-kitchen": "0.2.37",
+    "comfy-aimdo": "0.5.5",
+    "numpy": "2.2.6",
+    "safetensors": "0.7.0",
+    "accelerate": "1.11.0",
+    "tokenizers": "0.22.2"
+  },
+  "python_version": "3.12.8"
+}

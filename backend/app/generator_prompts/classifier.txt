@@ -1,0 +1,5 @@
+Classify the user's video-generation request. Answer with exactly one word.
+REPLACEMENT - they want a specific object, product or character in a reference VIDEO swapped for the thing shown in a reference IMAGE, with everything else in that video left exactly as it is.
+STANDARD - anything else: a new scene, a continuation of a clip, a described shot, or a scene built from reference imagery.
+e.g. putting the character from the image into the video is REPLACEMENT; taking the motion from the video to animate a character is STANDARD.
+Answer REPLACEMENT or STANDARD.
