@@ -14,6 +14,44 @@ const setFormStatus = (form, message, error = false) => {
 };
 const selectedProfiles = name => [...document.querySelectorAll(`input[name="${name}-profiles"]:checked`)].map(input => input.value);
 
+const wizardPanels = [...document.querySelectorAll('[data-wizard-step]')];
+const railButtons = [...document.querySelectorAll('.wizard-rail [data-step-target]')];
+let currentStep = 0;
+let computeMode = localStorage.getItem('commander-compute-mode') || '';
+let diagnostics = {};
+const renderReadiness = () => {
+  const target = document.querySelector('#readiness');
+  if (!target) return;
+  const connected = [...document.querySelectorAll('.service-card .status.connected')].map(item => item.closest('.service-card').querySelector('h3').textContent);
+  const gpu = diagnostics.gpus?.length ? `${diagnostics.gpus.length} local GPU${diagnostics.gpus.length > 1 ? 's' : ''}` : 'No local GPU detected';
+  target.innerHTML = `<article><span>COMPUTE</span><strong>${escapeHtml(computeMode || 'Choose later')}</strong><small>${escapeHtml(gpu)}</small></article><article><span>SERVICES</span><strong>${connected.length ? connected.length + ' connected' : 'None required yet'}</strong><small>${escapeHtml(connected.join(' · ') || 'Bring your own keys when ready')}</small></article><article><span>STARTER PROFILES</span><strong>Qwen + MiniMax H3</strong><small>16 GB usable floor; scale heavy jobs up</small></article><article><span>REMOTE ACCESS</span><strong>${diagnostics.tailscale_available ? 'Tailscale detected' : 'Optional'}</strong><small>Private HTTPS from phone or tablet</small></article>`;
+};
+const showStep = index => {
+  currentStep = Math.max(0, Math.min(index, wizardPanels.length - 1));
+  wizardPanels.forEach((panel, i) => panel.classList.toggle('active', i === currentStep));
+  railButtons.forEach((button, i) => { button.classList.toggle('active', i === currentStep); button.classList.toggle('complete', i < currentStep); });
+  if (currentStep === 4) renderReadiness();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+};
+document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => showStep(currentStep + 1)));
+document.querySelectorAll('[data-back]').forEach(button => button.addEventListener('click', () => showStep(currentStep - 1)));
+document.querySelectorAll('[data-step-target]').forEach(button => button.addEventListener('click', () => showStep(Number(button.dataset.stepTarget))));
+document.querySelectorAll('[data-compute]').forEach(card => {
+  card.classList.toggle('selected', card.dataset.compute === computeMode);
+  card.addEventListener('click', () => {
+    computeMode = card.dataset.compute;
+    localStorage.setItem('commander-compute-mode', computeMode);
+    document.querySelectorAll('[data-compute]').forEach(item => item.classList.toggle('selected', item === card));
+    document.querySelector('#compute-next').disabled = false;
+  });
+});
+if (computeMode) document.querySelector('#compute-next').disabled = false;
+fetch('/api/v1/setup/diagnostics').then(response => response.json()).then(data => {
+  diagnostics = data;
+  const gpuText = data.gpus.length ? data.gpus.map(gpu => `${gpu.name} · ${gpu.vram_gb} GB`).join(' · ') : 'No NVIDIA GPU detected';
+  document.querySelector('#diagnostics').innerHTML = `<span class="${data.gpus.length ? 'good' : ''}">${escapeHtml(gpuText)}</span><span class="${data.comfyui_reachable ? 'good' : ''}">${data.comfyui_reachable ? 'ComfyUI is responding' : 'No local ComfyUI running'}</span><span class="${data.tailscale_available ? 'good' : ''}">${data.tailscale_available ? 'Tailscale available' : 'Tailscale optional'}</span>`;
+}).catch(() => { document.querySelector('#diagnostics').textContent = 'Local checks unavailable; cloud-only setup still works.'; });
+
 document.querySelector('#password-form')?.addEventListener('submit', async event => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -26,12 +64,20 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
     const endpoint = form.dataset.mode === 'login' ? 'login' : 'password-setup';
     await jsonRequest(`/api/v1/cloud/${endpoint}`, {method: 'POST', body: JSON.stringify({password, remember: true})});
     button.textContent = 'Settings unlocked ✓';
+    document.querySelector('#protect-next').disabled = false;
     await loadLoras();
   } catch (error) {
     alert(error.message);
     button.disabled = false;
   }
 });
+
+if (document.body.dataset.firstRun === 'false') document.querySelector('#protect-next').disabled = false;
+document.querySelector('#manage-models')?.addEventListener('click', () => {
+  document.querySelectorAll('.advanced-section').forEach(section => section.hidden = false);
+  document.querySelector('#lora-management').scrollIntoView({behavior: 'smooth'});
+});
+showStep(0);
 
 document.querySelectorAll('.service-card').forEach(card => {
   card.querySelector('form').addEventListener('submit', async event => {

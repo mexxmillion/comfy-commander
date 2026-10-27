@@ -1,101 +1,44 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Setup & Models · Tensor Master Community</title>
-    <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/static/community.css?v=1">
-    <link rel="stylesheet" href="/static/community-models.css?v=1">
-    <link rel="stylesheet" href="/static/agent-widget.css?v=1">
-    <script defer src="/static/community.js?v=1"></script>
-    <script defer src="/static/agent-widget.js?v=1"></script>
-  </head>
-  <body>
-    <main class="setup-shell">
-      <header class="setup-hero">
-        <span class="mark">TM</span>
-        <div><p>SETUP & MODELS</p><h1>Your studio.<br><em>Your credentials.</em></h1></div>
-        <a href="/">Open studio →</a>
-      </header>
+<html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome · Comfy Commander</title>
+  <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=1"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
+  <script defer src="/static/community.js?v=2"></script><script defer src="/static/agent-widget.js?v=1"></script>
+</head><body data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
+  <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p><h1>Your ComfyUI.<br><em>Ready to command.</em></h1></div><a href="/">Skip to studio →</a></header>
+  <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>
 
-      <section class="intro-card">
-        <div><span class="step">01</span><h2>{{ 'Unlock settings' if status.password else 'Protect your studio' }}</h2><p>{{ 'Sign in to replace credentials and manage the LoRAs included in future workers.' if status.password else 'Create the password used for rentals and configuration. First-time password creation is available only from localhost.' }}</p></div>
-        <form id="password-form" data-mode="{{ 'login' if status.password else 'setup' }}">
-          <label>Admin password<input id="password" type="password" minlength="12" autocomplete="{{ 'current-password' if status.password else 'new-password' }}" required></label>
-          {% if not status.password %}<label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>{% endif %}
-          <button type="submit">{{ 'Sign in' if status.password else 'Create password' }}</button>
-        </form>
-      </section>
+  <section class="wizard-panel active" data-wizard-step="0">
+    <div class="welcome-copy"><span class="step">01 · YOUR CONTROL PLANE</span><h2>One password.<br>No mystery setup.</h2><p>Comfy Commander coordinates your own ComfyUI workers. It does not bundle provider keys, rent hardware, or upload a model until you ask.</p><div class="trust-grid"><span>✓ Credentials stay on this machine</span><span>✓ Empty-state safe</span><span>✓ Agent-readable API</span><span>✓ Open-source profiles</span></div></div>
+    <div class="intro-card compact"><div><span class="step">LOCAL ADMIN</span><h2>{{ 'Unlock settings' if status.password else 'Protect your studio' }}</h2><p>{{ 'Sign in to manage credentials and models.' if status.password else 'Create the password used for rentals and configuration. First-time creation is localhost-only.' }}</p></div><form id="password-form" data-mode="{{ 'login' if status.password else 'setup' }}"><label>Admin password<input id="password" type="password" minlength="12" autocomplete="{{ 'current-password' if status.password else 'new-password' }}" required></label>{% if not status.password %}<label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>{% endif %}<button type="submit">{{ 'Sign in' if status.password else 'Create password' }}</button></form></div>
+    <div class="wizard-actions"><span>Password setup changes no cloud resources.</span><button type="button" data-next disabled id="protect-next">Continue →</button></div>
+  </section>
 
-      <section>
-        <div class="section-title"><span class="step">02</span><div><h2>Connect only what you use</h2><p>Keys are validated server-side, stored in the private credential volume, and never returned to this page.</p></div></div>
-        <div class="service-grid">
-          {% for id, label, detail, optional in [
-            ('runpod','RunPod','Launch compatible Secure Cloud GPU workers.','Choose RunPod or Vast'),
-            ('vast','Vast.ai','Search and rent compatible marketplace workers.','Choose RunPod or Vast'),
-            ('huggingface','Hugging Face','Download gated models and your own private model repositories.','Recommended for SAM3'),
-            ('openrouter','OpenRouter','Optional prompt enhancement and Creative Engine planning.','Optional')
-          ] %}
-          <article class="service-card" data-service="{{ id }}">
-            <div><span class="status {{ 'connected' if status[id] else '' }}">{{ 'Connected' if status[id] else optional }}</span><h3>{{ label }}</h3><p>{{ detail }}</p></div>
-            <form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste new credential" autocomplete="off"><button type="submit">{{ 'Replace & test' if status[id] else 'Connect & test' }}</button></form>
-            <button class="quiet remove-secret" type="button" {% if not status[id] %}hidden{% endif %}>Remove local credential</button>
-            <small role="status"></small>
-          </article>
-          {% endfor %}
-        </div>
-      </section>
+  <section class="wizard-panel" data-wizard-step="1">
+    <div class="section-title"><span class="step">02</span><div><h2>Where should work run?</h2><p>Start with what you have. Change this later without rebuilding the app.</p></div></div>
+    <div class="compute-grid"><button class="choice-card" type="button" data-compute="local"><span>ON THIS MACHINE</span><h3>Local GPU</h3><p>16 GB VRAM is a tested, usable floor. No rental key required.</p></button><button class="choice-card recommended" type="button" data-compute="hybrid"><span>RECOMMENDED</span><h3>Local + cloud</h3><p>Stay local for ordinary work; rent more headroom only for unusually heavy jobs.</p></button><button class="choice-card" type="button" data-compute="cloud"><span>NO LOCAL GPU NEEDED</span><h3>Cloud only</h3><p>Run curated workers through RunPod or Vast.ai.</p></button></div>
+    <div id="diagnostics" class="diagnostics"><span>Checking this machine…</span></div><p class="hardware-note"><strong>Tested:</strong> RTX 5070 Ti and RTX 5080-class 16 GB GPUs with 32 GB system RAM. Long 15–20 second, ~1.2 MP video jobs may exhaust memory; reduce duration/resolution or choose a roomier GPU.</p>
+    <div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next id="compute-next" disabled>Continue →</button></div>
+  </section>
 
-      <section id="lora-management">
-        <div class="section-title"><span class="step">03</span><div><h2>Your LoRAs, on your workers</h2><p>Upload a local LoRA to your Hugging Face account or register an existing repository file. Only pinned, verified entries are included in newly built cloud workers.</p></div></div>
-        <p class="callout">Nothing uploads automatically. Uploading requires this page, an authenticated admin session, and a deliberate click. Running workers are unchanged.</p>
-        <div class="lora-grid">
-          <form id="lora-upload-form" class="management-card">
-            <div><span class="status">LOCAL → HUGGING FACE</span><h3>Upload a local LoRA</h3><p>Select a file already inside a configured ComfyUI <code>models/loras</code> directory.</p></div>
-            <label>Local LoRA<select id="local-lora" required><option value="">Loading local LoRAs…</option></select></label>
-            <label>Hugging Face repository<input id="upload-repo" placeholder="your-name/your-model" required></label>
-            <label>Path in repository<input id="upload-path" placeholder="my-style.safetensors" required></label>
-            <label class="check"><input id="upload-private" type="checkbox" checked> Keep repository private</label>
-            <fieldset data-profile-picker="upload"><legend>Use with profiles</legend></fieldset>
-            <button type="submit">Upload & pin for workers</button><small role="status"></small>
-          </form>
-          <form id="lora-register-form" class="management-card">
-            <div><span class="status">EXISTING HUGGING FACE FILE</span><h3>Register an existing LoRA</h3><p>Use an immutable commit SHA so every worker receives exactly the reviewed file.</p></div>
-            <label>Repository<input id="register-repo" placeholder="owner/model" required></label>
-            <label>Commit SHA<input id="register-revision" minlength="40" maxlength="64" placeholder="40-character commit SHA" required></label>
-            <label>File in repository<input id="register-file" placeholder="my-style.safetensors" required></label>
-            <fieldset data-profile-picker="register"><legend>Use with profiles</legend></fieldset>
-            <button type="submit">Verify & register</button><small role="status"></small>
-          </form>
-        </div>
-        <div class="registered-card"><div><h3>Registered for future workers</h3><p>Unregistering does not delete files locally or on Hugging Face.</p></div><div id="registered-loras" class="registered-list"><p>Sign in to load your LoRAs.</p></div></div>
-      </section>
+  <section class="wizard-panel" data-wizard-step="2">
+    <div class="section-title"><span class="step">03</span><div><h2>Connect only what you use</h2><p>Hugging Face unlocks gated/private models; OpenRouter powers the optional copilot.</p></div></div>
+    <div class="service-grid">{% for id, label, detail, optional in [('runpod','RunPod','Launch compatible Secure Cloud GPU workers.','Choose RunPod or Vast'),('vast','Vast.ai','Search and rent compatible marketplace workers.','Choose RunPod or Vast'),('huggingface','Hugging Face','Download gated models and your private model repositories.','Recommended for SAM3'),('openrouter','OpenRouter','Optional agent planning with Gemini or DeepSeek.','Optional')] %}<article class="service-card" data-service="{{ id }}"><div><span class="status {{ 'connected' if status[id] else '' }}">{{ 'Connected' if status[id] else optional }}</span><h3>{{ label }}</h3><p>{{ detail }}</p></div><form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste new credential" autocomplete="off"><button type="submit">{{ 'Replace & test' if status[id] else 'Connect & test' }}</button></form><button class="quiet remove-secret" type="button" {% if not status[id] %}hidden{% endif %}>Remove local credential</button><small role="status"></small></article>{% endfor %}</div>
+    <p class="callout">Skip credentials and explore first. Connecting a provider never starts a rental.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Continue →</button></div>
+  </section>
 
-      <section>
-        <div class="section-title"><span class="step">04</span><div><h2>Use it from your phone</h2><p>Keep Tensor Master on localhost and let Tailscale Serve provide private HTTPS access inside your tailnet.</p></div></div>
-        <article class="phone-card">
-          <div><span class="status connected">PRIVATE HTTPS</span><h3>No router port forwarding</h3><p>Install Tailscale on this computer and your phone, sign into the same tailnet, then run:</p></div>
-          <code>tailscale serve --bg --yes http://127.0.0.1:8000</code>
-          <div class="phone-steps"><span>1 · Create the password once on this host</span><span>2 · Open the printed https://…ts.net URL on your phone</span><span>3 · Sign in and drive the studio</span></div>
-          <p class="note">Use Tailscale <strong>Serve</strong>, not Telnet or Funnel. Serve stays private to the tailnet; Funnel is public internet exposure.</p>
-        </article>
-      </section>
+  <section class="wizard-panel" data-wizard-step="3">
+    <div class="section-title"><span class="step">04</span><div><h2>Start with two creative lanes</h2><p>Qwen Image for design and editing. MiniMax H3 for video and character work.</p></div></div>
+    <div class="profile-grid">{% for id, profile in profiles.items() %}<article><span>{{ profile.kind }}</span><h3>{{ profile.name }}</h3><p>{{ profile.summary }}</p><small>Usable from {{ profile.minimum_vram_gb }} GB VRAM{% if profile.recommended_vram_gb %} · {{ profile.recommended_vram_gb }} GB recommended for headroom{% endif %}{% if profile.gated %} · upstream terms may apply{% endif %}</small></article>{% endfor %}</div>
+    <div class="replacement-card compact"><div><span class="step">FEATURED</span><h2>Character replacement</h2><p>Qwen references → reviewed SAM3 target mask → H3 Ref2VA → visual QC.</p></div><ol><li>Keep identity and wardrobe consistent.</li><li>Track only the performer being replaced.</li><li>Preserve choreography and continuous audio.</li></ol></div><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Review setup →</button></div>
+  </section>
 
-      <section>
-        <div class="section-title"><span class="step">05</span><div><h2>Choose a focused profile</h2><p>Community Edition ships Qwen Image and public MiniMax H3 paths. Your registered LoRAs remain an explicit personal layer.</p></div></div>
-        <div class="profile-grid">
-          {% for id, profile in profiles.items() %}
-          <article><span>{{ profile.kind }}</span><h3>{{ profile.name }}</h3><p>{{ profile.summary }}</p><small>Minimum {{ profile.minimum_vram_gb }} GB VRAM{% if profile.gated %} · may require accepted upstream terms{% endif %}</small></article>
-          {% endfor %}
-        </div>
-      </section>
+  <section class="wizard-panel launch-panel" data-wizard-step="4">
+    <span class="step">05 · READY WHEN YOU ARE</span><h2>Your command center is staged.</h2><p>Open with zero workers and zero cloud spend. Add a worker now, or let the copilot/Codex guide the next step.</p><div id="readiness" class="readiness-grid"></div><div class="launch-actions"><a class="primary-link" href="/">Open Comfy Commander →</a><button type="button" class="quiet" id="manage-models">Manage LoRAs</button></div><p class="note">For phone access, install Tailscale on both devices and privately serve <code>http://127.0.0.1:8000</code>. Use Serve—not Telnet and not public Funnel.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" class="quiet" data-step-target="1">Change setup</button></div>
+  </section>
 
-      <section class="replacement-card">
-        <div><span class="step">06</span><p>FEATURED WORKFLOW</p><h2>Character replacement,<br>without anchor guesswork.</h2></div>
-        <ol><li>Prepare identity references with Qwen.</li><li>Track one performer with a reviewed SAM3 video mask.</li><li>Invert only that target and pass the aligned video to H3 Ref2VA.</li><li>Review expressions, choreography and seams before delivery.</li></ol>
-        <p class="note">The default accepted route uses the tracked video guide and no Add Guide image nodes.</p>
-      </section>
-    </main>
-  </body>
-</html>
+  <section id="lora-management" class="advanced-section" hidden><div class="section-title"><span class="step">MODELS</span><div><h2>Your LoRAs, on your workers</h2><p>Upload a local LoRA to Hugging Face or register an existing immutable repository file.</p></div></div><p class="callout">Nothing uploads automatically. Running workers are unchanged.</p>
+    <div class="lora-grid"><form id="lora-upload-form" class="management-card"><div><span class="status">LOCAL → HUGGING FACE</span><h3>Upload a local LoRA</h3></div><label>Local LoRA<select id="local-lora" required><option value="">Loading local LoRAs…</option></select></label><label>Hugging Face repository<input id="upload-repo" placeholder="your-name/your-model" required></label><label>Path in repository<input id="upload-path" placeholder="my-style.safetensors" required></label><label class="check"><input id="upload-private" type="checkbox" checked> Keep repository private</label><fieldset data-profile-picker="upload"><legend>Use with profiles</legend></fieldset><button type="submit">Upload & pin for workers</button><small role="status"></small></form><form id="lora-register-form" class="management-card"><div><span class="status">EXISTING HUGGING FACE FILE</span><h3>Register an existing LoRA</h3></div><label>Repository<input id="register-repo" placeholder="owner/model" required></label><label>Commit SHA<input id="register-revision" minlength="40" maxlength="64" placeholder="40-character commit SHA" required></label><label>File in repository<input id="register-file" placeholder="my-style.safetensors" required></label><fieldset data-profile-picker="register"><legend>Use with profiles</legend></fieldset><button type="submit">Verify & register</button><small role="status"></small></form></div><div class="registered-card"><div><h3>Registered for future workers</h3><p>Unregistering deletes no files.</p></div><div id="registered-loras" class="registered-list"><p>Sign in to load your LoRAs.</p></div></div>
+  </section>
+</main></body></html>

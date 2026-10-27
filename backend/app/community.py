@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import os
+import platform
+import shutil
 import sqlite3
+import subprocess
 from pathlib import Path
 from typing import Literal
 
@@ -38,35 +41,40 @@ COMMUNITY_PROFILES = {
         "name": "Qwen Image 2.1",
         "kind": "image",
         "summary": "Text-to-image and reference editing, with optional Viggle Turbo.",
-        "minimum_vram_gb": 24,
+        "minimum_vram_gb": 16,
+        "recommended_vram_gb": 24,
         "gated": False,
     },
     "ref2v-int8": {
         "name": "MiniMax H3 Ref2V Community",
         "kind": "video",
         "summary": "Public INT8 Ref2VA with native, Turbo and ACC recipe choices.",
-        "minimum_vram_gb": 30,
+        "minimum_vram_gb": 16,
+        "recommended_vram_gb": 24,
         "gated": False,
     },
     "ref2v-singularity": {
         "name": "MiniMax H3 Singularity",
         "kind": "video",
         "summary": "Singularity Ref2VA with supported 4-step and 8-step Turbo recipes.",
-        "minimum_vram_gb": 20,
+        "minimum_vram_gb": 16,
+        "recommended_vram_gb": 24,
         "gated": True,
     },
     "fasth3-omni": {
         "name": "FastH3 Omni",
         "kind": "video",
         "summary": "Fast H3 Omni INT8, native eight-step profile.",
-        "minimum_vram_gb": 24,
+        "minimum_vram_gb": 16,
+        "recommended_vram_gb": 24,
         "gated": True,
     },
     "h3-character-replacement": {
         "name": "H3 Character Replacement",
         "kind": "guided-workflow",
         "summary": "Qwen reference preparation, reviewed SAM3 target-video tracking, and H3 Ref2VA.",
-        "minimum_vram_gb": 30,
+        "minimum_vram_gb": 16,
+        "recommended_vram_gb": 24,
         "gated": True,
         "execution_profile": "ref2v-int8",
     },
@@ -165,6 +173,46 @@ async def status() -> dict:
     return {"services": setup_status(), "profiles": COMMUNITY_PROFILES}
 
 
+def _local_diagnostics() -> dict:
+    """Return sanitized, read-only first-run checks. Never starts a worker."""
+    settings = get_settings()
+    gpus: list[dict] = []
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi:
+        try:
+            result = subprocess.run(
+                [nvidia_smi, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=4, check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            for line in result.stdout.splitlines():
+                name, _, memory = line.rpartition(",")
+                if name.strip() and memory.strip().isdigit():
+                    gpus.append({"name": name.strip(), "vram_gb": round(int(memory.strip()) / 1024, 1)})
+        except (OSError, subprocess.SubprocessError):
+            pass
+    comfy_reachable = False
+    if settings.comfyui_url.startswith(("http://127.0.0.1", "http://localhost")):
+        try:
+            comfy_reachable = not httpx.get(f"{settings.comfyui_url.rstrip('/')}/system_stats", timeout=1.5).is_error
+        except httpx.HTTPError:
+            pass
+    return {
+        "platform": platform.system(),
+        "gpus": gpus,
+        "comfyui_reachable": comfy_reachable,
+        "docker_available": bool(shutil.which("docker")),
+        "tailscale_available": bool(shutil.which("tailscale") or Path("C:/Program Files/Tailscale/tailscale.exe").is_file()),
+        "models_detected": any(path.is_dir() and next(path.rglob("*.safetensors"), None) for path in settings.model_directories),
+        "starts_nothing": True,
+    }
+
+
+@router.get("/api/v1/setup/diagnostics")
+async def diagnostics() -> dict:
+    return _local_diagnostics()
+
+
 @router.post("/api/v1/setup/secret")
 async def save_secret(payload: SecretSetup, request: Request) -> dict:
     require_admin(request, mutation=True)
@@ -258,7 +306,7 @@ async def profiles() -> dict:
 @router.get("/api/v1/community/agent-manifest")
 async def agent_manifest() -> dict:
     return {
-        "name": "Tensor Master Community",
+        "name": "Comfy Commander by Tensor Master",
         "description": "Agent-drivable ComfyUI studio and GPU scheduler",
         "read_only": ["GET /health", "GET /api/v1/community/profiles", "GET /api/v1/jobs/{job_id}"],
         "builders": ["POST /api/v1/community/character-replacement/prepare"],

@@ -4,12 +4,12 @@
   launcher.className = 'tm-agent-launcher';
   launcher.type = 'button';
   launcher.textContent = 'AI';
-  launcher.setAttribute('aria-label', 'Open Tensor Master copilot');
+  launcher.setAttribute('aria-label', 'Open Commander copilot');
   const panel = document.createElement('section');
   panel.className = 'tm-agent';
   panel.hidden = true;
   panel.innerHTML = `
-    <header><div><strong>Tensor Master Copilot</strong><small>BYOK · actions require confirmation</small></div><button class="tm-agent-close" type="button" aria-label="Close">×</button></header>
+    <header><div><strong>Commander Copilot</strong><small>BYOK · actions require confirmation</small></div><button class="tm-agent-close" type="button" aria-label="Close">×</button></header>
     <div class="tm-agent-controls"><select aria-label="Agent model"><option value="deepseek/deepseek-v4.1-flash-1017">DeepSeek V4.1 Flash</option><option value="google/gemini-3.8-flash">Gemini 3.8 Flash</option></select><label>Attach workflow JSON<input type="file" accept="application/json,.json"></label></div>
     <div class="tm-agent-messages" aria-live="polite"><div class="tm-agent-message">Tell me what you want to run, attach a ComfyUI workflow, or ask me to help configure a cloud profile.</div></div>
     <form class="tm-agent-compose"><textarea aria-label="Message" placeholder="e.g. inspect this workflow and prepare it for a cloud worker" required></textarea><button type="submit">Send</button></form>`;

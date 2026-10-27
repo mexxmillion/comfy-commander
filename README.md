@@ -1,8 +1,12 @@
-# Tensor Master Community
+# Comfy Commander by Tensor Master
 
-Tensor Master Community is a self-hosted, agent-friendly control plane for
+Comfy Commander is a self-hosted, agent-friendly control plane for
 ComfyUI. It keeps jobs, GPU workers, model profiles, provider credentials and
 render receipts behind one focused web app.
+
+It is an independent community project built on ComfyUI, not an official
+Comfy.org product. The Tensor Master name remains on the execution engine and
+API internals so existing workers and integrations do not break.
 
 This competition edition intentionally ships a small public surface:
 

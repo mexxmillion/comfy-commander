@@ -27,6 +27,8 @@ def test_community_profiles_are_deliberately_small():
         "qwen-image-21", "ref2v-int8", "ref2v-singularity",
         "fasth3-omni", "h3-character-replacement",
     }
+    assert all(profile["minimum_vram_gb"] == 16 for profile in COMMUNITY_PROFILES.values())
+    assert all(profile["recommended_vram_gb"] >= 24 for profile in COMMUNITY_PROFILES.values())
 
 
 def test_sam3_builder_emits_review_outputs_and_no_image_guides():

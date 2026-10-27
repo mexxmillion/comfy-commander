@@ -1,4 +1,4 @@
-"""Tensor Master web monitor and private worker API."""
+"""Comfy Commander web monitor and private worker API."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ class GalleryCompression(GZipMiddleware):
             await self.app(scope, receive, send)
 
 
-app = FastAPI(title="Tensor Master", version=TENSOR_MASTER_VERSION)
+app = FastAPI(title="Comfy Commander by Tensor Master", version=TENSOR_MASTER_VERSION)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 app.include_router(rental_router)
