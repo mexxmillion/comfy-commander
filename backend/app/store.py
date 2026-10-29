@@ -684,13 +684,13 @@ class QueueStore:
             }
 
     def output_records(self, limit: int = 1000) -> list[dict]:
-        """Return durable completed artifacts with their reusable Pocket recipes."""
+        """Return gallery jobs immediately, retaining identity through completion."""
         with Session(self.engine) as db:
             rows = db.execute(
                 select(TaskRow, JobRow, JobRecipeRow)
                 .join(JobRow, TaskRow.job_id == JobRow.id)
                 .outerjoin(JobRecipeRow, JobRecipeRow.job_id == JobRow.id)
-                .where(TaskRow.status == "completed", TaskRow.artifact_json.is_not(None))
+                .where((TaskRow.status != "completed") | TaskRow.artifact_json.is_not(None))
                 .order_by(JobRow.created_at.desc(), TaskRow.number)
                 .limit(limit)
             ).all()
@@ -703,7 +703,10 @@ class QueueStore:
                     "job_name": job.name,
                     "worker_id": task.worker_id,
                     "created_at": job.created_at,
-                    "artifact": json.loads(task.artifact_json),
+                    "artifact": json.loads(task.artifact_json) if task.status == "completed" and task.artifact_json else {},
+                    "status": task.status,
+                    "progress": task.progress,
+                    "message": task.message,
                     "recipe": json.loads(saved.recipe_json) if saved else None,
                 }
                 for task, job, saved in rows

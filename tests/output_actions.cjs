@@ -6,6 +6,7 @@ const source = fs.readFileSync(path.join(__dirname, '../backend/app/static/gener
 const helper = source.slice(source.indexOf('function outputActions('), source.indexOf('function renderGallery('));
 function element(tag) {
   return {tagName: tag.toUpperCase(), children: [], style: {}, handlers: {},
+    setAttribute(name, value) { this[name] = value; },
     append(...items) { this.children.push(...items); },
     prepend(...items) { this.children.unshift(...items); },
     addEventListener(name, callback) { this.handlers[name] = callback; }};
@@ -41,6 +42,14 @@ assert.deepEqual(context.outputActions({filename: 'old.mp4'}).children.map(item 
   ['View / play', 'Save video', 'Download']);
 const saved = context.outputActions({...file, saved: true}).children.map(item => item.textContent);
 assert.ok(saved.includes('Rename preset') && saved.includes('Remove preset'));
+assert.equal(context.outputActions({...file, status: 'Running'}).children.length, 0);
+assert.equal(context.outputActions({...file, status: 'Queued'}).children.length, 0);
+const slateStart = source.indexOf('function outputSlate(');
+vm.runInContext(source.slice(slateStart, source.indexOf('function outputActions(', slateStart)), context);
+const slate = context.outputSlate({status: 'Running', progress: 35});
+assert.equal(slate.children[0].textContent, 'Rendering');
+assert.equal(slate.children[1].textContent, '35%');
+assert.equal(slate.role, 'status');
 console.log('Shared gallery/output action behavior passed');
 
 // Historical ACC recipes must not fall through to submission after rejection.

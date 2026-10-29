@@ -437,25 +437,26 @@
     if(!durableOutputs)return;const term=$('#output-search').value.trim().toLowerCase(),size=Number($('#output-page-size').value)||24;
     const matches=durableOutputs.filter(file=>[file.job_name,file.job_id,file.task_id,file.prompt_id,file.worker_id,file.recipe?.sourceDirection,file.recipe?.direction,file.recipe?.aiPrompt].join(' ').toLowerCase().includes(term));
     const pages=Math.max(1,Math.ceil(matches.length/size));outputPage=Math.min(outputPage,pages-1);const shown=matches.slice(outputPage*size,(outputPage+1)*size),grid=$('#output-grid');grid.replaceChildren();
-    shownOutputs=shown;
-    const known=new Set(durableOutputs.map(file=>file.prompt_id));for(const id of checkedOutputs)if(!known.has(id))checkedOutputs.delete(id);
+    const active=file=>["Queued","Running","Cancelling"].includes(file.status);
+    shownOutputs=shown.filter(file=>!active(file));
+    const known=new Set(durableOutputs.filter(file=>!active(file)).map(file=>file.prompt_id));for(const id of checkedOutputs)if(!known.has(id))checkedOutputs.delete(id);
     for(const file of shown){
-      const card=el('article',null,'output-card gallery-card'),media=document.createElement('img'),query=new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
+      const card=el('article',null,'output-card gallery-card'),media=file.filename?document.createElement('img'):window.tensorGenerator.outputSlate(file),query=new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
       if(file.task_id&&!String(file.worker_id||'').startsWith('local'))query.set('task_id',file.task_id);
-      media.src=`/api/v1/media/preview?${query}`;media.loading='lazy';media.alt='Completed render';
+      if(file.filename){media.src=`/api/v1/media/preview?${query}`;media.loading='lazy';media.alt='Completed render';}
       const title=el('h3',file.job_name||file.filename),original=file.recipe?.sourceDirection||file.recipe?.direction||'',prompt=el('p',original||'No prompt recorded'),meta=el('div',`${file.worker_id||'unknown worker'} · ${date(file.modified?file.modified*1000:null)}`,'output-meta'),actions=window.tensorGenerator.outputActions(file,media);actions.classList.add('output-actions');
       const identity=el('div','Job: ','output-job-id');identity.append(el('code',file.job_id||file.prompt_id||'Not recorded'));
       const timing=el('div',file.timings?.generation_seconds==null?'Render time not recorded':`Render: ${seconds(file.timings.generation_seconds)}${file.timings.queue_seconds==null?'':` · Queue: ${seconds(file.timings.queue_seconds)}`}`,'output-timing');
       const enhanced=file.recipe?.aiPrompt;
-      const selection=el('label',' Select entry'),check=document.createElement('input');check.type='checkbox';check.checked=checkedOutputs.has(file.prompt_id);check.disabled=removingOutputs;check.style.width='auto';check.onchange=()=>{if(check.checked)checkedOutputs.add(file.prompt_id);else checkedOutputs.delete(file.prompt_id);updateOutputSelection();};selection.prepend(check);
+      const selection=el('label',' Select entry'),check=document.createElement('input');check.type='checkbox';check.checked=checkedOutputs.has(file.prompt_id);check.disabled=removingOutputs||active(file);check.style.width='auto';check.onchange=()=>{if(check.checked)checkedOutputs.add(file.prompt_id);else checkedOutputs.delete(file.prompt_id);updateOutputSelection();};selection.prepend(check);
       const copy=el('div',null,'gallery-card-copy');
       card.append(media,copy);copy.append(selection,title,identity,prompt);
       if(enhanced&&enhanced!==original){const details=el('details',null,'output-ai-prompt'),summary=el('summary','AI enhanced prompt'),text=el('pre',enhanced);details.append(summary,text);copy.append(details);}
       if(file.job_id&&!file.recipe){const edit=el('button','Edit & rerun');edit.type='button';edit.onclick=()=>openGeneratorJob(file.job_id);actions.prepend(edit);}
-      const remove=el('button','Remove entry','danger');remove.type='button';remove.disabled=removingOutputs;remove.title='Remove from Outputs and Gallery; keep media file';remove.onclick=()=>removeOutputEntries([file.prompt_id]);actions.append(remove);
+      const remove=el('button','Remove entry','danger');remove.type='button';remove.disabled=removingOutputs||active(file);remove.title='Remove from Outputs and Gallery; keep media file';remove.onclick=()=>removeOutputEntries([file.prompt_id]);actions.append(remove);
       copy.append(timing,meta,outputSettings(file),actions);grid.append(card);
     }
-    $('#output-status').textContent=`${matches.length} completed outputs safely stored by Tensor Master · ${durableOutputs.length} total`;
+    $('#output-status').textContent=`${matches.length} jobs · ${durableOutputs.filter(active).length} queued or rendering · ${durableOutputs.length} total`;
     $('#output-page-label').textContent=`Page ${outputPage+1} of ${pages}`;$('#output-prev').disabled=outputPage===0;$('#output-next').disabled=outputPage+1>=pages;
     updateOutputSelection();
   }
@@ -498,6 +499,7 @@
   function onJobSubmitted() {
     if(refreshing){refreshPending=true;return;}
     void refresh();
+    if(location.hash==='#outputs')void loadDurableOutputs();
   }
   window.addEventListener('tensor-master:job-submitted',onJobSubmitted);
   async function refresh() {
@@ -552,5 +554,5 @@
   }
   $('#refresh-console').onclick=refreshVisiblePage;
   syncBulkWorkers();filterTasks();filterWorkers();renderLogs();renderInspector();$('#sync-status').textContent='Live · refresh every 5s';
-  setInterval(()=>{if(!paused&&!document.hidden)refresh();},5000);
+  setInterval(()=>{if(!paused&&!document.hidden){void refresh();if(location.hash==='#outputs')void loadDurableOutputs();}},5000);
 })();

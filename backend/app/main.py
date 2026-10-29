@@ -804,7 +804,7 @@ async def job_status(job_id: str, store: QueueStore = STORE) -> dict:
 @app.get("/api/v1/outputs")
 async def completed_outputs(request: Request, store: QueueStore = STORE,
                             limit: Annotated[int, Query(ge=1, le=1000)] = 1000) -> list[dict]:
-    """Authoritative gallery feed; artifacts are already stored by Tensor Master."""
+    """Authoritative gallery feed for queued, running and finished jobs."""
     records = store.output_records(limit=limit)
     missing = {record["job_id"] for record in records if record["recipe"] is None}
     historic = creative.historic_recipe_index(store, missing)
@@ -816,9 +816,7 @@ async def completed_outputs(request: Request, store: QueueStore = STORE,
             if recipe:   # rebuilt from the graph: keep it, so the next gallery load is instant
                 store.save_recipe_if_missing(record["job_id"], recipe)
         artifact = record["artifact"]
-        if not artifact.get("filename"):
-            continue
-        if not artifact.get("url"):
+        if artifact.get("filename") and not artifact.get("url"):
             view_url = str(request.url.replace(path='/api/v1/media/file', query=''))
             artifact["url"] = view_url + "?" + urlencode({
                 "filename": artifact["filename"],
@@ -839,7 +837,11 @@ async def completed_outputs(request: Request, store: QueueStore = STORE,
             "worker_id": record["worker_id"],
             "recipe": recipe,
             "modified": modified,
-            "status": "Finished",
+            "status": {"completed": "Finished", "queued": "Queued", "running": "Running",
+                       "cancel_requested": "Cancelling", "failed": "Failed",
+                       "cancelled": "Cancelled"}.get(record["status"], record["status"]),
+            "progress": record["progress"],
+            "message": record["message"],
         })
     return results
 

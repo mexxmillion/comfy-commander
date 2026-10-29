@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=dispatcher-counts-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=live-output-slates-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
-    <script defer src="/static/generator.js?v=sparse-attention-20261029"></script>
-    <script defer src="/static/console.js?v=dispatcher-counts-20261029"></script>
+    <script defer src="/static/generator.js?v=live-output-slates-20261029"></script>
+    <script defer src="/static/console.js?v=live-output-slates-20261029"></script>
     <link rel="stylesheet" href="/static/generator.css?v=comfy-palette-20261029">
     <link rel="stylesheet" href="/static/agent-widget.css?v=1">
     <script defer src="/static/agent-widget.js?v=1"></script>
@@ -57,8 +57,8 @@
           {% include "generator.html" %}
         </section>
         <section id="outputs" class="output-workspace" hidden aria-label="Durable output gallery">
-          <div class="output-toolbar"><div><p class="eyebrow">TENSOR MASTER / DURABLE OUTPUTS</p><h2>Completed renders</h2></div><input id="output-search" type="search" placeholder="Search prompt, job, worker…"><label>Per page <select id="output-page-size"><option>12</option><option selected>24</option><option>48</option></select></label></div>
-          <p id="output-status" class="muted">Loading completed outputs…</p>
+          <div class="output-toolbar"><div><p class="eyebrow">TENSOR MASTER / DURABLE OUTPUTS</p><h2>Your generations</h2></div><input id="output-search" type="search" placeholder="Search prompt, job, worker…"><label>Per page <select id="output-page-size"><option>12</option><option selected>24</option><option>48</option></select></label></div>
+          <p id="output-status" class="muted">Loading generations…</p>
           <div class="output-actions"><button id="output-select-page" type="button">Select page</button><button id="output-clear-selection" type="button">Clear selection</button><button id="output-remove-selected" type="button" disabled>Remove selected (0)</button></div>
           <p class="muted">Removing entries hides them from Outputs and Gallery. Media files stay on disk.</p>
           <div id="output-grid" class="output-grid"></div>

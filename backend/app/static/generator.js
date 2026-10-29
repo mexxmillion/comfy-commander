@@ -1328,7 +1328,7 @@ function recentJobs(serverFiles, history, queue) {
       const timestamp = entry.status?.messages?.find(([kind]) => kind === "execution_start")?.[1]?.timestamp;
       jobs.push({ ...output, prompt_id: entry.prompt[1], status: "Finished", recipe, fromGraph: true, timings: historyTiming(entry), thumbnailFile: thumbnail, modified: timestamp ? timestamp / 1000 : 0 });
     });
-  serverFiles.forEach((file) => jobs.push({ ...file, modified: file.modified > 1e12 ? file.modified / 1000 : file.modified, status: file.filename ? "Finished" : "Saved preset", thumbnailFile: file.thumbnail
+  serverFiles.forEach((file) => jobs.push({ ...file, modified: file.modified > 1e12 ? file.modified / 1000 : file.modified, status: file.status || (file.filename ? "Finished" : "Saved preset"), thumbnailFile: file.thumbnail
     ? { filename: file.thumbnail, subfolder: file.subfolder || "", type: file.type || "output", kind: "image" }
     : referenceThumbnail(file.recipe) }));
 
@@ -1345,7 +1345,7 @@ function recentJobs(serverFiles, history, queue) {
         existing.fromGraph = false;
       }
       if (job.job_id) {
-        for (const key of ["prompt_id", "job_id", "task_id", "comfy_prompt_id", "worker_id", "filename", "subfolder", "type", "url", "status"]) {
+        for (const key of ["prompt_id", "job_id", "task_id", "comfy_prompt_id", "worker_id", "filename", "subfolder", "type", "url", "status", "progress", "message"]) {
           if (job[key] !== undefined) existing[key] = job[key];
         }
       }
@@ -1704,8 +1704,23 @@ async function removeSelectedGalleryItems() {
   toast(failed ? `${ids.length - failed} removed; ${failed} failed. Failed entries remain selected for retry.` : `${ids.length} entries removed. Media files kept.`);
 }
 
+function outputSlate(file) {
+  const slate = document.createElement("div");
+  slate.className = "rendering-slate";
+  slate.setAttribute("role", "status");
+  const title = document.createElement("strong");
+  title.textContent = file.status === "Running" ? "Rendering" : file.status || "Awaiting output";
+  const note = document.createElement("span");
+  const progress = Number(file.progress);
+  note.textContent = file.status === "Running" && Number.isFinite(progress)
+    ? `${Math.max(0, Math.min(100, Math.round(progress)))}%` : file.message || "Your output will appear here";
+  slate.append(title, note);
+  return slate;
+}
+
 function outputActions(file, media = null) {
   const actions = document.createElement("div");
+  if (["Running", "Queued", "Cancelling"].includes(file.status)) return actions;
   actions.className = "gallery-card-actions";
   if (["h3", "qwen", "faces", "krea", "ltx"].includes(file.recipe?.mode)) {
     const reuse = document.createElement("button");
@@ -1743,7 +1758,7 @@ function outputActions(file, media = null) {
 
 function renderGallery(files) {
   state.galleryFiles = files;
-  const selectable = new Set(files.filter(file => !["Running", "Queued"].includes(file.status)).map(file => file.prompt_id));
+  const selectable = new Set(files.filter(file => !["Running", "Queued", "Cancelling"].includes(file.status)).map(file => file.prompt_id));
   for (const id of gallerySelection) if (!selectable.has(id)) gallerySelection.delete(id);
   const grid = $("#gallery-grid");
   grid.replaceChildren();
@@ -1769,7 +1784,9 @@ function renderGallery(files) {
     const preview = file.filename ? file : file.thumbnailFile || file;
     const isVideo = /\.(mp4|webm|mov|mkv)$/i.test(preview.filename || "") || preview.kind === "video";
     let media;
-    if (preview.filename) {
+    if (!file.filename && file.status && file.status !== "Saved preset") {
+      media = outputSlate(file);
+    } else if (preview.filename) {
       if (/\.(mp3|wav|flac|ogg|m4a)$/i.test(preview.filename)) {
         media=document.createElement('audio');media.controls=true;media.preload='none';media.src=mediaUrl(preview);
       } else if (state.controllerMedia) {
@@ -1818,7 +1835,7 @@ function renderGallery(files) {
     summary.textContent = "Settings & job details";
     data.textContent = JSON.stringify({job: file.prompt_id, created: file.modified > 1000000000 ? new Date(file.modified * 1000).toLocaleString() : null, recipe: file.recipe, timings: file.timings}, null, 2);
     details.append(summary, data);
-    if (!["Running", "Queued"].includes(file.status)) {
+    if (!["Running", "Queued", "Cancelling"].includes(file.status)) {
       const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "Remove entry"; remove.className = "danger"; remove.onclick = () => removeGalleryItem(file); actions.append(remove);
     }
     copy.append(name, prompt, ...(aiPrompt ? [aiPrompt] : []), metadata, details, actions);
@@ -1841,6 +1858,13 @@ async function loadGallery() {
     if (load === galleryLoad) renderGallery(recentJobs([...outputs,...library,...savedSetups()],{},{}).filter(file=>!hidden.has(file.prompt_id)));
   } catch(error) { if(load === galleryLoad) $('#gallery-status').textContent = error.message; }
 }
+
+window.addEventListener('tensor-master:job-submitted', () => {
+  if (!studioRoot.hidden && !$("#gallery-panel").hidden) void loadGallery();
+});
+setInterval(() => {
+  if (!document.hidden && !studioRoot.hidden && !$("#gallery-panel").hidden && !removingGallery) void loadGallery();
+}, 5000);
 
 async function showGallery() {
   studioRoot.classList.add("library-open");
@@ -2679,7 +2703,7 @@ $('#generator-login-form').onsubmit = async event => {
     await initialize();await window.creativeMaster?.reconnect();
   } catch(error){$('#generator-login-error').textContent=error.message;}
 };
-window.tensorGenerator = {loadJob: restoreDispatchedJob, outputActions, showSources, showGenerate: () => setMode(state.mode)};
+window.tensorGenerator = {loadJob: restoreDispatchedJob, outputActions, outputSlate, showSources, showGenerate: () => setMode(state.mode)};
 for (const event of ['input','change']) $('#studio-form').addEventListener(event,()=>{
   if (!draftReady) draftEarlyEdit=true;
   saveDraft();
