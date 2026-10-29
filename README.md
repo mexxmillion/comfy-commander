@@ -1,5 +1,8 @@
 # Comfy Commander by Tensor Master
 
+[![License: AGPL v3 or later](https://img.shields.io/badge/License-AGPL_v3_or_later-663399.svg)](LICENSE)
+[![Tests](https://github.com/mexxmillion/tensor-master-community/actions/workflows/ci.yml/badge.svg)](https://github.com/mexxmillion/tensor-master-community/actions/workflows/ci.yml)
+
 **Run ComfyUI work locally or on rented GPUs from one polished web app—and let
 Codex, Claude, or another agent drive the safe parts through MCP.**
 
@@ -298,8 +301,17 @@ Never run production experiments by weakening a ComfyUI node allowlist or by
 replacing a secure launcher. Rendering, renting GPUs and posting competition
 entries are separate explicit actions.
 
-## License and upstream terms
+## License, commercial use and upstream terms
 
-Tensor Master Community code is GPL-3.0-or-later; see [LICENSE](LICENSE). Models
-and runtime dependencies retain their own licenses. In particular, the SAM3
-checkpoint has upstream terms that each user must review and accept.
+Comfy Commander Community code is **AGPL-3.0-or-later**; see
+[LICENSE](LICENSE) and [LICENSING.md](LICENSING.md). You may use it commercially
+under the AGPL, but modified network services and distributed derivatives must
+provide their corresponding source under the AGPL. Organizations that want to
+build a proprietary or closed-source product should contact the copyright
+holder about a separate commercial license.
+
+The AGPL covers this project's original code, not its name, logo, downloaded
+models or third-party components. See [TRADEMARKS.md](TRADEMARKS.md) and
+[NOTICE.md](NOTICE.md). Models and runtime dependencies retain their own terms.
+In particular, the SAM3 checkpoint has upstream terms that each user must
+review and accept.

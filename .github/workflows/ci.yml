@@ -1,0 +1,32 @@
+name: Verify community build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project and test dependencies
+        run: python -m pip install --disable-pip-version-check ".[dev]"
+      - name: Verify SPDX package metadata
+        run: |
+          python - <<'PY'
+          from importlib.metadata import metadata
+
+          expression = metadata("ai-dispatcher").get("License-Expression")
+          if expression != "AGPL-3.0-or-later":
+              raise SystemExit(f"unexpected License-Expression: {expression!r}")
+          print(expression)
+          PY
+      - name: Run tests
+        run: python -m pytest -q

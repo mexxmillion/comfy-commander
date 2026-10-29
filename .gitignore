@@ -6,6 +6,12 @@ runpod.txt
 .venv*/
 __pycache__/
 .pytest_cache/
+.ruff_cache/
+.test-tmp/
 *.pyc
 *.sqlite3
 state/
+models/
+dist/
+build/
+*.egg-info/

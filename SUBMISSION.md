@@ -46,7 +46,7 @@ human authorization.
 **1:38–1:54 — QC.** Show expression/choreography/seam review and preserved source
 audio. Distinguish “rendered” from “accepted.”
 
-**1:54–2:00 — Close.** Show the public repo, GPL license and quick-start command.
+**1:54–2:00 — Close.** Show the public repo, AGPL license and quick-start command.
 
 ## Submission package
 
