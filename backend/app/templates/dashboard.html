@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=output-gallery-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=generate-first-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
     <script defer src="/static/generator.js?v=output-gallery-20261029"></script>
     <script defer src="/static/console.js?v=output-gallery-20261029"></script>
@@ -18,13 +18,13 @@
       <aside>
         <div class="brand"><span class="pulse"></span> Tensor Master</div>
         <nav aria-label="Main navigation">
+          <a class="generate-primary" href="#generator">Generate</a>
           <a class="active" href="#monitor">Monitor <span>{{ state.metrics.running }}</span></a>
           <a href="#tasks">Tasks <span>{{ state.metrics.active_tasks }}</span></a>
           <a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a>
           <a href="#rentals">Rentals <span>{{ active_rentals|length }}</span></a>
           <a href="#activity">Activity</a>
           <a href="#history">Benchmarks</a>
-          <a href="#generator">Generate</a>
           <a href="#outputs">Outputs</a>
           <a href="/setup">Setup & Models</a>
         </nav>

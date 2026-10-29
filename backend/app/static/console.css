@@ -1,4 +1,7 @@
 /* Dense operations layout. No simulated telemetry. */
+.shell>aside nav a.generate-primary{background:#153b42;color:#b8f6ff;border:1px solid #398b98;font-weight:750;margin-bottom:8px}
+.shell>aside nav a.generate-primary:hover,.shell>aside nav a.generate-primary:focus-visible{background:#20545e;color:#fff;outline:2px solid #78deef;outline-offset:2px}
+.shell>aside nav a.generate-primary.active{background:#24616d;border-color:#78deef;color:#fff}
 .generator-open main { display:flex!important; }
 .generator-open main>*:not(header):not(.generator-workspace) { display:none!important; }
 .output-open main { display:flex!important; }
