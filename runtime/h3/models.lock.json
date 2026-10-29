@@ -9,7 +9,6 @@
     "ref2v-int8": [
       "common",
       "ref2v-int8",
-      "ref2v-turbo",
       "sam3",
       "vsa",
       "face-refine",
@@ -19,7 +18,6 @@
     "ref2v-singularity": [
       "common",
       "ref2v-singularity",
-      "ref2v-turbo",
       "sam3",
       "vsa",
       "face-refine",
@@ -115,15 +113,6 @@
       "local_dir": ".",
       "size": 20970379616,
       "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779"
-    },
-    {
-      "group": "ref2v-turbo",
-      "repo": "Kijai/MiniMax-H3-experimental",
-      "revision": "a32d8b8b86bf649eb949db63727e5456d1af8611",
-      "file": "loras/MiniMax-H3-Ref2VA-Acc-8Step_pruned_comfy.safetensors",
-      "local_dir": ".",
-      "size": 1725921392,
-      "sha256": "6f18e1c2eccb14b37322607730f26b16bf1169b56cd098ea006cffaec43d1e39"
     },
     {
       "group": "face-refine",

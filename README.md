@@ -18,7 +18,7 @@ The Community Edition intentionally stays focused:
 
 - Qwen Image 2.1 image generation and reference editing
 - MiniMax H3 Ref2VA INT8, Singularity and FastH3 Omni profiles
-- native, public ACC and bring-your-own 4/8-step Turbo recipes
+- native and bring-your-own 4/8-step Turbo recipes
 - RunPod and Vast.ai worker launch controls with explicit cost limits
 - optional Hugging Face credentials plus pinned personal-LoRA deployment
 - a BYOK OpenRouter studio copilot with Gemini and DeepSeek Flash choices

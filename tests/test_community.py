@@ -78,6 +78,16 @@ def test_model_manifest_has_only_public_profiles_and_pinned_sam3():
     assert sam3[0]["sha256"] == "9ba99c92703c2e8b4f47de2d34a539bb8e18923049e238b780d70dbe6368eb03"
 
 
+def test_h3_profiles_do_not_download_acc():
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
+    assert not any("-acc-" in item["file"].lower() for item in manifest["artifacts"])
+    for groups in manifest["profiles"].values():
+        assert "ref2v-turbo" not in groups
+    template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert 'name="turbo" value="10"' not in template
+
+
 def test_community_lora_manifest_round_trip(tmp_path):
     path = tmp_path / "community-loras.json"
     entry = {

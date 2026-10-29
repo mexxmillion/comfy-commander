@@ -42,3 +42,16 @@ assert.deepEqual(context.outputActions({filename: 'old.mp4'}).children.map(item 
 const saved = context.outputActions({...file, saved: true}).children.map(item => item.textContent);
 assert.ok(saved.includes('Rename preset') && saved.includes('Remove preset'));
 console.log('Shared gallery/output action behavior passed');
+
+// Historical ACC recipes must not fall through to submission after rejection.
+const loadStart = source.indexOf('function loadRecipe(recipe)');
+const loadGuard = source.slice(loadStart, source.indexOf("  $('#ai-prompt-only')", loadStart)) + '\n}';
+const requeueStart = source.indexOf('function requeueRecipe(recipe)');
+const requeue = source.slice(requeueStart, source.indexOf('\nasync function keepSetup', requeueStart));
+context.normalizeRecipe = recipe => recipe;
+context.toast = message => calls.push(['toast', message]);
+context.setTimeout = () => assert.fail('Rejected ACC recipe must not schedule submission');
+vm.runInContext(loadGuard + '\n' + requeue, context);
+context.requeueRecipe({mode: 'h3', turbo: 10});
+assert.match(calls.at(-1)[1], /ACC presets are no longer supported/);
+console.log('Historical ACC requeue rejection passed');
