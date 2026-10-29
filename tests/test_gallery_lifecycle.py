@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
-from backend.app.store import QueueStore, TaskRow
+from backend.app.store import QueueStore, TaskRow, WorkerRow
 
 
 @pytest.mark.asyncio
@@ -53,3 +53,25 @@ def test_requeued_job_does_not_show_stale_output(tmp_path):
     record = store.output_records()[0]
     assert record["status"] == "queued"
     assert record["artifact"] == {}
+
+
+def test_preview_wait_reason_matches_worker_capability_and_state(tmp_path):
+    store = QueueStore(f"sqlite:///{tmp_path / 'waiting.sqlite3'}")
+    job = store.submit(name="Preview", graph={"1": {"class_type": "TMPrepareReference"}},
+                       runtime="pocket-reference-preprocess-v1", min_vram_gb=4)
+    task = f"{job}-t001"
+    assert store.task_wait_reason(task) == "no_worker"
+    values = dict(worker_id="test-local", name="Test", provider="Local", gpu="Test GPU",
+                  architecture="any", vram_gb=16, runtime="pocket-h3-local")
+    store.register_worker(**values)
+    assert store.task_wait_reason(task) == "no_worker"
+    store.register_worker(**values, capabilities=["reference-preprocess-v1"])
+    assert store.task_wait_reason(task) == "queue"
+    with Session(store.engine) as db, db.begin():
+        db.get(WorkerRow, "test-local").status = "draining"
+    assert store.task_wait_reason(task) == "workers_paused"
+
+
+def test_job_submission_defaults_to_16gb():
+    from backend.app.main import JobSubmission
+    assert JobSubmission(name="Default", graph={}).min_vram_gb == 16

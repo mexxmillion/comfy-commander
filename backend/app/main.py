@@ -266,7 +266,7 @@ class JobSubmission(BaseModel):
     graph: dict[str, dict[str, Any]]
     recipe: dict | None = None
     policy: Literal["local", "standard", "any"] = "local"
-    min_vram_gb: int = Field(default=24, ge=1, le=192)
+    min_vram_gb: int = Field(default=16, ge=1, le=192)
     architecture: Literal["any", "ampere", "ada", "blackwell"] = "any"
     # Higher number = picked up sooner; 100 is medium, 1 is the lowest.
     priority: int = Field(default=DEFAULT_PRIORITY, ge=MIN_PRIORITY, le=MAX_PRIORITY)
@@ -1114,7 +1114,7 @@ async def operator_route_task(
     if graph is None:
         raise HTTPException(status_code=404, detail="Task not found")
     runtime = runtime_for_graph(graph, payload.pool)
-    default_vram = 24
+    default_vram = 16
     try:
         route = store.route_task(
             task_id,

@@ -174,6 +174,8 @@ def isolation_status(job_id: str, request: Request, store: QueueStore = STORE):
         raise HTTPException(404, 'Isolation job not found')
     task = job['tasks'][0]
     result = {'status': task['status'], 'message': task['message'], 'progress': task['progress']}
+    if task['status'] == 'queued':
+        result.update(wait_reason=store.task_wait_reason(task['id']), queue_position=task.get('rank'))
     if task['status'] == 'completed' and task.get('artifact'):
         result['reference'] = isolation.promote_artifact(get_settings().comfyui_input_dir, recipe,
                                                        task['artifact'], task['id'])

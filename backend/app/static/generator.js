@@ -506,7 +506,7 @@ async function openIsolationEditor(index) {
     $("#isolation-view").value = "composite";
     $("#isolation-original").src = referenceFileUrl(previous?.source || target.file);
     $("#isolation-preview").hidden = true;
-    $(".isolation-previews").hidden = true;
+    $(".isolation-previews").hidden = false;
     $("#isolation-progress").hidden = true;
     $("#isolation-apply").disabled = false;
     $("#isolation-status").textContent = "Choose isolation or depth, then click Preview result. Review the result before saving.";
@@ -539,6 +539,17 @@ function showIsolationPreview() {
   $("#isolation-preview-label").textContent = view === "mask" ? "Mask · white is kept" : view === "composite" ? "Generation reference" : "Cutout preview";
 }
 
+function isolationProgressText(result) {
+  if (result.status === "queued") {
+    if (result.wait_reason === "no_worker") return "Waiting for a compatible reference-processing worker. Preview has not started.";
+    if (result.wait_reason === "workers_paused") return "Waiting for a worker · compatible workers are paused or unavailable. Preview has not started.";
+    if (result.wait_reason === "queue") return `Queued${result.queue_position ? ` · position ${result.queue_position}` : ""} · waiting for its turn on a compatible worker.`;
+    return "Queued · checking worker availability. Preview has not started.";
+  }
+  const progress = Number(result.progress);
+  return `Processing${result.message ? ` · ${result.message}` : " reference"}${Number.isFinite(progress) ? ` · ${Math.max(0, Math.min(100, Math.round(progress)))}%` : ""}`;
+}
+
 async function previewIsolation() {
   const editor = isolationEditor;
   if (!editor || editor.busy) return;
@@ -568,7 +579,7 @@ async function previewIsolation() {
     while (!result.reference) {
       if (["failed", "cancelled"].includes(result.status)) throw new Error(result.message || "Isolation did not complete. See Tasks for details.");
       if (editor === isolationEditor) {
-        $("#isolation-status").textContent = result.status === "queued" ? "Queued · waiting for a reference-processing worker. Follow this job in Dispatcher." : (result.message || "Processing reference…");
+        $("#isolation-status").textContent = isolationProgressText(result);
         if (result.status === "running" && Number.isFinite(Number(result.progress))) $("#isolation-progress").value = Math.max(0, Math.min(100, Number(result.progress)));
         else $("#isolation-progress").removeAttribute("value");
       }
@@ -2072,7 +2083,7 @@ async function run(event) {
           graph: workflow,
           recipe,
           policy: forceLocal ? "local" : target === "tensor-master-any" ? "any" : cloud ? "standard" : "local",
-          min_vram_gb: 24,
+          min_vram_gb: 16,
           architecture: "any",
         }),
       });
@@ -2492,7 +2503,7 @@ async function runLtx() {
     setup.recipe.renderTarget = poolTarget(policy);
     const response = await fetch("/api/v1/jobs", {method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({name: payload.mode === "hdr" ? "LTX SDR → HLG HDR" : "LTX 2× Upscale",
-        graph: setup.graph, recipe: setup.recipe, policy, min_vram_gb: 24, architecture: "any"})});
+        graph: setup.graph, recipe: setup.recipe, policy, min_vram_gb: 16, architecture: "any"})});
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || "Tensor Master rejected the job");
     const dispatch = {recipe: setup.recipe, label: `LTX ${payload.mode}`, startedAt: Date.now(), busy: false};

@@ -181,3 +181,10 @@ assert.equal(processingContext.state.savedReferences[0].file, 'processed.png');
 assert.equal(processingContext.state.savedReferences[0].preprocess.source, 'original.png');
 assert.equal(editorClosed, true);
 console.log('Reference preview-before-save and reviewed-image reuse passed');
+
+vm.runInContext(source.slice(source.indexOf('function isolationProgressText('), source.indexOf('async function previewIsolation()')), context);
+assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'no_worker'}), /Waiting for a compatible/);
+assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'queue', queue_position: 4}), /position 4/);
+assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'workers_paused'}), /paused/);
+assert.match(context.isolationProgressText({status: 'running', progress: 25}), /Processing.*25%/);
+console.log('Preview queue and worker waiting messages passed');

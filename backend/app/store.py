@@ -529,6 +529,23 @@ class QueueStore:
             return {"status": task.status, "worker_id": task.worker_id,
                     "prompt_id": task.prompt_id}
 
+    def task_wait_reason(self, task_id: str) -> str | None:
+        """Explain queue waiting using the same compatibility rules as pickup."""
+        with Session(self.engine) as db:
+            task = db.get(TaskRow, task_id)
+            job = db.get(JobRow, task.job_id) if task else None
+            if task is None or job is None or task.status != "queued":
+                return None
+            route = self._route(task, job)
+            compatible = [worker for worker in db.scalars(select(WorkerRow))
+                          if (now() - datetime.fromisoformat(worker.last_seen)).total_seconds() < 60
+                          and self._worker_matches(worker, route)]
+            if not compatible:
+                return "no_worker"
+            if not any(worker.status in {"ready", "busy"} for worker in compatible):
+                return "workers_paused"
+            return "queue"
+
     def claim(self, worker_id: str) -> dict | None:
         with Session(self.engine) as db, db.begin():
             # Serialize SQLite claim writers before reading candidates; two workers
