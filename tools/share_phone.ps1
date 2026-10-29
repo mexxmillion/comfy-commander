@@ -19,7 +19,7 @@ try {
     Invoke-RestMethod -Uri $health -TimeoutSec 5 | Out-Null
 }
 catch {
-    throw "Tensor Master is not responding at $health. Start the controller first."
+    throw "Comfy Commander is not responding at $health. Start the controller first."
 }
 
 & $tailscale.Source status | Out-Null
@@ -29,7 +29,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Tailscale is not connected on this computer.' 
 if ($LASTEXITCODE -ne 0) { throw 'Tailscale Serve could not publish Tensor Master to the tailnet.' }
 
 Write-Output ''
-Write-Output 'Tensor Master is available only inside your tailnet at the HTTPS URL above.'
+Write-Output 'Comfy Commander is available only inside your tailnet at the HTTPS URL above.'
 Write-Output 'Install Tailscale on the phone, sign into the same tailnet, and open that URL.'
 Write-Output 'Check later with: tailscale serve status'
 Write-Output 'To remove every Serve route on this host: tailscale serve reset'
