@@ -395,14 +395,15 @@
   const outputSpecs = new Map();
   function outputSettings(file) {
     const details = el('details', null, 'output-settings');
-    const summary = el('summary', 'Render settings');
+    const summary = el('summary', 'Settings & job details');
     const body = el('div');
-    details.append(summary, body);
+    const provenance=el('pre',JSON.stringify({job_id:file.job_id||null,task_id:file.task_id||null,prompt_id:file.prompt_id||null,recipe:file.recipe||null,timings:file.timings||null},null,2));
+    details.append(summary, provenance, body);
     let loading = false, loaded = false;
     details.ontoggle = async () => {
       if (!details.open || loading || loaded) return;
       if (!file.task_id) {
-        body.replaceChildren(el('p', 'Render settings were not recorded for this output.', 'inspect-note'));
+        body.replaceChildren(el('p', file.recipe?'Saved recipe shown above. Additional task settings are unavailable.':'Render settings were not recorded for this output.', 'inspect-note'));
         loaded = true;
         return;
       }
@@ -434,21 +435,20 @@
     shownOutputs=shown;
     const known=new Set(durableOutputs.map(file=>file.prompt_id));for(const id of checkedOutputs)if(!known.has(id))checkedOutputs.delete(id);
     for(const file of shown){
-      const card=el('article',null,'output-card'),media=document.createElement('img'),query=new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
+      const card=el('article',null,'output-card gallery-card'),media=document.createElement('img'),query=new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
       if(file.task_id&&!String(file.worker_id||'').startsWith('local'))query.set('task_id',file.task_id);
       media.src=`/api/v1/media/preview?${query}`;media.loading='lazy';media.alt='Completed render';
-      const playable=/\.(mp4|webm|mov|m4v|ogv|ogg)$/i.test(file.filename||'');
-      const title=el('h3',file.job_name||file.filename),original=file.recipe?.sourceDirection||file.recipe?.direction||'',prompt=el('p',original||'No prompt recorded'),meta=el('div',`${file.worker_id||'unknown worker'} · ${date(file.modified?file.modified*1000:null)}`,'output-meta'),actions=el('div',null,'output-actions'),open=el('a','Open');open.href=outputUrl(file);open.target='_blank';open.rel='noopener';const download=el('a','Download');download.href=outputUrl(file);download.download=file.filename;actions.append(open,download);
+      const title=el('h3',file.job_name||file.filename),original=file.recipe?.sourceDirection||file.recipe?.direction||'',prompt=el('p',original||'No prompt recorded'),meta=el('div',`${file.worker_id||'unknown worker'} · ${date(file.modified?file.modified*1000:null)}`,'output-meta'),actions=window.tensorGenerator.outputActions(file,media);actions.classList.add('output-actions');
       const identity=el('div','Job: ','output-job-id');identity.append(el('code',file.job_id||file.prompt_id||'Not recorded'));
       const timing=el('div',file.timings?.generation_seconds==null?'Render time not recorded':`Render: ${seconds(file.timings.generation_seconds)}${file.timings.queue_seconds==null?'':` · Queue: ${seconds(file.timings.queue_seconds)}`}`,'output-timing');
       const enhanced=file.recipe?.aiPrompt;
-      if(playable){open.textContent='Play';open.removeAttribute('target');open.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();openOutputPlayer(file);};}
       const selection=el('label',' Select entry'),check=document.createElement('input');check.type='checkbox';check.checked=checkedOutputs.has(file.prompt_id);check.disabled=removingOutputs;check.style.width='auto';check.onchange=()=>{if(check.checked)checkedOutputs.add(file.prompt_id);else checkedOutputs.delete(file.prompt_id);updateOutputSelection();};selection.prepend(check);
-      card.append(selection,media,title,identity,prompt);
-      if(enhanced&&enhanced!==original){const details=el('details',null,'output-ai-prompt'),summary=el('summary','AI enhanced prompt'),text=el('pre',enhanced);details.append(summary,text);card.append(details);}
-      if(file.job_id){const edit=el('button','Edit & rerun');edit.type='button';edit.onclick=()=>openGeneratorJob(file.job_id);actions.prepend(edit);}
-      const remove=el('button','Remove','danger');remove.type='button';remove.disabled=removingOutputs;remove.title='Remove from Outputs and Gallery; keep media file';remove.onclick=()=>removeOutputEntries([file.prompt_id]);actions.append(remove);
-      card.append(timing,meta,actions,outputSettings(file));grid.append(card);
+      const copy=el('div',null,'gallery-card-copy');
+      card.append(media,copy);copy.append(selection,title,identity,prompt);
+      if(enhanced&&enhanced!==original){const details=el('details',null,'output-ai-prompt'),summary=el('summary','AI enhanced prompt'),text=el('pre',enhanced);details.append(summary,text);copy.append(details);}
+      if(file.job_id&&!file.recipe){const edit=el('button','Edit & rerun');edit.type='button';edit.onclick=()=>openGeneratorJob(file.job_id);actions.prepend(edit);}
+      const remove=el('button','Remove entry','danger');remove.type='button';remove.disabled=removingOutputs;remove.title='Remove from Outputs and Gallery; keep media file';remove.onclick=()=>removeOutputEntries([file.prompt_id]);actions.append(remove);
+      copy.append(timing,meta,outputSettings(file),actions);grid.append(card);
     }
     $('#output-status').textContent=`${matches.length} completed outputs safely stored by Tensor Master · ${durableOutputs.length} total`;
     $('#output-page-label').textContent=`Page ${outputPage+1} of ${pages}`;$('#output-prev').disabled=outputPage===0;$('#output-next').disabled=outputPage+1>=pages;

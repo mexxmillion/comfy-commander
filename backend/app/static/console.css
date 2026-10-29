@@ -122,3 +122,7 @@ dialog.output-player{box-sizing:border-box;width:min(1100px,94vw);max-width:94vw
   .inspect-tabs,.timing-list,.inspect-grid,.spec-prompt,.spec-ai{min-width:0}
   .spec-prompt p,.spec-ai pre{overflow-wrap:anywhere}
 }
+
+.output-settings>pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}.output-job-id{overflow-wrap:anywhere}.output-card .gallery-card-actions{display:flex;flex-wrap:wrap;gap:6px}
+
+.output-card.gallery-card{padding:0;border-radius:.8rem}.output-card.gallery-card>img{height:auto;aspect-ratio:16/10;object-fit:contain}.output-card .gallery-card-copy{padding:.75rem}.output-card .gallery-card-actions button,.output-card .gallery-card-actions a{padding:.45rem;border:0;border-radius:.5rem;font-size:.68rem}.output-card .output-settings pre{font-size:11px}

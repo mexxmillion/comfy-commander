@@ -1605,6 +1605,7 @@ async function keepSetup(file, button) {
     await saveRecipe(file.prompt_id, { recipe: file.recipe, ...(file.filename ? { output: file } : {}), saved: true, preset_name: name, timings: file.timings || {} });
     file.saved = true;
     file.preset_name = name;
+    button.textContent = "Rename preset";
     rememberSetup(file);
     renderGallery(state.galleryFiles);
     toast("Preset saved.");
@@ -1671,6 +1672,43 @@ async function removeSelectedGalleryItems() {
   toast(failed ? `${ids.length - failed} removed; ${failed} failed. Failed entries remain selected for retry.` : `${ids.length} entries removed. Media files kept.`);
 }
 
+function outputActions(file, media = null) {
+  const actions = document.createElement("div");
+  actions.className = "gallery-card-actions";
+  if (["h3", "qwen", "faces", "krea", "ltx"].includes(file.recipe?.mode)) {
+    const reuse = document.createElement("button");
+    reuse.type = "button";
+    reuse.className = "reuse-setup";
+    reuse.textContent = "Edit & rerun";
+    reuse.addEventListener("click", () => { location.hash = "#generator"; loadRecipe(file.recipe); });
+    const requeue = document.createElement("button");
+    requeue.type = "button";
+    requeue.textContent = "Requeue same";
+    requeue.addEventListener("click", () => { location.hash = "#generator"; requeueRecipe(file.recipe); });
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = file.saved ? "Rename preset" : "Save preset";
+    save.addEventListener("click", () => keepSetup(file, save));
+    actions.append(reuse, requeue, save);
+    if (file.saved) {
+      const unsave = document.createElement("button"); unsave.type = "button"; unsave.textContent = "Remove preset";
+      unsave.onclick = () => removeGalleryItem(file, true); actions.append(unsave);
+    }
+  }
+  if (file.filename) {
+    const view = document.createElement("button"); view.type = "button"; view.textContent = "View / play"; view.className = "reuse-setup";
+    view.onclick = () => viewGalleryOutput(file); actions.prepend(view);
+    if (media?.tagName === "IMG") { media.style.cursor = "pointer"; media.onclick = () => viewGalleryOutput(file); }
+    const share = document.createElement("button");
+    share.type = "button";
+    share.textContent = isImageOutput(file) ? "Save image" : "Save video";
+    share.addEventListener("click", () => shareMedia(file));
+    actions.append(share);
+    const download = document.createElement("a"); download.href = mediaUrl(file); download.download = file.filename; download.textContent = "Download"; actions.append(download);
+  }
+  return actions;
+}
+
 function renderGallery(files) {
   state.galleryFiles = files;
   const selectable = new Set(files.filter(file => !["Running", "Queued"].includes(file.status)).map(file => file.prompt_id));
@@ -1731,39 +1769,7 @@ function renderGallery(files) {
     const name = document.createElement("span");
     name.textContent = file.preset_name || `${file.status}${file.recipe ? ` · ${file.recipe.megapixels}MP · ${file.recipe.steps} steps` : ""}`;
     name.title = file.filename || file.prompt_id;
-    const actions = document.createElement("div");
-    actions.className = "gallery-card-actions";
-    if (["h3", "qwen", "faces", "krea", "ltx"].includes(file.recipe?.mode)) {
-      const reuse = document.createElement("button");
-      reuse.type = "button";
-      reuse.className = "reuse-setup";
-      reuse.textContent = "Edit & rerun";
-      reuse.addEventListener("click", () => loadRecipe(file.recipe));
-      const requeue = document.createElement("button");
-      requeue.type = "button";
-      requeue.textContent = "Requeue same";
-      requeue.addEventListener("click", () => requeueRecipe(file.recipe));
-      const save = document.createElement("button");
-      save.type = "button";
-      save.textContent = file.saved ? "Rename preset" : "Save preset";
-      save.addEventListener("click", () => keepSetup(file, save));
-      actions.append(reuse, requeue, save);
-      if (file.saved) {
-        const unsave = document.createElement("button"); unsave.type = "button"; unsave.textContent = "Remove preset";
-        unsave.onclick = () => removeGalleryItem(file, true); actions.append(unsave);
-      }
-    }
-    if (file.filename) {
-      const view = document.createElement("button"); view.type = "button"; view.textContent = "View / play"; view.className = "reuse-setup";
-      view.onclick = () => viewGalleryOutput(file); actions.prepend(view);
-      if (media.tagName === "IMG") { media.style.cursor = "pointer"; media.onclick = () => viewGalleryOutput(file); }
-      const share = document.createElement("button");
-      share.type = "button";
-      share.textContent = isImageOutput(file) ? "Save image" : "Save video";
-      share.addEventListener("click", () => shareMedia(file));
-      actions.append(share);
-      const download = document.createElement("a"); download.href = mediaUrl(file); download.download = file.filename; download.textContent = "Download"; actions.append(download);
-    }
+    const actions = outputActions(file, media);
     const original = file.recipe?.sourceDirection ?? file.recipe?.direction ?? "";
     const prompt = document.createElement("p"); prompt.className = "gallery-prompt"; prompt.textContent = original || "No prompt recorded";
     const aiPrompt = file.recipe?.aiPrompt && file.recipe.aiPrompt !== original ? document.createElement("details") : null;
@@ -2636,7 +2642,7 @@ $('#generator-login-form').onsubmit = async event => {
     await initialize();await window.creativeMaster?.reconnect();
   } catch(error){$('#generator-login-error').textContent=error.message;}
 };
-window.tensorGenerator = {loadJob: restoreDispatchedJob};
+window.tensorGenerator = {loadJob: restoreDispatchedJob, outputActions};
 for (const event of ['input','change']) $('#studio-form').addEventListener(event,()=>{
   if (!draftReady) draftEarlyEdit=true;
   saveDraft();
