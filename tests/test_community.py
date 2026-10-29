@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -61,9 +62,11 @@ def test_prepare_request_accepts_only_pocket_uploads():
         request(source_video="C:/private/source.mkv")
 
 
-def test_character_recipe_requires_human_review():
+def test_character_recipe_supports_one_shot_and_retains_post_render_qc():
     text = json.dumps(character_replacement_recipe())
-    assert "reviewed SAM3" in text
+    assert "SAM3_Detect" in text
+    assert "same job" in text
+    assert "completion is not creative acceptance" in text
     assert "No MiniMaxH3AddGuide" in text
 
 
@@ -178,6 +181,18 @@ def test_homepage_defaults_to_generate():
     assert "const route=location.hash||'#generator'" in console
     assert "a.hash===(location.hash||'#generator')" in console
     assert "location.hash||'#monitor'" not in console
+
+
+def test_mobile_navigation_matches_desktop_destinations_and_grouping():
+    root = Path(__file__).parents[1]
+    template = (root / "backend/app/templates/dashboard.html").read_text(encoding="utf-8")
+    desktop = template.split('<nav aria-label="Main navigation">', 1)[1].split('</nav>', 1)[0]
+    mobile = template.split('<nav class="mobile-nav"', 1)[1].split('</nav>', 1)[0]
+    assert re.findall(r'href="([^"]+)"', mobile) == re.findall(r'href="([^"]+)"', desktop)
+    primary, dispatcher = mobile.split('<details id="mobile-dispatcher-nav">', 1)
+    assert re.findall(r'href="([^"]+)"', primary) == ['#generator', '#sources', '#outputs']
+    assert 'data-dispatch-queued' in dispatcher and 'data-dispatch-running' in dispatcher
+    assert all(f'href="#{route}"' in dispatcher for route in ['tasks', 'monitor', 'workers', 'rentals'])
 
 
 def test_flf2v_has_public_rental_models_and_enabled_controls():

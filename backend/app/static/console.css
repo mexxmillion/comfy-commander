@@ -185,3 +185,18 @@ dialog#rental-dialog,dialog#ssh-access{background:#2b2530;border-color:#514956;b
 #gallery-viewer{width:min(1100px,95vw);max-height:94dvh;overflow:auto;color:#f0efed;background:#2b2530;border:1px solid #514956;border-radius:14px}#gallery-viewer::backdrop{background:#000c}#gallery-viewer form{display:flex;justify-content:flex-end;margin-bottom:10px}#gallery-viewer video,#gallery-viewer img{display:block;width:100%;max-height:74dvh;object-fit:contain;background:#000}#gallery-viewer audio{width:100%}#gallery-viewer-title{overflow-wrap:anywhere}
 
 .gallery-card-actions .play-output{background:#f2ff59!important;color:#211927!important;font-size:13px!important;font-weight:800!important;min-height:42px;padding:10px 16px!important}.gallery-card-actions .edit-rerun{border:1px solid #f2ff59!important;background:#38313e!important;color:#f2ff59!important;min-height:42px}.gallery-card-actions .download-secondary{background:transparent!important;color:#c2bfb9!important;font-weight:400!important}
+/* Keep the phone navigation in the same order and groups as the desktop. */
+@media(max-width:760px){
+  .mobile-nav{grid-template-columns:repeat(4,minmax(0,1fr));align-items:stretch;min-height:64px;padding:6px 8px max(6px,env(safe-area-inset-bottom));gap:4px;z-index:30}
+  .mobile-nav>a,.mobile-nav summary{display:flex;min-height:48px;align-items:center;justify-content:center;border-radius:12px;padding:6px 2px;font-size:.75rem;text-align:center;color:var(--muted);cursor:pointer;list-style:none}
+  .mobile-nav summary{flex-direction:column;gap:3px}
+  .mobile-nav summary::-webkit-details-marker{display:none}
+  .mobile-nav>a.generate-primary{color:#f2ff59}
+  .mobile-nav details.active>summary,.mobile-nav details[open]>summary{color:#f2ff59;background:#38313e}
+  .mobile-dispatch-counts{font-size:.58rem;white-space:nowrap}
+  .mobile-dispatcher-menu{position:absolute;bottom:calc(100% + 8px);right:8px;width:min(300px,calc(100vw - 16px));max-height:65dvh;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:18px;background:#211927;box-shadow:0 12px 40px #0009;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .mobile-dispatcher-menu strong,.mobile-dispatcher-menu .setup-nav{grid-column:1/-1}
+  .mobile-dispatcher-menu strong{padding:6px;color:var(--text)}
+  .mobile-dispatcher-menu a{font-size:.85rem;min-height:44px;display:grid;place-items:center;border-radius:10px;background:#38313e}
+  main{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+}

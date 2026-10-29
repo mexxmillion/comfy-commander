@@ -210,3 +210,49 @@ for (const roles of [[], ['first_frame'], ['last_frame'], ['first_frame', 'last_
   assert.equal(Boolean(graph['146']), false);
 }
 console.log('FLF2V text-only, first, last and both-keyframe graph checks passed');
+(async()=>{
+  const controls={};
+  const get=selector=>controls[selector] ||= {value:'',type:'text'};
+  controls['#aspect-ratio']={options:[{value:'9:16 (Portrait Widescreen)'},{value:'16:9 (Widescreen)'}]};
+  for(const id of ['ai-enhance','h3-audio-lock','turbo-enabled','sparse-enabled'])get('#'+id).type='checkbox';
+  const preferences={aspect_ratio:'16:9',megapixels:.75,duration:8,render_target:'local',h3_type:'reference',h3_model:'fasth3-omni',turbo_steps:8,sparse_attention:'SOL',ai_enhance:false,audio_lock:true};
+  let fetched=0,draft='saved draft';
+  const defaultsContext={URLSearchParams,DRAFT_KEY:'draft',location:{search:''},localStorage:{getItem:()=>draft},draftEarlyEdit:false,
+    $:get,studioRoot:{querySelector:get},setH3Type:()=>{},SINGULARITY_MODEL:'singularity',OMNI_MODEL:'omni',
+    syncTurboStack:()=>{},syncPromptEnhancement:()=>{},sparseAttentionDefaults:()=>{},
+    fetch:async()=>{fetched++;return {ok:true,json:async()=>preferences};}};
+  vm.createContext(defaultsContext);
+  vm.runInContext(source.slice(source.indexOf('function applyGenerationDefaults('),source.indexOf("$('#generator-sign-in').onclick")),defaultsContext);
+  await defaultsContext.loadGenerationDefaults();
+  assert.equal(fetched,0,'Existing drafts take precedence over defaults');
+  draft=null;
+  await defaultsContext.loadGenerationDefaults();
+  assert.equal(get('#aspect-ratio').value,'16:9 (Widescreen)');
+  assert.equal(get('#render-target').value,'tensor-master');
+  assert.equal(get('#sparse-method').value,'sol-attn');
+  assert.equal(get('#ai-enhance').checked,false);
+  assert.equal(get('#h3-audio-lock').checked,true);
+  defaultsContext.draftEarlyEdit=true;get('#duration').value=12;
+  await defaultsContext.loadGenerationDefaults();
+  assert.equal(get('#duration').value,12,'Late responses preserve edits');
+  console.log('Shared server defaults, formatted aspect selection and draft/edit preservation passed');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+const bulkContext={};vm.createContext(bulkContext);
+vm.runInContext(consoleSource.slice(consoleSource.indexOf('function bulkRoutePayload('),consoleSource.indexOf("  $('#bulk-apply').onclick")),bulkContext);
+const taskRoute={policy:'local',min_vram_gb:24,architecture:'blackwell',preferred_worker_id:'local-test',status:'queued'};
+const preserved=bulkContext.bulkRoutePayload(taskRoute,{pool:'keep',worker:'keep',vram:'16',architecture:'keep'});
+assert.equal(preserved.pool,'local');assert.equal(preserved.min_vram_gb,16);assert.equal(preserved.architecture,'blackwell');assert.equal(preserved.preferred_worker_id,'local-test');assert.equal(preserved.requeue,false);
+const explicitRoute=bulkContext.bulkRoutePayload(taskRoute,{pool:'any',worker:'',vram:'',architecture:'any'});
+assert.equal(explicitRoute.pool,'any');assert.equal(explicitRoute.preferred_worker_id,null);assert.equal(explicitRoute.min_vram_gb,24);
+console.log('Bulk VRAM updates preserve existing pool, worker and architecture unless explicitly changed');
+const replacementControls={},replacementGet=selector=>replacementControls[selector] ||= {};
+let replacementType='replacement';
+const replacementContext={state:{mode:'h3',h3Type:'reference'},$:replacementGet,studioRoot:{querySelector:()=>({value:replacementType})}};
+vm.createContext(replacementContext);
+vm.runInContext(source.slice(source.indexOf('function validateReplacementReferences('),source.indexOf("studioRoot.querySelectorAll('input[name=\"job-type\"]')")),replacementContext);
+for(const refs of [[],[{kind:'image'}],[{kind:'video'}]])assert.throws(()=>replacementContext.validateReplacementReferences(refs),/one source video and one replacement image/);
+assert.doesNotThrow(()=>replacementContext.validateReplacementReferences([{kind:'video'},{kind:'image'}]));
+replacementContext.syncReplacementMode(true);
+assert.equal(replacementGet('#h3-audio-lock').checked,true);assert.equal(replacementGet('#replacement-target').required,true);
+replacementType='standard';replacementContext.syncReplacementMode();assert.equal(replacementGet('#replacement-settings').hidden,true);
+console.log('Replacement media requirements and audio-lock default passed');

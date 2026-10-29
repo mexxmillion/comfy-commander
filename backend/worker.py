@@ -91,7 +91,10 @@ def architecture_for(gpu_name: str) -> str:
     return "ampere"
 
 
-def find_artifact(history_entry: dict) -> dict | None:
+def find_artifact(history_entry: dict, primary_node: str | None = None) -> dict | None:
+    outputs = history_entry.get("outputs", {})
+    if primary_node:
+        return find_artifact({"outputs": {primary_node: outputs.get(primary_node, {})}})
     for key in ("gifs", "videos", "images", "audio"):
         for output in history_entry.get("outputs", {}).values():
             for item in output.get(key, []):
@@ -404,14 +407,29 @@ def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Che
                         if status.get("status_str") == "error":
                             raise RuntimeError("ComfyUI reported an execution error")
                         publish_reference_caches(api, task, entry, Path(os.getenv('COMFY_OUTPUT_DIR', str(get_settings().comfyui_input_dir.parent / 'output'))), report)
-                        artifact = find_artifact(entry)
+                        replacement_chain = "replacement_9" in task['graph']
+                        primary = next((key for key, node in task['graph'].items()
+                                        if not key.startswith('replacement_') and node.get('class_type') == 'VHS_VideoCombine'), None)
+                        artifact = find_artifact(entry, primary if replacement_chain else None)
                         if artifact is None:
                             raise RuntimeError("ComfyUI finished without a saved output")
+                        evidence = {}
+                        if replacement_chain:
+                            for role, node_id in (("mask", "replacement_11"), ("target_guide", "replacement_12")):
+                                item = find_artifact(entry, node_id)
+                                if item is None:
+                                    raise RuntimeError("Replacement finished without its mask/guide evidence")
+                                evidence[role] = item
                         finished_at = time.monotonic()
                         if cloud_mode:
                             report(progress=97, message="Returning rendered output")
                             artifact = retry_transfer(lambda result=artifact: return_cloud_output(
                                 api, task, result, Path(os.getenv("COMFY_OUTPUT_DIR", "/opt/ComfyUI/output"))), report)
+                            for role, item in evidence.items():
+                                evidence[role] = retry_transfer(lambda result=item: return_cloud_output(
+                                    api, task, result, Path(os.getenv("COMFY_OUTPUT_DIR", "/opt/ComfyUI/output"))), report)
+                        if evidence:
+                            artifact['evidence'] = evidence
                         measured = {
                             "queue_seconds": round(float(task.get("queue_seconds", 0)), 1),
                             "generation_seconds": round(finished_at - accepted_at, 1),

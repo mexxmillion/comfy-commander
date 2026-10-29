@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=play-first-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=replacement-settings-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
-    <script defer src="/static/generator.js?v=flf2v-sources-20261029"></script>
-    <script defer src="/static/console.js?v=generate-home-20261029"></script>
-    <link rel="stylesheet" href="/static/generator.css?v=reference-queue-16gb-20261029">
+    <script defer src="/static/generator.js?v=replacement-settings-20261029"></script>
+    <script defer src="/static/console.js?v=replacement-settings-20261029"></script>
+    <link rel="stylesheet" href="/static/generator.css?v=replacement-settings-20261029">
   </head>
   <body>
     <div class="shell">
@@ -28,7 +28,7 @@
             <a href="#activity">Activity</a>
             <a href="#history">Benchmarks</a>
           </details>
-          <a class="setup-nav" href="/setup">Setup &amp; Models</a>
+          <a class="setup-nav" href="/settings">⚙ Settings</a>
         </nav>
         <div class="provider-status">
           <small>CONTROL PLANE</small>
@@ -140,7 +140,7 @@
               <span class="muted" id="task-count">Latest {{ state.tasks|length }} of {{ state.metrics.total_tasks }} tasks</span>
             </div>
             <div class="console-toolbar"><input id="task-search" type="search" aria-label="Search tasks" placeholder="Search job, ID, worker, runtime…"><select id="task-filter" aria-label="Task status"><option value="all">All states</option><option value="queued">Queued</option><option value="running">Running</option><option value="cancel_requested">Cancelling</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option></select><select id="task-sort" aria-label="Sort tasks"><option value="newest">Newest first</option><option value="rank">Run order (rank)</option><option value="oldest">Oldest first</option><option value="status">By state</option><option value="name">By job name</option></select><label class="inline-label">Rows <select id="task-page-size" aria-label="Tasks per page"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option></select></label><button id="export-tasks" type="button">Export CSV</button></div>
-            <div id="bulk-actions" class="bulk-actions" hidden><strong id="bulk-count">0 selected</strong><select id="bulk-pool" aria-label="Bulk worker pool"><option value="any">Any available · local + cloud</option><option value="local">Local pool only</option><option value="standard">Cloud pool only</option></select><select id="bulk-worker" aria-label="Bulk preferred worker"><option value="">Automatic · first compatible worker</option>{% for worker in state.workers %}<option value="{{ worker.id }}">{{ worker.name }} · {{ worker.gpu }}</option>{% endfor %}</select><label class="inline-label">VRAM <input id="bulk-vram" aria-label="Bulk minimum VRAM GB" type="number" min="1" max="192" value="24"></label><select id="bulk-architecture" aria-label="Bulk GPU architecture"><option value="any">Any architecture</option><option value="ampere">Ampere</option><option value="ada">Ada</option><option value="blackwell">Blackwell</option></select><button id="bulk-apply" class="primary" type="button">Apply route</button><button id="bulk-remove" class="danger" type="button">Remove selected</button><button id="bulk-clear" type="button">Clear selection</button></div>
+            <div id="bulk-actions" class="bulk-actions" hidden><strong id="bulk-count">0 selected</strong><select id="bulk-pool" aria-label="Bulk worker pool"><option value="keep">Keep current worker pool</option><option value="any">Any available · local + cloud</option><option value="local">Local pool only</option><option value="standard">Cloud pool only</option></select><select id="bulk-worker" aria-label="Bulk preferred worker"><option value="keep">Keep current worker preference</option><option value="">Automatic · first compatible worker</option>{% for worker in state.workers %}<option value="{{ worker.id }}">{{ worker.name }} · {{ worker.gpu }}</option>{% endfor %}</select><label class="inline-label">VRAM <input id="bulk-vram" aria-label="Bulk minimum VRAM GB" type="number" min="1" max="192" placeholder="Keep current"></label><select id="bulk-architecture" aria-label="Bulk GPU architecture"><option value="keep">Keep current architecture</option><option value="any">Any architecture</option><option value="ampere">Ampere</option><option value="ada">Ada</option><option value="blackwell">Blackwell</option></select><button id="bulk-apply" class="primary" type="button">Apply route</button><button id="bulk-remove" class="danger" type="button">Remove selected</button><button id="bulk-clear" type="button">Clear selection</button></div><p id="bulk-route-status" class="muted" role="status"></p>
 {# Rank · priority control. Same markup and alignment on every row: rank badge,
    priority number, then a tight top/up/down/bottom group. Higher number runs sooner. #}
 {% macro priority_controls(task) %}{% set active = task.status in ('running', 'cancel_requested') %}{% set queued = task.status == 'queued' %}<div class="prio" role="group" aria-label="Rank and priority for {{ task.job_name }}">
@@ -265,7 +265,19 @@
       <section id="rental-picker" hidden><label>Community runtime profile<select id="rental-profile"><option value="ref2v-int8" selected>MiniMax H3 Ref2V · Community default</option><option value="ref2v-singularity">Singularity Ref2VA v1.3 INT8</option><option value="fasth3-omni">FastH3 Omni INT8 · native 8 steps</option><option value="flf2v-int8">H3 First / Last Frame · FL2VA INT8</option><option value="qwen-image-21">Qwen Image 2.1 · native + optional Viggle</option></select></label><div class="form-row"><label>Quantity<input id="rental-count" type="number" min="1" max="10" value="1"></label><label>Maximum rental time (minutes)<input id="rental-minutes" type="number" min="15" max="180" value="90"></label></div><button type="button" id="refresh-offers">Refresh offers</button><div id="rental-offers" class="rental-offers"></div><button type="button" class="primary" id="launch-rental">Rent selected GPU(s)</button></section>
       <p id="rental-message" role="status" class="muted"></p>
     </dialog>
-    <nav class="mobile-nav" aria-label="Mobile navigation"><a href="#generator">Generate</a><a href="#tasks">Queue</a><a href="#outputs">Outputs</a><a href="#workers">Workers</a><a href="#rentals">Rentals</a><a href="#monitor">Monitor</a></nav>
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <a class="generate-primary" href="#generator">Generate</a>
+      <a href="#sources">Sources</a>
+      <a href="#outputs">Outputs</a>
+      <details id="mobile-dispatcher-nav">
+        <summary>Dispatcher <span class="mobile-dispatch-counts"><b data-dispatch-queued>{{ state.metrics.queued }}</b> queued · <b data-dispatch-running>{{ state.metrics.running }}</b> running</span></summary>
+        <div class="mobile-dispatcher-menu">
+          <strong>Dispatcher</strong>
+          <a href="#tasks">Queue</a><a href="#monitor">Monitor</a><a href="#workers">Workers</a><a href="#rentals">Rentals</a><a href="#activity">Activity</a><a href="#history">Benchmarks</a>
+          <a class="setup-nav" href="/settings">⚙ Settings</a>
+        </div>
+      </details>
+    </nav>
     <script>
       document.addEventListener('click', event => {
         const button = event.target.closest('[data-ssh-command]');

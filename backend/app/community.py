@@ -165,11 +165,13 @@ def _secret_path(service: str) -> Path:
 
 
 @router.get("/setup", response_class=HTMLResponse)
+@router.get("/settings", response_class=HTMLResponse)
 async def setup_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="setup.html",
-        context={"status": setup_status(), "profiles": COMMUNITY_PROFILES},
+        context={"status": setup_status(), "profiles": COMMUNITY_PROFILES,
+                 "settings_mode": request.url.path == "/settings"},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -371,14 +373,14 @@ async def agent_manifest() -> dict:
 def character_replacement_recipe() -> dict:
     return {
         "id": "h3-character-replacement-v1",
-        "status": "guided",
+        "status": "one-shot-or-guided",
         "stages": [
             "Prepare scene-matched identity and wardrobe references with Qwen Image 2.1",
             "Normalize the source once and plan exclusive frame intervals",
-            "Track the intended performer with a reviewed SAM3 initial mask and SAM3_VideoTrack",
+            "Track the intended performer from the target description using SAM3_Detect and SAM3_VideoTrack",
             "Invert only the tracked target pixels and retain normal partner/background colors",
             "Use that aligned video as the H3 Ref2VA video reference",
-            "Render exact intervals, trim model padding, review motion and seams, then mux original continuous audio",
+            "Render H3 in the same job, preserve source audio with audio lock, then review motion, identity and seams",
         ],
         "default_graph_rule": "No MiniMaxH3AddGuide image nodes; the tracked target-only inverted VIDEO is the motion guide.",
         "limitations": [

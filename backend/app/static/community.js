@@ -1,7 +1,7 @@
 const jsonRequest = async (url, options = {}) => {
   const response = await fetch(url, {credentials: 'same-origin', headers: {'Content-Type': 'application/json', ...(options.headers || {})}, ...options});
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Request failed');
+  if (!response.ok) throw new Error(Array.isArray(data.detail) ? data.detail.map(item=>`${item.loc?.slice(1).join('.') || 'Value'}: ${item.msg}`).join('; ') : data.detail || 'Request failed');
   return data;
 };
 
@@ -16,6 +16,7 @@ const selectedProfiles = name => [...document.querySelectorAll(`input[name="${na
 
 const wizardPanels = [...document.querySelectorAll('[data-wizard-step]')];
 const railButtons = [...document.querySelectorAll('.wizard-rail [data-step-target]')];
+const settingsMode = document.body.dataset.settingsMode === 'true';
 let currentStep = 0;
 let computeMode = localStorage.getItem('commander-compute-mode') || '';
 let diagnostics = {};
@@ -29,7 +30,7 @@ const renderReadiness = () => {
 const showStep = index => {
   currentStep = Math.max(0, Math.min(index, wizardPanels.length - 1));
   wizardPanels.forEach((panel, i) => panel.classList.toggle('active', i === currentStep));
-  railButtons.forEach((button, i) => { button.classList.toggle('active', i === currentStep); button.classList.toggle('complete', i < currentStep); });
+  railButtons.forEach((button, i) => { button.classList.toggle('active', Number(button.dataset.stepTarget) === currentStep); button.classList.toggle('complete', !settingsMode && i < currentStep); });
   if (currentStep === 6) renderReadiness();
   if (currentStep === 5) void loadImportedProfiles();
   if (currentStep === 4) void loadPhoneAccess();
@@ -71,6 +72,7 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
     await loadLoras();
     await loadPhoneAccess();
     await loadCloudSsh();
+    if(settingsMode) await loadPreferences();
   } catch (error) {
     alert(error.message);
     button.disabled = false;
@@ -79,10 +81,11 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
 
 if (document.body.dataset.firstRun === 'false') document.querySelector('#protect-next').disabled = false;
 document.querySelector('#manage-models')?.addEventListener('click', () => {
+  if(settingsMode) showStep(8);
   document.querySelector('#lora-management').hidden = false;
   document.querySelector('#lora-management').scrollIntoView({behavior: 'smooth'});
 });
-showStep(0);
+showStep(settingsMode ? 7 : 0);
 
 document.querySelectorAll('.service-card').forEach(card => {
   card.querySelector('form').addEventListener('submit', async event => {
@@ -291,7 +294,7 @@ document.querySelector('#save-import-profile').addEventListener('click',async ev
 async function loadImportedProfiles(){
   try{const data=await jsonRequest('/api/v1/setup/profiles');const root=document.querySelector('#import-saved-profiles');root.replaceChildren();for(const profile of data.profiles){const line=document.createElement('p');line.textContent=`${profile.name} · ${profile.ready?'Rental dependencies resolved':'Draft · dependencies unresolved'}`;root.append(line);}}catch{}
 }
-document.querySelector('#import-open-models').addEventListener('click',()=>{const panel=document.querySelector('#lora-management');panel.hidden=false;panel.scrollIntoView({behavior:'smooth'});});
+document.querySelector('#import-open-models').addEventListener('click',()=>{if(settingsMode)showStep(8);const panel=document.querySelector('#lora-management');panel.hidden=false;panel.scrollIntoView({behavior:'smooth'});});
 
 async function loadCloudSsh(){
   try {
@@ -302,3 +305,34 @@ async function loadCloudSsh(){
 }
 document.querySelector('#refresh-cloud-ssh').addEventListener('click',loadCloudSsh);
 loadCloudSsh();
+
+async function loadPreferences() {
+  const form=document.querySelector('#preferences-form');
+  if(!form)return;
+  const status=document.querySelector('#preferences-status');
+  try {
+    const data=await jsonRequest('/api/v1/settings/preferences');
+    for(const [name,value] of Object.entries(data)) {
+      const input=form.elements.namedItem(name);
+      if(!input)continue;
+      if(input.type==='checkbox')input.checked=value;else input.value=value;
+    }
+    status.textContent='Saved defaults loaded. Changes apply to fresh forms; existing drafts are kept.';
+  } catch(error){status.textContent=error.message+' · Use the Sign in tab to unlock Settings.';}
+}
+async function submitPreferences(save) {
+  const form=document.querySelector('#preferences-form'),status=document.querySelector('#preferences-status');
+  if(!form.reportValidity())return;
+  const payload={};
+  for(const input of form.elements)if(input.name)payload[input.name]=input.type==='checkbox'?input.checked:['megapixels','duration','turbo_steps'].includes(input.name)?Number(input.value):input.value;
+  const buttons=[...form.querySelectorAll('button')];buttons.forEach(button=>button.disabled=true);
+  try {
+    await jsonRequest('/api/v1/settings/preferences'+(save?'':'/validate'),{method:save?'PUT':'POST',body:JSON.stringify(payload)});
+    status.textContent=save?'Defaults validated and saved on this server. Open a fresh form to use them.':'Values are valid. Nothing has been saved.';
+  } catch(error){status.textContent=typeof error.message==='string'?error.message:'Defaults could not be saved.';}
+  finally{buttons.forEach(button=>button.disabled=false);}
+}
+document.querySelector('#preferences-form')?.addEventListener('submit',event=>{event.preventDefault();void submitPreferences(true);});
+document.querySelector('#validate-preferences')?.addEventListener('click',()=>void submitPreferences(false));
+document.querySelector('#reload-preferences')?.addEventListener('click',()=>void loadPreferences());
+if(settingsMode)void loadPreferences();

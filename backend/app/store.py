@@ -23,6 +23,7 @@ def now() -> datetime:
 # Flip HIGHER_PRIORITY_FIRST to False to make 1 the top priority instead.
 # Ties always fall back to submission order (oldest job first).
 DEFAULT_PRIORITY = 100
+DEFAULT_MIN_VRAM_GB = 16
 MIN_PRIORITY = 1
 MAX_PRIORITY = 10000
 HIGHER_PRIORITY_FIRST = True
@@ -199,7 +200,7 @@ class QueueStore:
         graph: dict,
         workflow: str = "pocket-h3",
         policy: str = "local",
-        min_vram_gb: int = 24,
+        min_vram_gb: int = DEFAULT_MIN_VRAM_GB,
         architecture: str = "any",
         runtime: str = "pocket-h3-local",
         recipe: dict | None = None,

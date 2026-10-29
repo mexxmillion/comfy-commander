@@ -106,7 +106,7 @@ function scheduleDraftSave() {
 async function restoreDraft() {
   const notice=$('#draft-status');
   try {
-    const draft=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null');
+    const draft=new URLSearchParams(location.search).get('defaults')==='1' ? null : JSON.parse(localStorage.getItem(DRAFT_KEY)||'null');
     if (!draft || draft.version!==1 || !['h3','qwen','faces','krea','ltx','voice'].includes(draft.mode)) return;
     let stored=null;
     if (draft.pendingNames?.length) {
@@ -146,7 +146,7 @@ async function restoreDraft() {
     if (restoredFiles) draftQueuedFiles=stored.signature;
     if (state.mode==='h3') syncPromptEnhancement();
     if (state.mode==='qwen') {syncQwenTurbo();syncQwenEnhancement();}
-    syncVoiceMode();syncPromptOnly();syncQwenEditCanvas();
+    syncVoiceMode();syncPromptOnly();syncQwenEditCanvas();syncReplacementMode();
     renderReferences();renderFrameInputs();renderSelectedLoras();renderLoraList();
     window.creativeMaster?.sync();
     notice.textContent=draft.pendingNames?.length&&!restoredFiles
@@ -1326,6 +1326,7 @@ function recipeFromHistoryEntry(entry) {
     enhancePrompt: hasWriter,
     aiModel: frameMode ? prompt["185"]?.inputs.openrouter_model : prompt["181"].inputs.openrouter_model,
     jobType: frameMode ? "standard" : prompt["181"].inputs.job_type,
+    replacementTarget: prompt.replacement_4?.inputs?.text || 'person',
     loras,
   };
 }
@@ -1505,6 +1506,7 @@ function captureH3Recipe(references, seed) {
     enhancePrompt: $("#ai-enhance").checked,
     aiModel: $("#ai-model").value,
     jobType: studioRoot.querySelector('input[name="job-type"]:checked').value,
+    replacementTarget: $('#replacement-target').value.trim(),
     loras: selectedLoraEntries("h3").filter(([name]) => name !== VSA_LORA).map(([name, strength]) => ({ name, strength })),
   };
 }
@@ -1649,6 +1651,8 @@ function loadRecipe(recipe) {
   if (turbo) turbo.checked = true;
   const jobType = studioRoot.querySelector(`input[name="job-type"][value="${recipe.jobType || "auto"}"]`);
   if (jobType) jobType.checked = true;
+  $('#replacement-target').value=recipe.replacementTarget || 'person';
+  syncReplacementMode();
   syncTurboStack();
   syncH3OutputMode();
   $("#ai-enhance").dispatchEvent(new Event("change"));
@@ -1791,6 +1795,10 @@ function outputActions(file, media = null) {
     share.addEventListener("click", () => shareMedia(file));
     actions.append(share);
     const download = document.createElement("a"); download.href = mediaUrl(file); download.download = file.filename; download.textContent = "Download"; download.className = "download-secondary"; actions.append(download);
+    for(const [role,label] of [['mask','SAM3 mask'],['target_guide','Inverted guide']]) {
+      const evidence=file.evidence?.[role];if(!evidence?.filename)continue;
+      const link=document.createElement('a');link.href=mediaUrl({...evidence,task_id:file.task_id});link.download=evidence.filename;link.textContent=label;actions.append(link);
+    }
   }
   return actions;
 }
@@ -2036,6 +2044,10 @@ async function run(event) {
       throw new Error("Qwen Image 2.1 nodes are not loaded. Check the worker status in Tensor Master.");
     }
     const references = frameMode ? await uploadFrameReferences() : await uploadReferences();
+    if(jobMode==='h3' && !frameMode && studioRoot.querySelector('input[name="job-type"]:checked').value==='replacement') {
+      validateReplacementReferences(references);
+      if($('#h3-single-frame').checked)throw new Error('Replacement requires video output. Turn off single-frame mode.');
+    }
     if (["h3", "qwen", "faces", "krea", "ltx"].includes(jobMode)) keepUploadedReferences(references, frameMode);
     if (promptOnly) {
       await generateAiPrompt(references);
@@ -2277,6 +2289,7 @@ function setH3Type(type) {
     syncTurboStack();
     syncH3OutputMode();
   }
+  syncReplacementMode();
 }
 
 function syncVoiceMode() {
@@ -2590,7 +2603,16 @@ $("#h3-single-frame").addEventListener("change", () => {
 for (const id of ["duration", "aspect-ratio", "megapixels", "ai-model", "qwen-ai-model", "qwen-reference-resolution", "qwen-edit-canvas"]) {
   $(`#${id}`).addEventListener("change", markAiPromptStale);
 }
-studioRoot.querySelectorAll('input[name="job-type"]').forEach((input) => input.addEventListener("change", markAiPromptStale));
+function validateReplacementReferences(references) {
+  if(!references.some(ref=>ref.kind==='video') || !references.some(ref=>ref.kind==='image'))throw new Error('Replacement requires at least one source video and one replacement image. Add both in References.');
+}
+function syncReplacementMode(enableAudioDefault=false) {
+  const replacement=state.mode==='h3' && state.h3Type!=='frames' && studioRoot.querySelector('input[name="job-type"]:checked').value==='replacement';
+  $('#replacement-settings').hidden=!replacement;
+  $('#replacement-target').required=replacement;
+  if(replacement && enableAudioDefault)$('#h3-audio-lock').checked=true;
+}
+studioRoot.querySelectorAll('input[name="job-type"]').forEach((input) => input.addEventListener("change", ()=>{syncReplacementMode(true);markAiPromptStale();}));
 $("#toggle-loras").addEventListener("click", () => {
   const picker = $("#lora-picker");
   picker.hidden = !picker.hidden;
@@ -2716,12 +2738,41 @@ async function restoreDispatchedJob(jobId = new URLSearchParams(location.search)
   }
 }
 async function restoreInitialView() {
+  await loadGenerationDefaults();
   await restoreDraft();
   if (new URLSearchParams(location.search).get("view") === "gallery") {
     await showGallery();
     return;
   }
   await restoreDispatchedJob();
+}
+function applyGenerationDefaults(preferences) {
+  setH3Type(preferences.h3_type);
+  $('#h3-model').value = {'ref2v-int8':'minimax_h3_ref2va_pruned_int8_convrot.safetensors','ref2v-singularity':SINGULARITY_MODEL,'fasth3-omni':OMNI_MODEL}[preferences.h3_model];
+  $('#aspect-ratio').value=[...$('#aspect-ratio').options].find(option=>option.value.split(' ')[0]===preferences.aspect_ratio).value;
+  for(const [key,id] of Object.entries({megapixels:'megapixels',duration:'duration',ai_enhance:'ai-enhance',audio_lock:'h3-audio-lock'})) {
+    const input=$('#'+id);
+    if(input.type==='checkbox')input.checked=preferences[key];else input.value=preferences[key];
+  }
+  $('#render-target').value={any:'tensor-master-any',local:'tensor-master',cloud:'tensor-master-cloud'}[preferences.render_target];
+  studioRoot.querySelector(`input[name="turbo"][value="${preferences.turbo_steps}"]`).checked=true;
+  $('#turbo-enabled').checked=true;
+  $('#total-steps').value=preferences.h3_type==='frames' && preferences.turbo_steps===4 ? 5 : preferences.turbo_steps;
+  sparseAttentionDefaults();
+  if(preferences.sparse_attention!=='auto') {
+    $('#sparse-enabled').checked=preferences.sparse_attention!=='off';
+    if(preferences.sparse_attention!=='off')$('#sparse-method').value=preferences.sparse_attention==='SOL'?'sol-attn':preferences.sparse_attention.toLowerCase();
+  }
+  syncTurboStack();syncPromptEnhancement();
+}
+async function loadGenerationDefaults() {
+  try {
+    if(new URLSearchParams(location.search).get('defaults')!=='1' && localStorage.getItem(DRAFT_KEY))return;
+    const response=await fetch('/api/v1/settings/preferences');
+    if(!response.ok)return;
+    const preferences=await response.json();
+    if(!draftEarlyEdit)applyGenerationDefaults(preferences);
+  } catch { /* Keep the built-in defaults if preferences are unavailable. */ }
 }
 $('#generator-sign-in').onclick = async () => {
   const response = await fetch('/api/v1/cloud/auth-status');
@@ -2942,6 +2993,7 @@ initialize().then(restoreInitialView);
       const previous=controls.map(c=>c.disabled); controls.forEach(c=>c.disabled=true);
       try {
         const references=frames?await uploadFrameReferences():await uploadReferences();
+        if(!frames && studioRoot.querySelector('input[name="job-type"]:checked').value==='replacement')validateReplacementReferences(references);
         snapshot.recipe={...captureH3Recipe(references,0),direction:brief,aiPrompt:'',enhancePrompt:false};
         snapshot.graph=buildH3Workflow(references,0,{});
       } finally {controls.forEach((c,i)=>c.disabled=previous[i]);}

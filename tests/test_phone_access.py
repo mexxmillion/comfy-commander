@@ -45,7 +45,8 @@ def test_phone_is_a_complete_onboarding_step():
     import re
     from pathlib import Path
 
-    template = (Path(__file__).parents[1] / "backend/app/templates/setup.html").read_text(encoding="utf-8")
+    from jinja2 import Environment, FileSystemLoader
+    template = Environment(loader=FileSystemLoader(Path(__file__).parents[1] / "backend/app/templates")).get_template("setup.html").render(status={}, profiles={}, settings_mode=False)
     assert re.findall(r'data-wizard-step="(\d+)"', template) == ["0", "1", "2", "3", "4", "5", "6"]
     assert 'id="phone-access" class="wizard-panel" data-wizard-step="4"' in template
     assert 'href="https://tailscale.com/download"' in template

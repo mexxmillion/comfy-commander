@@ -20,10 +20,11 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .prompt_secret import read_key
 from .config import get_settings
-from .store import Base, JobRecipeRow, JobRow, TaskRow, now
+from .store import DEFAULT_MIN_VRAM_GB, Base, JobRecipeRow, JobRow, TaskRow, now
 from .creative_prompts import PROMPT_VERSION, generation_mode, system_prompt
 from .creative_prompts import idea_system_prompt, H3_SKIN_COLOR_ARTIFACT_GUARD, H3_FACIAL_ACTION_ARTIFACT_GUARD
 from . import generator_prompt
+from . import character_replacement
 
 QUEUE_LOCK = Lock()
 LOG = logging.getLogger(__name__)
@@ -319,6 +320,10 @@ def queue_batch(store, batch_id: str, selection: Selection, validate_graph) -> d
                 continue
             concept.update(title=edit.title, prompt=edit.prompt)
             graph = final_graph(batch["graph"], edit.prompt, concept["seed"])
+            if (any(node.get("class_type") == "MiniMaxH3ReferencePack"
+                    and node.get("inputs", {}).get("job_type") == "replacement" for node in graph.values())
+                    and not character_replacement.is_chain(graph)):
+                graph = character_replacement.compose_chain(graph, batch["recipe"].get("replacementTarget", "person"))
             validate_graph(graph)
             job_id = f"job-{uuid4().hex[:12]}"
             recipe = dict(batch["recipe"], direction=batch["brief"], sourceDirection=batch["brief"],
@@ -329,7 +334,7 @@ def queue_batch(store, batch_id: str, selection: Selection, validate_graph) -> d
                                     "idea": concept.get("idea"), "prompt_version": batch.get("prompt_version")})
             concept.update(job_id=job_id, recipe=recipe, graph=graph)
             db.add(JobRow(id=job_id, name=f"CM {batch_id[-6:]} · {edit.index+1} · {edit.title}"[:120],
-                          workflow="pocket-h3", policy=batch["policy"], min_vram_gb=24,
+                          workflow="pocket-h3", policy=batch["policy"], min_vram_gb=DEFAULT_MIN_VRAM_GB,
                           architecture="any", runtime=batch["runtime"], graph_json=json.dumps(graph), created_at=now().isoformat()))
             db.add(TaskRow(id=f"{job_id}-t001", job_id=job_id, number=1))
             db.add(JobRecipeRow(job_id=job_id, recipe_json=json.dumps(recipe)))

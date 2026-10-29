@@ -351,3 +351,17 @@ models or third-party components. See [TRADEMARKS.md](TRADEMARKS.md) and
 [NOTICE.md](NOTICE.md). Models and runtime dependencies retain their own terms.
 In particular, the SAM3 checkpoint has upstream terms that each user must
 review and accept.
+
+
+### Returning to Settings
+
+Open **⚙ Settings** from the desktop navigation or the phone's Dispatcher menu. Settings provides direct tabs for generation defaults, compute/SSH diagnostics, provider connections, private phone access, reviewed workflow profiles, and Hugging Face LoRA upload/registration. Guided onboarding remains available at `/setup`.
+
+Generation defaults are validated before saving to the controller's `state/preferences.json` and shared across desktop and phone. Existing drafts and job recipes take precedence; use **Start a fresh form with saved defaults** to begin with the saved values. Changing a render target never rents hardware. Phone addresses are detected from Tailscale rather than accepted as arbitrary overrides. LoRA uploads still require the human's confirmation. New Creative Engine jobs use the same 16 GB minimum as Generate; explicitly configured and existing jobs retain their requirements.
+
+
+### One-shot H3 Replacement
+
+Select **Replacement**, add at least one source video and one replacement image, and describe the target person. **Run H3** submits one job through `/api/v1/jobs`: the controller composes the approved SAM3 detect/track branch, inverts only the tracked person's pixels, and feeds those frames directly into the H3 video reference. The background and image references remain intact. Audio lock turns on when Replacement is selected and can be changed explicitly. The completed job retains the SAM3 mask and inverted-guide evidence alongside the final H3 video. Generation runs without an intermediate approval pause; completion still requires visual/audio QC. The separate preparation endpoint remains available for a guided preview workflow.
+
+Bulk routing now preserves each task's existing pool, worker preference and architecture unless a different value is chosen. A VRAM-only change therefore keeps local-only LoRAs on the local pool. Failed changes remain selected and show the server's rejection reason.

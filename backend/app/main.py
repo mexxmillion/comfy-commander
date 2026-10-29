@@ -38,6 +38,7 @@ from .identity import authority
 from .job_edit import edit_setup
 from .job_spec import job_spec
 from .media import router as media_router
+from .preferences import router as preferences_router
 from .profile_import import router as profile_import_router
 from .prompt_secret import configured as prompt_secret_configured
 from .providers.base import OfferSearch
@@ -80,6 +81,7 @@ app.include_router(media_router)
 app.include_router(community_router)
 app.include_router(studio_agent_router)
 app.include_router(profile_import_router)
+app.include_router(preferences_router)
 app.add_middleware(GalleryCompression, minimum_size=1000)
 
 
@@ -514,7 +516,9 @@ def validate_rife_graph(graph: dict[str, dict[str, Any]]) -> None:
 
 def validate_pocket_graph(graph: dict[str, dict[str, Any]]) -> None:
     reference_preprocess.validate_nodes(graph)
-    if reference_preprocess.is_graph(graph):
+    if character_replacement.is_chain(graph):
+        validate_h3_graph(character_replacement.validate_chain(graph))
+    elif reference_preprocess.is_graph(graph):
         reference_preprocess.validate_graph(graph)
     elif character_replacement.is_graph(graph):
         character_replacement.validate_graph(graph)
@@ -734,6 +738,15 @@ async def submit_job(payload: JobSubmission, store: QueueStore = STORE) -> dict[
     """Queue a Pocket graph. Optional ``priority`` (default 100 = medium):
     a higher number is claimed sooner (1000 before 100; 1 is the lowest),
     ties run oldest first."""
+    replacement = any(node.get("class_type") == "MiniMaxH3ReferencePack"
+                      and node.get("inputs", {}).get("job_type") == "replacement"
+                      for node in payload.graph.values())
+    if replacement and not character_replacement.is_chain(payload.graph):
+        validate_h3_graph(payload.graph)
+        recipe = payload.recipe or {}
+        if recipe.get("singleFrame"):
+            raise HTTPException(422, "Replacement requires video output")
+        payload.graph = character_replacement.compose_chain(payload.graph, recipe.get("replacementTarget", "person"))
     reference_preprocess.prepare_graph(payload.graph, get_settings().comfyui_input_dir)
     validate_pocket_graph(payload.graph)
     job_id = store.submit(
@@ -793,7 +806,7 @@ async def creative_batch_status(batch_id: str, store: QueueStore = STORE) -> dic
 
 @app.post("/api/v1/creative/{batch_id}/queue", dependencies=[POCKET_AUTH])
 async def queue_creative_batch(batch_id: str, payload: creative.Selection, store: QueueStore = STORE) -> dict:
-    return creative.queue_batch(store, batch_id, payload, validate_h3_graph)
+    return creative.queue_batch(store, batch_id, payload, validate_pocket_graph)
 
 
 @app.get("/api/v1/jobs/{job_id}", dependencies=[POCKET_AUTH])

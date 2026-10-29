@@ -89,6 +89,10 @@
             <label><input type="radio" name="job-type" value="standard"><span><strong>Standard</strong><small>Full scene prompt</small></span></label>
           </div>
         </div>
+        <div id="replacement-settings" class="h3-only reference-mode-only" hidden>
+          <label class="field"><span>Person to replace · SAM3 tracking prompt</span><input id="replacement-target" type="text" minlength="3" maxlength="300" value="person" placeholder="The person in the red shirt"></label>
+          <p class="hint">Requires at least one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
+        </div>
       </section>
 
       <section class="panel reference-mode-section">

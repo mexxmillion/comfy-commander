@@ -240,7 +240,7 @@
       const automatic=el('option','Automatic · first compatible worker');automatic.value='';worker.append(automatic);
       for(const item of state.workers){const option=el('option',`${item.name} · ${item.gpu} · ${item.status}`);option.value=item.id;option.selected=task.preferred_worker_id===item.id;worker.append(option);}
       if(task.preferred_worker_id&&!state.workers.some(item=>item.id===task.preferred_worker_id)){const offline=el('option',`${task.preferred_worker_id} · offline`);offline.value=task.preferred_worker_id;offline.selected=true;worker.append(offline);}
-      const vram=el('input');vram.type='number';vram.min='1';vram.max='192';vram.value=String(task.min_vram_gb||24);vram.setAttribute('aria-label','Minimum VRAM GB');
+      const vram=el('input');vram.type='number';vram.min='1';vram.max='192';vram.value=String(task.min_vram_gb||16);vram.setAttribute('aria-label','Minimum VRAM GB');
       const architecture=el('select');architecture.setAttribute('aria-label','GPU architecture');
       for(const value of ['any','ampere','ada','blackwell']){const option=el('option',value==='any'?'Any architecture':value[0].toUpperCase()+value.slice(1));option.value=value;option.selected=(task.architecture||'any')===value;architecture.append(option);}
       const fields=el('div',null,'route-fields');
@@ -328,20 +328,33 @@
   if(selectVisibleTasks)selectVisibleTasks.onchange=event=>{for(const task of tasks().filter(routeEligible)){if(event.target.checked)checkedTasks.add(task.id);else checkedTasks.delete(task.id);}updateBulkSelection();};
   $('#bulk-clear').onclick=()=>{checkedTasks.clear();updateBulkSelection();};
   $('#bulk-remove').onclick=()=>removeQueueEntries([...checkedTasks]);
+  function bulkRoutePayload(task, options) {
+    return {pool:options.pool==='keep'?task.policy:options.pool,
+      preferred_worker_id:options.worker==='keep'?(task.preferred_worker_id||null):(options.worker||null),
+      min_vram_gb:options.vram===''?task.min_vram_gb:Number(options.vram),
+      architecture:options.architecture==='keep'?task.architecture:options.architecture,
+      requeue:['failed','cancelled','completed'].includes(task.status)};
+  }
   $('#bulk-apply').onclick=async()=>{
     const selectedTasks=[...checkedTasks].map(id=>state.tasks.find(task=>task.id===id)).filter(routeEligible);
     if(!selectedTasks.length)return;
-    const pool=$('#bulk-pool').value,label=$('#bulk-pool').selectedOptions[0].textContent;
-    if(!window.confirm(`Apply “${label}” to ${selectedTasks.length} selected task${selectedTasks.length===1?'':'s'}? Completed, failed, and cancelled tasks will be requeued.`))return;
-    const payload={pool,preferred_worker_id:$('#bulk-worker').value||null,min_vram_gb:Number($('#bulk-vram').value),architecture:$('#bulk-architecture').value};
+    if(!$('#bulk-vram').reportValidity())return;
+    if(!window.confirm(`Apply changed route settings to ${selectedTasks.length} selected task${selectedTasks.length===1?'':'s'}? Fields marked Keep current are preserved. Completed, failed, and cancelled tasks will be requeued.`))return;
+    const options={pool:$('#bulk-pool').value,worker:$('#bulk-worker').value,vram:$('#bulk-vram').value,architecture:$('#bulk-architecture').value};
+    $('#bulk-apply').disabled=true;
+    $('#bulk-route-status').textContent='Updating selected routes…';
     const results=await Promise.all(selectedTasks.map(async task=>{
-      const response=await fetch(`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/route`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,requeue:['failed','cancelled','completed'].includes(task.status)})});
+      try {
+      const response=await fetch(`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/route`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bulkRoutePayload(task,options))});
       let body={};try{body=await response.json();}catch{}
       return {task,response,body};
+      } catch(error){return {task,response:{ok:false},body:{detail:error.message}};}
     }));
     const failures=results.filter(item=>!item.response.ok);
     for(const item of results)if(item.response.ok)checkedTasks.delete(item.task.id);
+    $('#bulk-apply').disabled=false;
     await refresh();
+    $('#bulk-route-status').textContent=`${results.length-failures.length} route(s) updated.${failures.length?' '+failures.length+' failed: '+(failures[0].body.detail||'Request failed'):' Queue requirements now reflect the saved routes.'}`;
     if(failures.length)window.alert(`${failures.length} task${failures.length===1?'':'s'} could not be changed. ${failures[0].body.detail||'Sign in under Rentals and try again.'}`);
   };
   $('#worker-search').addEventListener('input',filterWorkers);
@@ -366,10 +379,14 @@
     const dispatching=!generating&&!outputs;
     $('#dispatcher-nav').open=dispatching;
     $('#dispatcher-nav').classList.toggle('active',dispatching);
+    $('#mobile-dispatcher-nav').classList.toggle('active',dispatching);
     if(outputs)loadDurableOutputs();
     document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
   }
+  document.querySelectorAll('#mobile-dispatcher-nav a').forEach(link=>link.addEventListener('click',()=>{$('#mobile-dispatcher-nav').open=false;}));
+  document.addEventListener('click',event=>{if(!event.target.closest('#mobile-dispatcher-nav'))$('#mobile-dispatcher-nav').open=false;});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')$('#mobile-dispatcher-nav').open=false;});
   function closeOutputPlayer(){
     const dialog=$('#output-player');
     if(dialog.open)dialog.close();
