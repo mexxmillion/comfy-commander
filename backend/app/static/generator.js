@@ -135,6 +135,7 @@ async function restoreDraft() {
       $("#turbo-enabled").checked = false;
       $("#total-steps").value = 4;
     }
+    if (!(draft.controls || []).some(control => control.id === "sparse-enabled")) sparseAttentionDefaults();
     state.savedReferences=draft.savedReferences||[];state.savedFrameRefs=draft.savedFrameRefs||{};
     state.selectedLoras=new Map(draft.loras||[]);
     state.aiPrompts=draft.aiPrompts||{h3:'',qwen:''};state.aiPromptSources=draft.aiPromptSources||{h3:'',qwen:''};
@@ -828,6 +829,24 @@ async function uploadReferences() {
   return state.savedReferences.map(reference => ({ ...reference }));
 }
 
+function sparseAttentionInputs(model) {
+  if (!$("#sparse-enabled").checked) return null;
+  const method = $("#sparse-method").value;
+  if (!["sla", "vsa", "sol-attn"].includes(method)) throw new Error("Choose SLA, VSA or SOL sparse attention.");
+  return {
+    model, selection: method,
+    ...(method === "sol-attn" ? {"selection.tau": 1.3} : {"selection.keep_percent": 10}),
+    start_percent: 0.2, end_percent: 1, dense_blocks: "", min_tokens: 12288,
+    extra_tokens: 256, sink_conditioning: "exact_kv_and_rows", verbose: false,
+  };
+}
+
+function sparseAttentionDefaults() {
+  const omni = state.h3Type !== "frames" && $("#h3-model").value === OMNI_MODEL;
+  $("#sparse-enabled").checked = omni;
+  $("#sparse-method").value = "vsa";
+}
+
 function buildH3Workflow(references, seed, creative = null, options = {}) {
   const frameMode = state.h3Type === "frames";
   const singleFrame = $("#h3-single-frame").checked;
@@ -948,8 +967,9 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
     workflow["145"] = { inputs: { lora_name: (frameMode ? FRAME_TURBO_LORAS : TURBO_LORAS)[turboSteps], strength_model: frameMode ? Number($("#frame-turbo-strength").value) : 1, model: [previous, 0] }, class_type: "LoraLoaderModelOnly" };
     previous = "145";
   }
-  if (!omni && (eros || !frameMode) && $("#vsa-enabled").checked) {
-    workflow["146"] = { inputs: { gate_file: VSA_LORA, sparsity: 0.75, model: [previous, 0] }, class_type: "Ref2VAVSAGatePatch" };
+  const sparseInputs = sparseAttentionInputs([previous, 0]);
+  if (sparseInputs) {
+    workflow["146"] = { inputs: sparseInputs, class_type: "BlockSparseAttention" };
     previous = "146";
   }
   selectedLoraEntries("h3").filter(([name]) => name !== VSA_LORA).forEach(([name, strength], index) => {
@@ -1255,7 +1275,8 @@ function recipeFromHistoryEntry(entry) {
     references,
     turbo,
     turboEnabled,
-    vsaEnabled: Boolean(prompt["146"]),
+    sparseEnabled: Boolean(prompt["146"]),
+    sparseMethod: prompt["146"]?.inputs?.selection || "vsa",
     singleFrame,
     audioLock: Object.values(prompt).some(node => node.class_type === "MiniMaxH3NativeAudioLock"),
     turboStrength: prompt["145"]?.inputs?.strength_model ?? 0.75,
@@ -1433,7 +1454,8 @@ function captureH3Recipe(references, seed) {
     references,
     turbo: Number(studioRoot.querySelector('input[name="turbo"]:checked').value),
     turboEnabled: $("#turbo-enabled").checked && (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) !== EROSMAX_MODEL,
-    vsaEnabled: $("#vsa-enabled").checked,
+    sparseEnabled: $("#sparse-enabled").checked,
+    sparseMethod: $("#sparse-method").value,
     turboStrength: Number($("#frame-turbo-strength").value),
     baseModel: state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value,
     steps: Number($("#total-steps").value),
@@ -1573,10 +1595,11 @@ function loadRecipe(recipe) {
   if (state.h3Type === "frames") $("#frame-h3-model").value = recipe.baseModel || FRAME_H3_MODEL;
   else $("#h3-model").value = recipe.baseModel || LEGACY_H3_MODEL;
   $("#turbo-enabled").checked = recipe.turboEnabled ?? (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) !== EROSMAX_MODEL;
-  $("#vsa-enabled").checked = recipe.vsaEnabled === true;
+  $("#sparse-enabled").checked = recipe.sparseEnabled ?? recipe.vsaEnabled ?? ($("#h3-model").value === OMNI_MODEL);
+  $("#sparse-method").value = ["sla", "vsa", "sol-attn"].includes(recipe.sparseMethod) ? recipe.sparseMethod : "vsa";
   $("#frame-turbo-strength").value = recipe.turboStrength ?? 0.75;
   $("#aspect-ratio").value = normalizeAspect(recipe.aspect || $("#aspect-ratio").value);
-  $("#megapixels").value = recipe.megapixels ?? 0.4;
+  $("#megapixels").value = recipe.megapixels ?? 0.5;
   $("#total-steps").value = recipe.steps ?? PRESET_STEPS[recipe.turbo] ?? 4;
   $("#h3-single-frame").checked = recipe.singleFrame === true;
   $("#h3-audio-lock").checked = recipe.audioLock === true;
@@ -2261,6 +2284,8 @@ function markAiPromptStale() {
 }
 
 function syncTurboStack() {
+  $("#sparse-method").disabled = !$("#sparse-enabled").checked;
+  const sparseLabel = $("#sparse-enabled").checked ? `Sparse ${$("#sparse-method").value.toUpperCase()}` : "Sparse attention off";
   const omni = state.h3Type !== 'frames' && $('#h3-model').value === OMNI_MODEL;
   if (omni) {
     $('#turbo-enabled').checked = false;
@@ -2272,7 +2297,7 @@ function syncTurboStack() {
     });
     $('#total-steps').value = 8;
     $('#turbo-stack-help').textContent = 'FastH3 Omni · native 8-step model · add optional look LoRAs below';
-    $('#engine-note').textContent = 'Euler · simple · video/audio shifts 12/3 · guidance 1 · no external Turbo or VSA';
+    $('#engine-note').textContent = `Euler · simple · video/audio shifts 12/3 · guidance 1 · ${sparseLabel}`;
     return;
   }
   const eros = (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) === EROSMAX_MODEL;
@@ -2310,7 +2335,7 @@ function syncTurboStack() {
     return;
   }
   const enabled = $("#turbo-enabled").checked;
-  const vsa = $("#vsa-enabled").checked ? "VSA 0.75" : "VSA off";
+  const vsa = sparseLabel;
   studioRoot.querySelectorAll('input[name="turbo"]').forEach((input) => {
     input.nextElementSibling.querySelector("small").textContent = enabled
       ? `LightX2V Ref2V · ${input.value}-step LoRA · ${vsa}`
@@ -2556,7 +2581,8 @@ for (const [kind, prefix] of [["first_frame", "first"], ["last_frame", "last"]])
   });
 }
 $("#turbo-enabled").addEventListener("change", syncTurboStack);
-$("#vsa-enabled").addEventListener("change", syncTurboStack);
+$("#sparse-enabled").addEventListener("change", syncTurboStack);
+$("#sparse-method").addEventListener("change", syncTurboStack);
 $("#qwen-turbo").addEventListener("change", syncQwenTurbo);
 $("#qwen-steps").addEventListener("input", syncQwenTurbo);
 $("#qwen-cfg").addEventListener("input", syncQwenTurbo);
@@ -2566,6 +2592,7 @@ $("#face-model").addEventListener("change", () => {
 $("#frame-turbo-strength").addEventListener("input", syncTurboStack);
 $("#h3-model").addEventListener("change", () => {
   $("#turbo-enabled").checked = $("#h3-model").value !== EROSMAX_MODEL;
+  sparseAttentionDefaults();
   syncTurboStack();
 });
 $("#frame-h3-model").addEventListener("change", () => {

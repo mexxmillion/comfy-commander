@@ -56,7 +56,8 @@ does not rent anything. GPU rental always has a separate offer, price, lifetime,
 and confirmation step.
 
 Ref2V defaults to the matching LightX2V 4-step or 8-step LoRA at strength 1.0,
-using Euler / simple sampling. VSA is optional and off by default. Cloud Ref2V
+using Euler / simple sampling. Sparse attention uses ComfyUI Model Sparse Attention with SLA, VSA or SOL. It is
+off by default for Ref2V; FastH3 Omni enables VSA by default. Cloud Ref2V
 profiles include both pinned LoRAs; local workers need the corresponding files
 in their ComfyUI `models/loras` directory. Saved recipes retain their recorded
 LoRA and VSA selections.

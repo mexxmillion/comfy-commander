@@ -48,7 +48,7 @@ COMMUNITY_PROFILES = {
     "ref2v-int8": {
         "name": "MiniMax H3 Ref2V Community",
         "kind": "video",
-        "summary": "Public INT8 Ref2VA with LightX2V 4/8-step Ref2V LoRAs by default, with optional VSA.",
+        "summary": "Public INT8 Ref2VA with LightX2V 4/8-step Ref2V LoRAs by default, with optional sparse attention.",
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
         "gated": False,
@@ -64,7 +64,7 @@ COMMUNITY_PROFILES = {
     "fasth3-omni": {
         "name": "FastH3 Omni",
         "kind": "video",
-        "summary": "Fast H3 Omni INT8, native eight-step profile.",
+        "summary": "Fast H3 Omni INT8, native eight-step profile with VSA sparse attention by default.",
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
         "gated": True,

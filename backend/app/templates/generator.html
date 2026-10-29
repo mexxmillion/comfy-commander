@@ -135,10 +135,11 @@
           <span><strong>External acceleration LoRA</strong><small id="turbo-stack-help">LightX2V Ref2V · matching 4/8-step LoRA enabled by default</small></span>
         </label>
         <label class="switch-row h3-only">
-          <input id="vsa-enabled" type="checkbox">
+          <input id="sparse-enabled" type="checkbox">
           <span class="switch-track" aria-hidden="true"><i></i></span>
-          <span><strong>VSA acceleration</strong><small>Optional sparse attention · off by default</small></span>
+          <span><strong>Sparse attention</strong><small>Ref2V: off by default · FastH3 Omni: VSA by default</small></span>
         </label>
+        <label class="field h3-only"><span>Sparse attention method</span><select id="sparse-method"><option value="sla">SLA</option><option value="vsa" selected>VSA</option><option value="sol-attn">SOL</option></select><small class="hint">VSA uses FastH3-trained weights; SLA uses SLA-trained weights. SOL uses adaptive sparsity.</small></label>
         <input id="h3-single-frame" type="checkbox" hidden>
         <label class="switch-row qwen-only" hidden>
           <input id="qwen-turbo" type="checkbox">
@@ -170,7 +171,7 @@
             </select>
           </label>
           <label class="field visual-only"><span>Resolution · megapixels</span>
-            <input id="megapixels" type="number" inputmode="decimal" min="0.1" max="16" step="any" value="0.4" required>
+            <input id="megapixels" type="number" inputmode="decimal" min="0.1" max="16" step="any" value="0.5" required>
           </label>
           <label class="field h3-only"><span>Total steps · override</span>
             <input id="total-steps" type="number" inputmode="numeric" min="1" max="10000" step="1" value="4" required>

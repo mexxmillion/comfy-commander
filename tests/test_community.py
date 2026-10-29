@@ -100,7 +100,12 @@ def test_ref2v_defaults_and_pinned_lightx2v_downloads():
         assert "lightx2v-ref2v" in manifest["profiles"][profile]
     template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
     assert '<input id="turbo-enabled" type="checkbox" checked>' in template
-    assert '<input id="vsa-enabled" type="checkbox">' in template
+    assert '<input id="sparse-enabled" type="checkbox">' in template
+    assert 'id="megapixels"' in template and 'step="any" value="0.5" required' in template
+    assert 'step="0.25" value="5" required' in template
+    assert template.index('value="9:16 (Portrait Widescreen)"') < template.index(
+        'value="16:9 (Widescreen)"'
+    )
 
 
 def test_community_lora_manifest_round_trip(tmp_path):

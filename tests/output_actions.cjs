@@ -56,22 +56,45 @@ context.requeueRecipe({mode: 'h3', turbo: 10});
 assert.match(calls.at(-1)[1], /ACC presets are no longer supported/);
 console.log('Historical ACC requeue rejection passed');
 
-// Exercise the production H3 model chain for both Ref2V step presets.
+// Exercise the production model chain and native DynamicCombo serialization.
 const chainStart = source.indexOf('  let previous = "127";', source.indexOf('function buildH3Workflow'));
 const chainEnd = source.indexOf('  if (!frameMode && !singleFrame', chainStart);
 const constants = source.slice(source.indexOf('const TURBO_LORAS ='), source.indexOf('const FRAME_H3_MODEL'));
+const sparseHelpers = source.slice(source.indexOf('function sparseAttentionInputs('), source.indexOf('function buildH3Workflow('));
 for (const steps of [4, 8]) {
-  for (const vsa of [false, true]) {
-    const graphContext = {workflow: {'168': {inputs: {}}}, turboEnabled: true,
-      turboSteps: steps, frameMode: false, omni: false, eros: false,
-      VSA_LORA: 'fasth3_vsa_gate.safetensors', selectedLoraEntries: () => [],
-      $: selector => { assert.equal(selector, '#vsa-enabled'); return {checked: vsa}; }};
-    vm.createContext(graphContext);
-    vm.runInContext(constants + source.slice(chainStart, chainEnd), graphContext);
-    assert.match(graphContext.workflow['145'].inputs.lora_name, new RegExp(`ref2v_turbo_${steps}step`));
-    assert.equal(graphContext.workflow['145'].inputs.strength_model, 1);
-    assert.equal(Boolean(graphContext.workflow['146']), vsa);
-    assert.equal(graphContext.workflow['168'].inputs.model[0], vsa ? '146' : '145');
+  for (const enabled of [false, true]) {
+    for (const method of ['sla', 'vsa', 'sol-attn']) {
+      for (const omni of [false, true]) {
+        const controls = {'#sparse-enabled': {checked: enabled}, '#sparse-method': {value: method}};
+        const graphContext = {workflow: {'168': {inputs: {}}}, turboEnabled: !omni,
+          turboSteps: steps, frameMode: false, omni, eros: false,
+          selectedLoraEntries: () => [], $: selector => controls[selector]};
+        vm.createContext(graphContext);
+        vm.runInContext(constants + sparseHelpers + source.slice(chainStart, chainEnd), graphContext);
+        assert.equal(Boolean(graphContext.workflow['145']), !omni);
+        if (!omni) assert.match(graphContext.workflow['145'].inputs.lora_name, new RegExp(`ref2v_turbo_${steps}step`));
+        const node = graphContext.workflow['146'];
+        assert.equal(Boolean(node), enabled);
+        if (enabled) {
+          assert.equal(node.class_type, 'BlockSparseAttention');
+          assert.equal(node.inputs.selection, method);
+          assert.equal(node.inputs[method === 'sol-attn' ? 'selection.tau' : 'selection.keep_percent'], method === 'sol-attn' ? 1.3 : 10);
+          assert.equal(node.inputs.sink_conditioning, 'exact_kv_and_rows');
+          assert.equal(node.inputs.model[0], omni ? '127' : '145');
+        }
+        assert.equal(graphContext.workflow['168'].inputs.model[0], enabled ? '146' : omni ? '127' : '145');
+      }
+    }
   }
 }
-console.log('LightX2V model chain and optional VSA passed');
+const controls = {'#h3-model': {value: 'omni'}, '#sparse-enabled': {}, '#sparse-method': {}};
+const defaults = {state: {h3Type: 'reference'}, OMNI_MODEL: 'omni', $: selector => controls[selector]};
+vm.createContext(defaults);vm.runInContext(sparseHelpers, defaults);
+defaults.sparseAttentionDefaults();
+assert.equal(controls['#sparse-enabled'].checked, true);
+assert.equal(controls['#sparse-method'].value, 'vsa');
+controls['#h3-model'].value = 'ref2v';defaults.sparseAttentionDefaults();
+assert.equal(controls['#sparse-enabled'].checked, false);
+controls['#sparse-enabled'].checked = true;controls['#sparse-method'].value = 'untrusted';
+assert.throws(() => defaults.sparseAttentionInputs(['127', 0]), /Choose SLA, VSA or SOL/);
+console.log('Sparse methods, model chains and Omni/Ref2V defaults passed');
