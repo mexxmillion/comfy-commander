@@ -131,3 +131,13 @@ def test_huggingface_accepts_standard_environment_alias(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.setenv("HUGGINGFACE_TOKEN", "alias-value")
     assert credential_paths.provider_secret("huggingface", tmp_path / "missing") == "alias-value"
+
+
+def test_fresh_install_navigation_does_not_require_task_rows():
+    root = Path(__file__).parents[1]
+    console = (root / "backend/app/static/console.js").read_text(encoding="utf-8")
+    early_navigation = "addEventListener('hashchange',nav);nav();"
+    optional_queue_control = "if(selectVisibleTasks)selectVisibleTasks.onchange"
+    assert early_navigation in console
+    assert optional_queue_control in console
+    assert console.index(early_navigation) < console.index(optional_queue_control)

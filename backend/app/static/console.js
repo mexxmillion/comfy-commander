@@ -11,6 +11,9 @@
   const inspector = $('#job-inspector'), viewBase = inspector.dataset.viewBase;
   const logPanel = $('#activity');
   $('main').append(logPanel);
+  // Navigation must remain available even if an optional empty-state control is absent.
+  // A fresh install has no task rows, so initialize routes before binding queue controls.
+  addEventListener('hashchange',nav);nav();
   const el = (tag, text, cls) => { const node = document.createElement(tag); if (text != null) node.textContent = text; if (cls) node.className = cls; return node; };
   const seconds = value => value == null ? '—' : `${Number(value).toFixed(1)} s`;
   const date = value => value ? new Date(value).toLocaleString() : '—';
@@ -321,7 +324,8 @@
   $('#task-page-size').addEventListener('input',()=>{taskPage=0;filterTasks();});
   $('#task-prev').onclick=()=>{if(taskPage>0){taskPage--;filterTasks();}};
   $('#task-next').onclick=()=>{const pages=Math.ceil(matchingTasks().length/(Number($('#task-page-size').value)||25));if(taskPage+1<pages){taskPage++;filterTasks();}};
-  $('#select-visible-tasks').onchange=event=>{for(const task of tasks().filter(routeEligible)){if(event.target.checked)checkedTasks.add(task.id);else checkedTasks.delete(task.id);}updateBulkSelection();};
+  const selectVisibleTasks=$('#select-visible-tasks');
+  if(selectVisibleTasks)selectVisibleTasks.onchange=event=>{for(const task of tasks().filter(routeEligible)){if(event.target.checked)checkedTasks.add(task.id);else checkedTasks.delete(task.id);}updateBulkSelection();};
   $('#bulk-clear').onclick=()=>{checkedTasks.clear();updateBulkSelection();};
   $('#bulk-remove').onclick=()=>removeQueueEntries([...checkedTasks]);
   $('#bulk-apply').onclick=async()=>{
@@ -361,7 +365,6 @@
     document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#monitor')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
   }
-  addEventListener('hashchange',nav);nav();
   function closeOutputPlayer(){
     const dialog=$('#output-player');
     if(dialog.open)dialog.close();
