@@ -248,7 +248,7 @@ select, input[type="number"] { min-height: 3rem; padding: 0 .7rem; font-size: .8
   #studio-form>.h3-type-switch,#studio-form>.hero-panel,#studio-form>.run-panel { grid-column:1/-1; }
   #studio-form>.panel { margin:0; }
   .run-panel { bottom:1rem; grid-template-columns:minmax(220px,1fr) minmax(150px,1fr) auto auto; }
-  .embedded-studio .topbar,.embedded-studio #monitor-link { display:none; }
+  .embedded-studio .topbar { display:none; }
   .embedded-studio .mode-switch { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
 
@@ -361,7 +361,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
   .mode-switch { display:flex; overflow-x:auto; scrollbar-width:none; scroll-snap-type:x proximity; }
   .mode-switch::-webkit-scrollbar { display:none; }
   .mode-switch button,.mode-switch a { flex:0 0 auto; min-height:40px; padding:0 14px; white-space:nowrap; scroll-snap-align:start; }
-  .embedded-studio .topbar,.embedded-studio #monitor-link { display:none; }
+  .embedded-studio .topbar { display:none; }
   .embedded-studio .studio-shell { padding:8px 8px calc(8px + env(safe-area-inset-bottom)); }
   .embedded-studio .run-panel { bottom:max(6px,env(safe-area-inset-bottom)); }
   .ai-generated summary>small { display:none; }

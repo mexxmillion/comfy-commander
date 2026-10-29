@@ -2591,7 +2591,6 @@ $("#clear-log").addEventListener("click", () => {
 syncTurboStack();
 syncPromptEnhancement();
 syncPromptOnly();
-$("#monitor-link").href = "#monitor";
 async function restoreDispatchedJob(jobId = new URLSearchParams(location.search).get('edit_job')) {
   if(!jobId)return;
   const notice=document.createElement('p');notice.className='hint';notice.setAttribute('role','status');
