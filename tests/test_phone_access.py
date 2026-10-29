@@ -28,10 +28,28 @@ def config(proxy="http://127.0.0.1:8000", port=443):
 def test_private_controller_url_and_no_peer_data(monkeypatch):
     calls = mock_status(monkeypatch, config(port=8443))
     result = phone.phone_access()
-    assert result["url"] == f"https://{DNS}:8443"
+    assert result["url"] == f"https://{DNS}:8443/"
     assert result["state"] == "ready"
     assert all("--json" in args for args in calls)
     assert "Self" not in result and "Peer" not in result
+
+
+def test_standard_https_port_is_explicit_in_copyable_url(monkeypatch):
+    mock_status(monkeypatch, config())
+    result = phone.phone_access()
+    assert result["url"] == f"https://{DNS}:443/"
+    assert result["https_port"] == 443
+
+
+def test_phone_is_a_complete_onboarding_step():
+    import re
+    from pathlib import Path
+
+    template = (Path(__file__).parents[1] / "backend/app/templates/setup.html").read_text(encoding="utf-8")
+    assert re.findall(r'data-wizard-step="(\d+)"', template) == ["0", "1", "2", "3", "4", "5"]
+    assert 'id="phone-access" class="wizard-panel" data-wizard-step="4"' in template
+    assert 'href="https://tailscale.com/download"' in template
+    assert 'data-step-target="4">Phone access' in template
 
 
 @pytest.mark.parametrize("proxy", ["http://127.0.0.1:8188", "http://remote:8000", "http://127.0.0.1:8000/other"])

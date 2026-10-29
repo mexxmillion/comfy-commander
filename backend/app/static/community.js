@@ -30,7 +30,8 @@ const showStep = index => {
   currentStep = Math.max(0, Math.min(index, wizardPanels.length - 1));
   wizardPanels.forEach((panel, i) => panel.classList.toggle('active', i === currentStep));
   railButtons.forEach((button, i) => { button.classList.toggle('active', i === currentStep); button.classList.toggle('complete', i < currentStep); });
-  if (currentStep === 4) renderReadiness();
+  if (currentStep === 5) renderReadiness();
+  if (currentStep === 4) void loadPhoneAccess();
   window.scrollTo({top: 0, behavior: 'smooth'});
 };
 document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => showStep(currentStep + 1)));
@@ -214,17 +215,18 @@ async function loadPhoneAccess() {
   const copy = document.querySelector('#copy-phone-url');
   try {
     const data = await jsonRequest('/api/v1/setup/phone-access');
-    section.hidden = !data.available;
+    section.hidden = false;
     input.value = data.url || '';
     document.querySelector('#enable-phone-access').hidden = !data.can_enable || !!data.url;
     copy.disabled = !data.url;
     document.querySelector('#phone-access-setup').hidden = data.state !== 'not_shared';
-    status.textContent = data.url ? 'Ready for phone · private Tailscale HTTPS' :
+    status.textContent = data.url ? `Ready for phone · private HTTPS port ${data.https_port}` :
+      !data.available ? 'Install Tailscale using the download button, sign in on both devices, then refresh.' :
       data.state === 'not_shared' ? 'Tailscale is connected. Enable private sharing to get your phone URL.' :
       data.state === 'disconnected' ? 'Open Tailscale on this computer and sign in, then refresh.' :
       'Could not read Tailscale sharing status. Check Tailscale on this computer, then refresh.';
   } catch {
-    section.hidden = !diagnostics.tailscale_available;
+    section.hidden = false;
     input.value = '';copy.disabled = true;
     document.querySelector('#enable-phone-access').hidden = true;
     status.textContent = 'Sign in to Commander settings to view the private phone URL.';

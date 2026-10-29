@@ -42,13 +42,14 @@ powershell -ExecutionPolicy Bypass -File .\tools\first_run.ps1
 ```
 
 Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
-five screens:
+six screens:
 
 1. Create the local admin password.
 2. Choose local, cloud, or hybrid compute.
 3. Connect only the providers you want.
 4. Review the Qwen Image and MiniMax H3 starter profiles.
-5. Open the command center.
+5. Connect your phone through Tailscale, or skip for now.
+6. Open the command center.
 
 First run starts with **no credentials, no jobs, no workers, no private models,
 and no cloud spend**. Connecting RunPod or Vast.ai validates a credential; it

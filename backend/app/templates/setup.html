@@ -3,11 +3,11 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Welcome · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=1"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=phone-access-20261029"></script><script defer src="/static/agent-widget.js?v=1"></script>
+  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=phone-onboarding-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
+  <script defer src="/static/community.js?v=phone-onboarding-20261029"></script><script defer src="/static/agent-widget.js?v=1"></script>
 </head><body data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
   <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p><h1>Your ComfyUI.<br><em>Ready to command.</em></h1></div><a href="/">Skip to studio →</a></header>
-  <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>
+  <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Phone'),('06','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>
 
   <section class="wizard-panel active" data-wizard-step="0">
     <div class="welcome-copy"><span class="step">01 · YOUR CONTROL PLANE</span><h2>One password.<br>No mystery setup.</h2><p>Comfy Commander coordinates your own ComfyUI workers. It does not bundle provider keys, rent hardware, or upload a model until you ask.</p><div class="trust-grid"><span>✓ Credentials stay on this machine</span><span>✓ Empty-state safe</span><span>✓ Agent-readable API</span><span>✓ Open-source profiles</span></div></div>
@@ -34,18 +34,23 @@
     <div class="replacement-card compact"><div><span class="step">FEATURED</span><h2>Character replacement</h2><p>Qwen references → reviewed SAM3 target mask → H3 Ref2VA → visual QC.</p></div><ol><li>Keep identity and wardrobe consistent.</li><li>Track only the performer being replaced.</li><li>Preserve choreography and continuous audio.</li></ol></div><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Review setup →</button></div>
   </section>
 
-  <section class="wizard-panel launch-panel" data-wizard-step="4">
-    <span class="step">05 · READY WHEN YOU ARE</span><h2>Your command center is staged.</h2><p>Open with zero workers and zero cloud spend. Add a worker now, or let the copilot/Codex guide the next step.</p><div id="readiness" class="readiness-grid"></div><div class="launch-actions"><a class="primary-link" href="/">Open Comfy Commander →</a><button type="button" class="quiet" id="manage-models">Manage LoRAs</button></div><p class="note">For phone access, install Tailscale on both devices and privately serve <code>http://127.0.0.1:8000</code>. Use Serve—not Telnet and not public Funnel.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" class="quiet" data-step-target="1">Change setup</button></div>
-  </section>
-
-  <section id="phone-access" class="advanced-section" hidden aria-labelledby="phone-access-title">
-    <div class="section-title"><span class="step">PHONE</span><div><h2 id="phone-access-title">Open Commander on your phone</h2><p>Install Tailscale on your phone and sign into the same tailnet as this computer.</p></div></div>
+  <section id="phone-access" class="wizard-panel" data-wizard-step="4" aria-labelledby="phone-access-title">
+    <div class="section-title"><span class="step">05</span><div><h2 id="phone-access-title">Open Commander on your phone</h2><p>Install Tailscale on your phone and sign into the same tailnet as this computer.</p></div></div>
+    <ol><li>Install Tailscale on this computer and your phone.</li><li>Sign into the same tailnet on both devices.</li><li>Enable private phone access, copy the full URL below, and open it on your phone.</li></ol>
+    <a class="primary-link" href="https://tailscale.com/download" target="_blank" rel="noopener">Download Tailscale ↗</a>
     <p id="phone-access-status" role="status">Checking private access…</p>
     <label>Private phone URL<input id="phone-access-url" type="url" readonly aria-label="Private phone URL"></label>
     <div class="launch-actions"><button type="button" id="enable-phone-access" hidden>Enable private phone access</button><button type="button" id="copy-phone-url" disabled>Copy URL</button><button type="button" id="refresh-phone-access" class="quiet">Refresh phone access</button></div>
     <div id="phone-access-setup" hidden><p>Click Enable private phone access, or run this command on the controller computer and refresh:</p><pre><code>.\tools\share_phone.ps1</code></pre></div>
     <p class="note">Open the copied HTTPS address in your phone browser and sign in with your Commander password. Keep Tailscale connected on both devices.</p>
+    <div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Continue / skip for now →</button></div>
   </section>
+
+  <section class="wizard-panel launch-panel" data-wizard-step="5">
+    <span class="step">06 · READY WHEN YOU ARE</span><h2>Your command center is staged.</h2><p>Open with zero workers and zero cloud spend. Add a worker now, or let the copilot/Codex guide the next step.</p><div id="readiness" class="readiness-grid"></div><div class="launch-actions"><a class="primary-link" href="/">Open Comfy Commander →</a><button type="button" class="quiet" id="manage-models">Manage LoRAs</button><button type="button" class="quiet" data-step-target="4">Phone access</button></div><p class="note">For phone access, install Tailscale on both devices and privately serve <code>http://127.0.0.1:8000</code>. Use Serve—not Telnet and not public Funnel.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" class="quiet" data-step-target="1">Change setup</button></div>
+  </section>
+
+
 
   <section id="lora-management" class="advanced-section" hidden><div class="section-title"><span class="step">MODELS</span><div><h2>Your LoRAs, on your workers</h2><p>Upload a local LoRA to Hugging Face or register an existing immutable repository file.</p></div></div><p class="callout">Nothing uploads automatically. Running workers are unchanged.</p>
     <div class="lora-grid"><form id="lora-upload-form" class="management-card"><div><span class="status">LOCAL → HUGGING FACE</span><h3>Upload a local LoRA</h3></div><label>Local LoRA<select id="local-lora" required><option value="">Loading local LoRAs…</option></select></label><label>Hugging Face repository<input id="upload-repo" placeholder="your-name/your-model" required></label><label>Path in repository<input id="upload-path" placeholder="my-style.safetensors" required></label><label class="check"><input id="upload-private" type="checkbox" checked> Keep repository private</label><fieldset data-profile-picker="upload"><legend>Use with profiles</legend></fieldset><button type="submit">Upload & pin for workers</button><small role="status"></small></form><form id="lora-register-form" class="management-card"><div><span class="status">EXISTING HUGGING FACE FILE</span><h3>Register an existing LoRA</h3></div><label>Repository<input id="register-repo" placeholder="owner/model" required></label><label>Commit SHA<input id="register-revision" minlength="40" maxlength="64" placeholder="40-character commit SHA" required></label><label>File in repository<input id="register-file" placeholder="my-style.safetensors" required></label><fieldset data-profile-picker="register"><legend>Use with profiles</legend></fieldset><button type="submit">Verify & register</button><small role="status"></small></form></div><div class="registered-card"><div><h3>Registered for future workers</h3><p>Unregistering deletes no files.</p></div><div id="registered-loras" class="registered-list"><p>Sign in to load your LoRAs.</p></div></div>

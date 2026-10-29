@@ -18,7 +18,8 @@ def tailscale_executable() -> str | None:
 def phone_access(port: int = 8000) -> dict:
     executable = tailscale_executable()
     result = {"available": bool(executable), "connected": False, "url": None,
-              "suggested_url": None, "state": "unavailable", "can_enable": False}
+              "suggested_url": None, "state": "unavailable", "can_enable": False,
+              "https_port": None}
     if not executable:
         return result
 
@@ -44,7 +45,7 @@ def phone_access(port: int = 8000) -> dict:
         if not re.fullmatch(r"[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.ts\.net", dns):
             result["state"] = "dns_unavailable"
             return result
-        result.update(suggested_url=f"https://{dns}", state="not_shared")
+        result.update(suggested_url=f"https://{dns}:443/", state="not_shared")
         serve = read("serve", "status", "--json")
         configs = [serve, *(serve.get("Foreground") or {}).values()]
         result["can_enable"] = not any(
@@ -65,7 +66,7 @@ def phone_access(port: int = 8000) -> dict:
                         or target.port != port or target.path not in {"", "/"}
                         or target.username or target.password or target.query or target.fragment):
                     continue
-                result.update(url=f"https://{dns}" + (f":{tls_port}" if tls_port != "443" else ""), state="ready")
+                result.update(url=f"https://{dns}:{tls_port}/", https_port=int(tls_port), state="ready")
                 return result
         return result
     except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
