@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -312,6 +313,23 @@ def _state_path(rental_id: str) -> Path:
 
 
 def build_bundle() -> None:
+    # Fail before invoking the builder (and before any provider action). Do not
+    # relay captured subprocess output: it can contain private paths or secrets.
+    for name in ("COMFYUI_ROOT", "COMFYUI_PYTHON"):
+        value = os.environ.get(name, "").strip()
+        if not value:
+            raise RuntimeError(
+                f"Cloud runtime packaging requires {name}. Configure it on the controller "
+                "host and restart the web server. No GPU rental was started."
+            )
+        path = Path(value)
+        valid = (path / "custom_nodes").is_dir() if name == "COMFYUI_ROOT" else path.is_file()
+        if not valid:
+            raise RuntimeError(
+                f"Cloud runtime packaging cannot use {name}. Check the configured "
+                "ComfyUI installation and Python executable on the controller host. "
+                "No GPU rental was started."
+            )
     script = ROOT / "runtime" / "h3" / "build_local.ps1"
     manifest = str(get_settings().community_lora_manifest)
     result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-BundleOnly",

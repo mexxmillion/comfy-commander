@@ -62,6 +62,14 @@ profiles include both pinned LoRAs; local workers need the corresponding files
 in their ComfyUI `models/loras` directory. Saved recipes retain their recorded
 LoRA and VSA selections.
 
+Cloud worker packaging currently requires a working local ComfyUI installation
+with the runtime node sources used by `runtime/h3/build_local.ps1`. Before
+starting the controller, set `COMFYUI_ROOT` to that installation's directory
+(containing `custom_nodes`) and `COMFYUI_PYTHON` to its Python executable.
+Restart the web server after changing these environment variables. The
+controller's own Python environment is not a substitute for the ComfyUI runtime.
+Missing packaging prerequisites stop the launch before a GPU rental starts.
+
 ### Tested hardware floor
 
 The curated profiles are usable on tested 16 GB GPUs, including RTX 5070 Ti and
