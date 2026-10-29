@@ -144,3 +144,40 @@ viewerContext.viewGalleryOutput({filename: 'result.mp4'});
 assert.equal(viewerChildren.get('#gallery-viewer-media').media.tagName, 'VIDEO');
 assert.equal(viewerChildren.get('#gallery-viewer-media').media.src, '/media/result.mp4');
 console.log('Outputs video player placement passed');
+
+const processingControls = new Map();
+for (const id of ['isolation-text', 'isolation-confidence', 'isolation-selection', 'isolation-crop',
+  'isolation-background', 'isolation-find', 'isolation-enabled', 'reference-depth',
+  'reference-depth-invert', 'reference-cache', 'isolation-apply', 'reference-isolation']) {
+  processingControls.set('#' + id, {value: '', checked: false});
+}
+processingControls.get('#isolation-text').value = 'person';
+processingControls.get('#isolation-confidence').value = '0.25';
+processingControls.get('#isolation-enabled').checked = true;
+let editorClosed = false;
+processingControls.get('#reference-isolation').close = () => { editorClosed = true; };
+const reference = {kind: 'image', file: 'original.png'};
+const processingContext = {$: selector => processingControls.get(selector),
+  isolationEditor: {target: reference, mode: 'h3', busy: false, result: null},
+  state: {mode: 'h3', savedReferences: [reference]}, toast() {},
+  markAiPromptStale() {}, renderReferences() {}, setStatus() {}};
+vm.createContext(processingContext);
+const busyStart = source.indexOf('function setIsolationBusy(');
+vm.runInContext(source.slice(busyStart, source.indexOf('function showIsolationPreview(', busyStart)), processingContext);
+processingContext.setIsolationBusy(false);
+assert.equal(processingControls.get('#isolation-apply').disabled, true);
+assert.equal(processingControls.get('#isolation-find').disabled, false);
+const saveStart = source.indexOf('$("#isolation-apply").onclick = () => {');
+const saveEnd = source.indexOf('\n};', saveStart) + 3;
+vm.runInContext(source.slice(saveStart, saveEnd), processingContext);
+processingControls.get('#isolation-apply').onclick();
+assert.equal(processingContext.state.savedReferences[0], reference);
+assert.equal(editorClosed, false);
+processingContext.isolationEditor.result = {kind: 'image', file: 'processed.png', preprocess: {source: 'original.png'}};
+processingContext.setIsolationBusy(false);
+assert.equal(processingControls.get('#isolation-apply').disabled, false);
+processingControls.get('#isolation-apply').onclick();
+assert.equal(processingContext.state.savedReferences[0].file, 'processed.png');
+assert.equal(processingContext.state.savedReferences[0].preprocess.source, 'original.png');
+assert.equal(editorClosed, true);
+console.log('Reference preview-before-save and reviewed-image reuse passed');

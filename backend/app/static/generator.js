@@ -507,9 +507,9 @@ async function openIsolationEditor(index) {
     $("#isolation-original").src = referenceFileUrl(previous?.source || target.file);
     $("#isolation-preview").hidden = true;
     $(".isolation-previews").hidden = true;
-    $("#reference-process-preview").open = false;
+    $("#isolation-progress").hidden = true;
     $("#isolation-apply").disabled = false;
-    $("#isolation-status").textContent = "Save settings, then Generate. Unchanged isolation/depth results are reused without loading their models.";
+    $("#isolation-status").textContent = "Choose isolation or depth, then click Preview result. Review the result before saving.";
     setIsolationBusy(false);
     $("#reference-isolation").showModal();
     setStatus("Reference ready", "Choose processing settings", null);
@@ -522,6 +522,11 @@ function setIsolationBusy(busy) {
   for (const id of ["isolation-text", "isolation-confidence", "isolation-selection", "isolation-crop", "isolation-background", "isolation-find", "isolation-enabled", "reference-depth", "reference-depth-invert", "reference-cache"]) $("#" + id).disabled = busy;
   for (const id of ["isolation-text", "isolation-confidence", "isolation-selection", "isolation-crop", "isolation-background"]) $("#" + id).disabled = busy || !$("#isolation-enabled").checked;
   $("#reference-depth-invert").disabled = busy || !$("#reference-depth").checked;
+  const processing = $("#isolation-enabled").checked || $("#reference-depth").checked;
+  $("#isolation-find").disabled = busy || !processing;
+  $("#isolation-find").textContent = busy ? "Processing…" : "Preview result";
+  $("#isolation-apply").disabled = busy || (processing && !isolationEditor?.result);
+
 }
 
 function showIsolationPreview() {
@@ -548,6 +553,8 @@ async function previewIsolation() {
   $("#isolation-apply").disabled = true;
   $("#isolation-preview").hidden = true;
   $("#isolation-status").textContent = "Submitting reference processing…";
+  $("#isolation-progress").hidden = false;
+  $("#isolation-progress").removeAttribute("value");
   setIsolationBusy(true);
   try {
     const response = await fetch("/api/v1/generator/isolate", {method: "POST", headers: {"Content-Type": "application/json"},
@@ -560,7 +567,11 @@ async function previewIsolation() {
     let result = submitted;
     while (!result.reference) {
       if (["failed", "cancelled"].includes(result.status)) throw new Error(result.message || "Isolation did not complete. See Tasks for details.");
-      if (editor === isolationEditor) $("#isolation-status").textContent = result.status === "queued" ? "Queued · waiting for a worker with reference processing installed. Follow or cancel this job in Tasks." : (result.message || "Processing reference…");
+      if (editor === isolationEditor) {
+        $("#isolation-status").textContent = result.status === "queued" ? "Queued · waiting for a reference-processing worker. Follow this job in Dispatcher." : (result.message || "Processing reference…");
+        if (result.status === "running" && Number.isFinite(Number(result.progress))) $("#isolation-progress").value = Math.max(0, Math.min(100, Number(result.progress)));
+        else $("#isolation-progress").removeAttribute("value");
+      }
       await new Promise(resolve => setTimeout(resolve, 2500));
       const status = await fetch(`/api/v1/generator/isolate/${encodeURIComponent(submitted.job_id)}`);
       result = await status.json();
@@ -570,10 +581,11 @@ async function previewIsolation() {
     editor.result = result.reference;
     showIsolationPreview();
     $("#isolation-apply").disabled = false;
-    $("#isolation-status").textContent = "Processed result ready. Cache is saved when reuse is enabled. Save settings; Generate uses the same processing automatically.";
+    $("#isolation-progress").value = 100;
+    $("#isolation-status").textContent = "Preview ready. Review the result, then click Save reference to use this processed image.";
   } catch (error) {
-    if (editor === isolationEditor) $("#isolation-status").textContent = error.message;
-  } finally { if (editor === isolationEditor) { setIsolationBusy(false); $("#isolation-apply").disabled = false; } }
+    if (editor === isolationEditor) { $("#isolation-status").textContent = error.message; $("#isolation-progress").hidden = true; }
+  } finally { if (editor === isolationEditor) { setIsolationBusy(false); } }
 }
 
 function initializeIsolationEvents() {
@@ -583,12 +595,16 @@ $("#isolation-background").onchange = () => {
   $("#isolation-view").value = "composite";
   if (isolationEditor) isolationEditor.result = null;
   $("#isolation-preview").hidden = true;
+  $("#isolation-progress").hidden = true;
+  setIsolationBusy(false);
 };
 for (const id of ["isolation-text", "isolation-confidence", "isolation-selection", "isolation-crop", "isolation-enabled", "reference-depth", "reference-depth-invert", "reference-cache"]) {
   $("#" + id).addEventListener("input", () => {
     if (isolationEditor) isolationEditor.result = null;
     $("#isolation-apply").disabled = false;
     $("#isolation-preview").hidden = true;
+    $("#isolation-progress").hidden = true;
+    $("#isolation-status").textContent = "Settings changed. Preview the updated result before saving.";
     setIsolationBusy(false);
   });
 }
@@ -601,15 +617,15 @@ $("#isolation-apply").onclick = () => {
   const confidence = Number($("#isolation-confidence").value);
   if ($("#isolation-enabled").checked && !text) return toast("Describe what to isolate, for example shirt.");
   if (!Number.isFinite(confidence) || confidence < 0.05 || confidence > 0.95) return toast("Confidence must be between 0.05 and 0.95.");
-  state.savedReferences[position] = {kind: "image", file: editor.target.preprocess?.source || editor.target.file,
-    preprocess_cache: $("#reference-cache").checked,
-    ...($("#isolation-enabled").checked ? {isolation: {text, confidence, selection: $("#isolation-selection").value,
-      crop: $("#isolation-crop").checked, background: $("#isolation-background").value}} : {}),
-    ...($("#reference-depth").checked ? {depth: {invert: $("#reference-depth-invert").checked}} : {})};
+  const processing = $("#isolation-enabled").checked || $("#reference-depth").checked;
+  if (processing && !editor.result) return toast("Preview the result before saving this reference.");
+  state.savedReferences[position] = processing
+    ? {...editor.result, preprocess_cache: $("#reference-cache").checked}
+    : {kind: "image", file: editor.target.preprocess?.source || editor.target.file};
   markAiPromptStale(); renderReferences();
   $("#reference-isolation").close();
-  setStatus("Ready to create", "Reference processing settings saved", null);
-  toast("Processing settings saved. Generate will reuse cached results when available.");
+  setStatus("Ready to create", "Processed reference saved", null);
+  toast("Reference saved. Generate will use the reviewed image.");
 };
 }
 

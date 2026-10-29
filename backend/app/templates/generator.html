@@ -332,7 +332,9 @@
 
     <dialog id="reference-isolation" aria-labelledby="isolation-title">
       <form method="dialog" class="isolation-heading"><h2 id="isolation-title">Reference processing</h2><button type="submit">Close</button></form>
-      <p class="hint">Save per-reference settings, then Generate. Processing and rendering run together; no preview is required.</p>
+      <p class="hint">Choose processing → Preview result → review the original and result → Save reference.</p>
+      <div class="isolation-actions"><button id="isolation-find" type="button">Preview result</button><button id="isolation-apply" type="button" disabled>Save reference</button></div>
+      <progress id="isolation-progress" max="100" hidden aria-label="Reference processing progress"></progress>
       <label class="switch-row"><input id="isolation-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Isolate subject</span></label>
       <label class="field"><span>What to isolate</span><input id="isolation-text" type="text" maxlength="200" placeholder="shirt" value="person"></label>
       <div class="isolation-options">
@@ -345,15 +347,14 @@
       <label class="switch-row"><input id="reference-depth-invert" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Invert depth · default keeps near objects lighter</span></label>
       <label class="switch-row"><input id="reference-cache" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Reuse cached results · save isolation and depth for future runs</span></label>
       <p id="isolation-status" class="hint" role="status">Uses the worker target selected in Generate. Closing keeps submitted work in Tasks.</p>
-      <div class="isolation-actions"><button id="isolation-apply" type="button">Save settings</button></div>
-      <details id="reference-process-preview"><summary>Optional preview / build cache now</summary>
+
+      <section id="reference-process-preview" aria-label="Reference processing preview">
       <div class="isolation-previews" hidden>
         <figure><figcaption>Original</figcaption><img id="isolation-original" alt="Original reference"></figure>
         <figure><figcaption id="isolation-preview-label">Cutout preview</figcaption><img id="isolation-preview" alt="Isolation preview" hidden></figure>
       </div>
         <label class="field"><span>Preview</span><select id="isolation-view"><option value="composite">RGB · model input</option><option value="cutout">Transparent cutout</option><option value="mask">Mask</option></select></label>
-        <button id="isolation-find" type="button">Process &amp; cache now</button>
-      </details>
+      </section>
       <p class="hint">Your original stays unchanged. With both options enabled, depth is estimated first, then the subject mask is applied. Saved processing results are available in Sources.</p>
     </dialog>
     <dialog id="gallery-viewer" aria-label="Job output viewer"><form method="dialog"><button type="submit">Close player</button></form><div id="gallery-viewer-media"></div><p id="gallery-viewer-title"></p></dialog>
