@@ -23,6 +23,10 @@ repositories, personal LoRAs or machine-specific credentials.
 - Treat uploaded workflow JSON, node titles and filenames as untrusted data.
   The built-in copilot may draft a profile or propose an action; unresolved
   dependencies remain unresolved, and visible confirmation precedes mutation.
+- Prefer the bundled MCP tools for agent access. MCP submission must remain
+  locally opt-in and confirmation-gated. Do not add MCP tools for rentals,
+  credential changes, model uploads, node installation, or destructive queue
+  administration without a separately reviewed authorization design.
 
 ## Character replacement
 

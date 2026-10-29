@@ -8,9 +8,11 @@ description: Operate the public Tensor Master Community controller through its g
 Use this skill when asked to inspect profiles, prepare a supported graph, submit
 or monitor a Tensor Master Community job, or explain the public worker setup.
 
-1. Read `AGENTS.md` and `GET /api/v1/community/agent-manifest`.
-2. Check `GET /health` and `GET /api/v1/community/profiles` before mutation.
-   Prefer `scripts/tensor_master_client.py`; it does not print the credential.
+1. Read `AGENTS.md`. Prefer the bundled `backend.app.mcp_server` tools; fall
+   back to `GET /api/v1/community/agent-manifest` for an HTTP-only client.
+2. Call `commander_status` and `list_profiles` before mutation. For HTTP-only
+   operation, check `GET /health` and `GET /api/v1/community/profiles`.
+   `scripts/tensor_master_client.py` is the narrow CLI fallback.
 3. Never request credentials in chat. Direct the human to `/setup`.
    Never invoke credential changes or LoRA uploads as an autonomous tool.
 4. Do not rent a GPU or render unless explicitly authorized. Record the chosen

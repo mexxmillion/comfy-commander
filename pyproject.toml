@@ -16,6 +16,7 @@ dependencies = [
   "pillow>=12,<13",
   "psutil>=5.9,<8",
   "jinja2>=3.1,<4",
+  "mcp>=2.3,<3",
   "pydantic-settings>=2.10,<3",
   "python-multipart>=0.0.20,<1",
   "sqlalchemy>=2.0,<3",
@@ -34,6 +35,9 @@ dev = [
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
 ]
+
+[project.scripts]
+comfy-commander-mcp = "backend.app.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]

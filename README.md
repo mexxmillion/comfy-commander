@@ -1,14 +1,17 @@
 # Comfy Commander by Tensor Master
 
-Comfy Commander is a self-hosted, agent-friendly control plane for
-ComfyUI. It keeps jobs, GPU workers, model profiles, provider credentials and
-render receipts behind one focused web app.
+**Run ComfyUI work locally or on rented GPUs from one polished web app—and let
+Codex, Claude, or another agent drive the safe parts through MCP.**
+
+Comfy Commander is a self-hosted control plane for ComfyUI. It keeps jobs,
+workers, curated model profiles, provider credentials, cost limits, and render
+receipts behind one interface that works on desktop or phone.
 
 It is an independent community project built on ComfyUI, not an official
 Comfy.org product. The Tensor Master name remains on the execution engine and
 API internals so existing workers and integrations do not break.
 
-This competition edition intentionally ships a small public surface:
+The Community Edition intentionally stays focused:
 
 - Qwen Image 2.1 image generation and reference editing
 - MiniMax H3 Ref2VA INT8, Singularity and FastH3 Omni profiles
@@ -17,34 +20,74 @@ This competition edition intentionally ships a small public surface:
 - optional Hugging Face credentials plus pinned personal-LoRA deployment
 - a BYOK OpenRouter studio copilot with Gemini and DeepSeek Flash choices
 - a reviewed SAM3 to H3 character-replacement workflow
+- a bundled MCP server for status, workflow analysis, preparation, submission,
+  and job monitoring
 
 Private identities, Eros, Dolores and other studio-only assets are not part of
 this repository. A user's own LoRAs can be registered at runtime without being
 committed to the project.
 
-## Quick start
+## Run it in five minutes
 
-Python 3.12 is required.
+Requirements: Windows 10/11, Git, and Python 3.12. A GPU is **not** required to
+open the controller or complete onboarding.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+git clone https://github.com/mexxmillion/tensor-master-community.git
+cd tensor-master-community
+powershell -ExecutionPolicy Bypass -File .\tools\first_run.ps1
 ```
 
-Open `http://127.0.0.1:8000/setup`. Create the local admin password, then
-connect only the services you use. Connecting a provider validates and saves a
-key; it does **not** rent a GPU.
+Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
+five screens:
 
-Docker is the shortest controller-only demo:
+1. Create the local admin password.
+2. Choose local, cloud, or hybrid compute.
+3. Connect only the providers you want.
+4. Review the Qwen Image and MiniMax H3 starter profiles.
+5. Open the command center.
+
+First run starts with **no credentials, no jobs, no workers, no private models,
+and no cloud spend**. Connecting RunPod or Vast.ai validates a credential; it
+does not rent anything. GPU rental always has a separate offer, price, lifetime,
+and confirmation step.
+
+### Tested hardware floor
+
+The curated profiles are usable on tested 16 GB GPUs, including RTX 5070 Ti and
+RTX 5080-class cards with 32 GB system RAM. A 24 GB GPU is recommended for more
+headroom, not required. Long 15–20 second video jobs around 1.2 MP may exhaust
+memory on a 16 GB/32 GB machine; shorten the clip, reduce resolution, or choose
+a roomier worker.
+
+### Docker controller demo
+
+Docker is an alternative controller-only launch:
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-The published port is bound to localhost by default. Put an authenticated HTTPS
-proxy or private network in front of it before allowing remote access.
+The published port remains localhost-only. Do not expose it directly through a
+router.
+
+## Test it as a completely new user
+
+Use a fresh clone on another computer and run `tools/first_run.ps1`. Do not copy
+the first machine's `state/`, `.env`, `.venv`, or `models/` directories. This
+tests the real onboarding path:
+
+- hardware and local ComfyUI detection;
+- password creation and reconnect;
+- provider-key validation or environment-variable discovery;
+- empty worker/model/job states;
+- mobile access through that machine's own Tailscale hostname;
+- MCP discovery from an agent running on that machine.
+
+After completing the local password screen, add provider credentials only if
+you want to test those paths. Existing provider keys can be reused; they do not
+need to be regenerated.
 
 ## Open it securely on a phone
 
@@ -168,7 +211,33 @@ The stop after SAM3 is intentional: a completed track is not automatically an
 accepted track. SAM3 weights require accepting their upstream license on
 Hugging Face.
 
-## Drive it with Codex or another agent
+## Drive it with Codex, Claude, or another MCP agent
+
+The repository includes a real MCP server. After the controller is installed,
+add this local stdio server to your MCP client, replacing the path:
+
+```json
+{
+  "mcpServers": {
+    "comfy-commander": {
+      "command": "C:\\path\\to\\tensor-master-community\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "backend.app.mcp_server"],
+      "cwd": "C:\\path\\to\\tensor-master-community"
+    }
+  }
+}
+```
+
+The agent can inspect readiness and profiles, analyze untrusted workflow JSON,
+prepare the character-replacement graph, and monitor known jobs. Queue mutation
+is disabled by default. To enable it, add
+`"env": {"COMMANDER_MCP_ALLOW_SUBMIT": "1"}` to that server entry; every
+submission still requires the exact confirmation phrase exposed by the tool and
+still passes the controller's graph/model/path validation.
+
+MCP cannot rent GPUs, change credentials, upload LoRAs, install custom nodes, or
+delete queue entries in this release. Those remain authenticated human actions
+in the web UI. See [the complete MCP setup and security guide](docs/MCP.md).
 
 Repository behavior is in [AGENTS.md](AGENTS.md). A reusable operational skill
 lives in [.agents/skills/tensor-master-community/SKILL.md](.agents/skills/tensor-master-community/SKILL.md).
