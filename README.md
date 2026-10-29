@@ -64,16 +64,33 @@ profiles include both pinned LoRAs; local workers need the corresponding files
 in their ComfyUI `models/loras` directory. Saved recipes retain their recorded
 LoRA and VSA selections.
 
-Cloud worker packaging currently requires a working local ComfyUI installation
-with the runtime node sources used by `runtime/h3/build_local.ps1`. Before
-starting the controller, set `COMFYUI_ROOT` to that installation's directory
-(containing `custom_nodes`) and `COMFYUI_PYTHON` to its Python executable.
-Restart the web server after changing these environment variables. The
-controller's own Python environment is not a substitute for the ComfyUI runtime.
-Missing packaging prerequisites stop the launch before a GPU rental starts.
+Cloud worker packaging uses pinned public source archives and the bundled
+reference-preprocessing nodes. A local ComfyUI installation is not required for
+cloud-only operation. No model weights are downloaded onto the controller by
+packaging; rental workers sync their selected model profile under the existing
+cost and lifetime limits. Source archives are cached under `state/`.
 
-FFmpeg for video previews is installed with Commander through `imageio-ffmpeg`.
-An existing system FFmpeg is preferred when available.
+For an explicitly managed local runtime snapshot, set
+`CLOUD_RUNTIME_SOURCE=local`, `COMFYUI_ROOT` and `COMFYUI_PYTHON` in `.env`.
+This optional path captures your local runtime; the default is the public bundle.
+
+Cloud rentals also require a dedicated SSH key pair. **Setup & Models → Compute →
+Cloud SSH access** shows the exact human-run key creation command and checks that
+both files exist. To use an existing dedicated key, set `CLOUD_SSH_KEY_FILE` in
+`.env` and restart the controller. Keys are never generated, copied or uploaded
+by the assistant. A passphrase-protected key must be loaded into your SSH agent
+for unattended worker setup.
+
+H3 includes **Reference video** and **First / last frame (FLF2V)** modes.
+FLF2V supports a first frame, last frame, both, or text only. Its rental profile
+pins the public FL2VA INT8 model and matching 4/8-step LightX2V FL2V LoRAs.
+
+Commander owns its gallery database (`state/dispatcher.sqlite3`), uploaded
+references (`state/comfy-input`), and returned cloud media (`state/cloud-outputs`).
+Cloud workers fetch only the inputs in their leased task and return finished
+media before reporting completion. Gallery history and files remain on the
+controller after a rented worker is removed. Local ComfyUI directories are
+optional integration settings, not required application storage.
 
 ### Tested hardware floor
 

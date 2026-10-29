@@ -38,6 +38,7 @@ from .identity import authority
 from .job_edit import edit_setup
 from .job_spec import job_spec
 from .media import router as media_router
+from .profile_import import router as profile_import_router
 from .prompt_secret import configured as prompt_secret_configured
 from .providers.base import OfferSearch
 from .providers.vast import VastProvider
@@ -57,7 +58,6 @@ from .rental_ui import (
 )
 from .store import DEFAULT_PRIORITY, MAX_PRIORITY, MIN_PRIORITY, QueueStore
 from .studio_agent import router as studio_agent_router
-from .profile_import import router as profile_import_router
 from .version import TENSOR_MASTER_VERSION
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -593,6 +593,8 @@ def cloud_profile_for_graph(graph: dict[str, dict[str, Any]]) -> str:
               if node.get("class_type") == "UNETLoader"}
     if models == {"minimax_h3_ref2va_pruned_int8_convrot.safetensors"}:
         profile = "ref2v-int8"
+    elif models == {"minimax_h3_fl2va_pruned_int8_convrot.safetensors"}:
+        profile = "flf2v-int8"
     elif models == {'Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors'}:
         profile = 'ref2v-singularity'
     elif models == {'fasth3_omniref_8step_pruned_int8_convrot.safetensors'}:

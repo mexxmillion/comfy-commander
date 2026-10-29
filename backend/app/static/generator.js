@@ -357,12 +357,21 @@ async function uploadReferenceFile(file, prefix) {
   }
 }
 
+async function ensureManagedSource(reference) {
+  if (reference.file?.startsWith('h3_mobile/')) return reference;
+  const response = await fetch('/api/v1/media/sources/import', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({file:reference.file})});
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || 'Could not prepare this source for generation.');
+  reference.file = result.file;
+  return reference;
+}
+
 async function uploadFrameReferences() {
   const references = [];
   for (const kind of ["first_frame", "last_frame"]) {
     const file = state.frameFiles[kind];
     if (!file) {
-      if (state.savedFrameRefs[kind]) references.push({ ...state.savedFrameRefs[kind] });
+      if (state.savedFrameRefs[kind]) references.push({ ...await ensureManagedSource(state.savedFrameRefs[kind]) });
       continue;
     }
     setStatus("Uploading keyframes", kind === "first_frame" ? "First frame" : "Last frame", 10);
@@ -845,6 +854,7 @@ async function uploadReferences() {
     state.files = state.files.filter(pending => pending !== file);
     renderReferences();
   }
+  for (const reference of state.savedReferences) await ensureManagedSource(reference);
   // Silent video references must not be wired into Native Audio Lock.
   for (const reference of state.savedReferences) {
     if (state.mode !== "h3" || !$("#h3-audio-lock").checked || $("#h3-single-frame").checked || state.savedReferences.some(ref => ref.kind === "audio") || reference.kind !== "video" || reference.use_soundtrack === false) continue;
@@ -2227,7 +2237,7 @@ function syncH3OutputMode() {
 function setH3Type(type) {
   const previousType = state.h3Type;
   state.h3Type = type === "frames" ? "frames" : "reference";
-  if (previousType !== state.h3Type) markAiPromptStale();
+  if (previousType !== state.h3Type) { markAiPromptStale(); sparseAttentionDefaults(); }
   const frameMode = state.mode === "h3" && state.h3Type === "frames";
   $(".frame-mode-section").hidden = !frameMode;
   $(".reference-mode-section").hidden = frameMode;
@@ -2412,7 +2422,13 @@ async function showSources() {
   await loadSources();
 }
 
-function useSource(file, frameKind) {
+async function useSource(file, frameKind) {
+  if (state.submitting) return toast("Wait for the current submission to finish.");
+  const originalMode = state.mode;
+  try {
+    file = {...file};
+    await ensureManagedSource(file);
+    if (state.mode !== originalMode) return toast("Generator changed. Select this source again.");
   if (state.mode === "h3" && state.h3Type === "frames" && !frameKind) return toast("Choose an image for a keyframe, or switch to Reference video to use this source.");
   if (frameKind) {
     state.savedFrameRefs[frameKind] = {kind: frameKind, file: file.file};
@@ -2430,7 +2446,8 @@ function useSource(file, frameKind) {
   setMode(mode);
   if (mode === "h3") setH3Type(h3Type);
   renderReferences(); renderFrameInputs(); markAiPromptStale();
-  toast("Source added. Other references are kept.");
+  toast("Source copied into managed references. Original kept.");
+  } catch(error) { toast(error.message); }
 }
 
 async function loadSources() {

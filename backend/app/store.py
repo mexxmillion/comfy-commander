@@ -406,7 +406,7 @@ class QueueStore:
                 'pocket-voice-local',
             } or (route["policy"] == "any" and runtime in {
                 "pocket-h3-cloud-ref2v-int8", "pocket-h3-cloud-qwen-image-21",
-                'pocket-h3-cloud-ref2v-singularity', 'pocket-h3-cloud-fasth3-omni',
+                'pocket-h3-cloud-ref2v-singularity', 'pocket-h3-cloud-fasth3-omni', 'pocket-h3-cloud-flf2v-int8',
             })
         return runtime == worker.runtime
 

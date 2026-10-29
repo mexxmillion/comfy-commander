@@ -188,3 +188,25 @@ assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'queu
 assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'workers_paused'}), /paused/);
 assert.match(context.isolationProgressText({status: 'running', progress: 25}), /Processing.*25%/);
 console.log('Preview queue and worker waiting messages passed');
+
+const buildStart = source.indexOf('function buildH3Workflow(');
+const buildEnd = source.indexOf('\nfunction ', buildStart + 5);
+for (const roles of [[], ['first_frame'], ['last_frame'], ['first_frame', 'last_frame']]) {
+  const values = {'#frame-h3-model': 'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+    '#h3-model': 'ref2v', '#total-steps': 5, '#megapixels': 0.5, '#duration': 5,
+    '#aspect-ratio': '9:16', '#frame-turbo-strength': 0.5, '#direction': 'A cinematic camera move'};
+  const buildContext = {state: {h3Type: 'frames'}, EROSMAX_MODEL: 'unsupported',
+    SINGULARITY_MODEL: 'singularity', OMNI_MODEL: 'omni', H3_TEXT_ENCODER: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
+    VSA_LORA: 'fasth3_vsa_gate.safetensors', selectedLoraEntries: () => [], sparseAttentionInputs: () => null,
+    studioRoot: {querySelector: () => ({value: '4'})},
+    $: selector => ({value: values[selector] ?? '', checked: selector === '#turbo-enabled'})};
+  vm.createContext(buildContext);
+  vm.runInContext(constants + source.slice(buildStart, buildEnd), buildContext);
+  const graph = buildContext.buildH3Workflow(roles.map(kind => ({kind, file: `h3_mobile/${kind}.png`})), 42);
+  assert.equal(graph['131'].class_type, 'MiniMaxH3ImageToVideo');
+  assert.equal(graph['127'].inputs.unet_name, values['#frame-h3-model']);
+  assert.match(graph['145'].inputs.lora_name, /fl2v_turbo_4step/);
+  for (const kind of ['first_frame', 'last_frame']) assert.equal(Boolean(graph['131'].inputs[kind]), roles.includes(kind));
+  assert.equal(Boolean(graph['146']), false);
+}
+console.log('FLF2V text-only, first, last and both-keyframe graph checks passed');

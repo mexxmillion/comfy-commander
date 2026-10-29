@@ -13,7 +13,7 @@ nohup /opt/h3-venv/bin/python main.py \
   --listen 127.0.0.1 --port 8188 \
   --vram-headroom 2 --use-ck-attention --fast fp16_accumulation \
   --disable-all-custom-nodes --whitelist-custom-nodes \
-  h3_beta57.py ComfyUI-Ref2VA-VSA Veda-on-ComfyUI h3_mobile viggle_turbo.py comfyui-kjnodes comfyui-minimaxrefpack \
+  h3_beta57.py ComfyUI-Ref2VA-VSA Veda-on-ComfyUI viggle_turbo.py comfyui-kjnodes comfyui-minimaxrefpack \
   ComfyUI-PromptDirector ComfyUI-H3-NativeAudioLock comfyui-fizgig-h3-still comfyui-videohelpersuite comfyui-unload-model comfyui-h3-facerefine \
   ComfyUI-LTXVideo comfyui-frame-interpolation comfyui-krea2edit ComfyUI-TensorMaster-Preprocessors \
   > /workspace/h3-comfy.log 2>&1 < /dev/null &

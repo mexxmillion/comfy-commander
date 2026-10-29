@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,8 @@ class Settings(BaseSettings):
     comfyui_url: str = "http://127.0.0.1:8188"
     comfyui_root: Path | None = None
     comfyui_python: Path | None = None
+    cloud_ssh_key_file: Path = Field(default_factory=lambda: default_token_file().parent / "cloud-worker-ed25519")
+    cloud_runtime_source: Literal["community", "local"] = "community"
     comfyui_input_dir: Path = Path(__file__).resolve().parents[2] / "state" / "comfy-input"
     model_directories: list[Path] = [Path(__file__).resolve().parents[2] / "models"]
     cloud_output_dir: Path = Path(__file__).resolve().parents[2] / "state" / "cloud-outputs"

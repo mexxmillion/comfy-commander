@@ -20,17 +20,27 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "managed-rental.json"
 LOG = ROOT / "state" / "managed-rental.log"
 KEY = ROOT / "vast.txt"
-SSH_KEY = ROOT / "state" / "h3-vast-smoke"
-SSH_PUBLIC_KEY = Path(str(SSH_KEY) + ".pub")
 BUNDLE = ROOT / "state" / "h3-cloud-runtime.tar.gz"
 IMAGE = "pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime"
-PROFILES = {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}
+PROFILES = {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}
 
 
 def settings():
     sys.path.insert(0, str(ROOT))
     from backend.app.config import get_settings
     return get_settings()
+
+
+SSH_KEY = settings().cloud_ssh_key_file
+SSH_PUBLIC_KEY = Path(str(SSH_KEY) + ".pub")
+
+
+def validate_ssh_key_files() -> None:
+    if not SSH_KEY.is_file() or not SSH_PUBLIC_KEY.is_file():
+        raise RuntimeError(
+            "Cloud worker SSH key is not configured. Open Setup & Models → Compute → "
+            "Cloud SSH access and create or configure your key pair. No GPU rental was started."
+        )
 
 
 def configure_state(path: str | Path) -> None:
@@ -209,7 +219,8 @@ def preflight() -> None:
         raise RuntimeError("Missing Vast API key")
     if not provider_secret("huggingface", configured.huggingface_token_file):
         raise RuntimeError("Missing Hugging Face token")
-    for path in (SSH_KEY, SSH_PUBLIC_KEY, BUNDLE):
+    validate_ssh_key_files()
+    for path in (BUNDLE,):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
     validate_bundle_manifest(community_path=configured.community_lora_manifest)

@@ -70,6 +70,7 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
     document.querySelector('#protect-next').disabled = false;
     await loadLoras();
     await loadPhoneAccess();
+    await loadCloudSsh();
   } catch (error) {
     alert(error.message);
     button.disabled = false;
@@ -291,3 +292,13 @@ async function loadImportedProfiles(){
   try{const data=await jsonRequest('/api/v1/setup/profiles');const root=document.querySelector('#import-saved-profiles');root.replaceChildren();for(const profile of data.profiles){const line=document.createElement('p');line.textContent=`${profile.name} · ${profile.ready?'Rental dependencies resolved':'Draft · dependencies unresolved'}`;root.append(line);}}catch{}
 }
 document.querySelector('#import-open-models').addEventListener('click',()=>{const panel=document.querySelector('#lora-management');panel.hidden=false;panel.scrollIntoView({behavior:'smooth'});});
+
+async function loadCloudSsh(){
+  try {
+    const data=await jsonRequest('/api/v1/setup/cloud-ssh');
+    document.querySelector('#cloud-ssh-status').textContent=data.ready?'SSH key pair found. Cloud SSH access is configured.':'SSH key pair missing. Complete this one-time host setup before renting.';
+    document.querySelector('#cloud-ssh-command').textContent=data.ready?'':data.command;
+  } catch {document.querySelector('#cloud-ssh-status').textContent='Sign in to view SSH setup instructions.';}
+}
+document.querySelector('#refresh-cloud-ssh').addEventListener('click',loadCloudSsh);
+loadCloudSsh();

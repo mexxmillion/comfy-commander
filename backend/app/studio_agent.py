@@ -49,7 +49,7 @@ class AgentChat(BaseModel):
         "deepseek/deepseek-v4.1-flash-1017",
     ]
     messages: list[ChatMessage] = Field(min_length=1, max_length=20)
-    base_profile: Literal["ref2v-int8", "ref2v-singularity", "fasth3-omni"] = "ref2v-int8"
+    base_profile: Literal["ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"] = "ref2v-int8"
     workflow: dict[str, Any] | None = None
 
     @field_validator("workflow")
@@ -112,7 +112,7 @@ RESPONSE_SCHEMA = {
             "properties": {
                 "message": {"type": "string"},
                 "action": {"type": "string", "enum": ["none", "open_setup"]},
-                "profile": {"type": ["string", "null"], "enum": [None, "qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni"]},
+                "profile": {"type": ["string", "null"], "enum": [None, "qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"]},
                 "policy": {"type": ["string", "null"], "enum": [None, "local", "standard", "any"]},
             },
         },

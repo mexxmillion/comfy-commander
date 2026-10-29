@@ -24,7 +24,8 @@ def preflight():
     from backend.app.credential_paths import provider_secret
     if not provider_secret("huggingface", get_settings().huggingface_token_file):
         raise RuntimeError("Missing Hugging Face token")
-    for path in (shared.SSH_KEY, Path(str(shared.SSH_KEY) + ".pub"), shared.BUNDLE,
+    shared.validate_ssh_key_files()
+    for path in (shared.BUNDLE,
                  get_settings().token_file):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")

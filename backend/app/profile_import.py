@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/setup/profiles")
 
 class ProfileImport(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    base_profile: Literal["ref2v-int8", "ref2v-singularity", "fasth3-omni"] = "ref2v-int8"
+    base_profile: Literal["ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"] = "ref2v-int8"
     workflow: dict[str, Any]
 
 
@@ -91,7 +91,7 @@ def saved_profiles() -> list[dict]:
 
 
 def rental_base(profile: str) -> str:
-    if profile in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
+    if profile in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         return profile
     if not re.fullmatch(r"profile-[a-f0-9]{12}", profile):
         raise HTTPException(422, "Unsupported runtime profile")

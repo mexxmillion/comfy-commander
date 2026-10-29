@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .config import get_settings
 
-SUPPORTED_PROFILES = ("qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni")
+SUPPORTED_PROFILES = ("qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8")
 MODEL_SUFFIXES = {".safetensors", ".pt", ".ckpt"}
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40,64}$")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -30,7 +30,7 @@ def _safe_repo_path(value: str) -> str:
 
 
 class LoraProfiles(BaseModel):
-    profiles: list[Literal["qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni"]]
+    profiles: list[Literal["qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"]]
 
     @field_validator("profiles")
     @classmethod

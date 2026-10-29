@@ -25,7 +25,7 @@ def request(**overrides):
 def test_community_profiles_are_deliberately_small():
     assert set(COMMUNITY_PROFILES) == {
         "qwen-image-21", "ref2v-int8", "ref2v-singularity",
-        "fasth3-omni", "h3-character-replacement",
+        "fasth3-omni", "flf2v-int8", "h3-character-replacement",
     }
     assert all(profile["minimum_vram_gb"] == 16 for profile in COMMUNITY_PROFILES.values())
     assert all(profile["recommended_vram_gb"] >= 24 for profile in COMMUNITY_PROFILES.values())
@@ -71,7 +71,7 @@ def test_model_manifest_has_only_public_profiles_and_pinned_sam3():
     manifest = json.loads((Path(__file__).parents[1] / "runtime/h3/models.lock.json")
                           .read_text(encoding="utf-8"))
     assert set(manifest["profiles"]) == {
-        "qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni"
+        "qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"
     }
     sam3 = [item for item in manifest["artifacts"] if item["group"] == "sam3"]
     assert len(sam3) == 1
@@ -178,3 +178,30 @@ def test_homepage_defaults_to_generate():
     assert "const route=location.hash||'#generator'" in console
     assert "a.hash===(location.hash||'#generator')" in console
     assert "location.hash||'#monitor'" not in console
+
+
+def test_flf2v_has_public_rental_models_and_enabled_controls():
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
+    groups = manifest["profiles"]["flf2v-int8"]
+    files = [a for a in manifest["artifacts"] if a["group"] in groups]
+    assert any(a["file"].endswith("minimax_h3_fl2va_pruned_int8_convrot.safetensors") for a in files)
+    assert sum(a["group"] == "lightx2v-fl2v" for a in files) == 2
+    assert all(len(a["revision"]) == 40 and len(a["sha256"]) == 64 for a in files)
+    template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert '<label><input type="radio" name="h3-type" value="frames">' in template
+
+
+def test_flf2v_cloud_routing_accepts_matching_turbo_and_rejects_ref2v_lora():
+    from backend.app.main import cloud_profile_for_graph
+
+    graph = {
+        "model": {"class_type": "UNETLoader", "inputs": {
+            "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"}},
+        "turbo": {"class_type": "LoraLoaderModelOnly", "inputs": {
+            "lora_name": "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"}},
+    }
+    assert cloud_profile_for_graph(graph) == "flf2v-int8"
+    graph["turbo"]["inputs"]["lora_name"] = "minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
+    with pytest.raises(HTTPException, match="LoRA not in the cloud model manifest"):
+        cloud_profile_for_graph(graph)

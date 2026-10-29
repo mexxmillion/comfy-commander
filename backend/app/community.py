@@ -69,6 +69,12 @@ COMMUNITY_PROFILES = {
         "recommended_vram_gb": 24,
         "gated": True,
     },
+    "flf2v-int8": {
+        "name": "H3 First / Last Frame",
+        "kind": "video",
+        "summary": "Public FL2VA INT8 for first-frame, last-frame, both-keyframe or text-only video with matching LightX2V FL2V LoRAs.",
+        "minimum_vram_gb": 16, "recommended_vram_gb": 24, "gated": True,
+    },
     "h3-character-replacement": {
         "name": "H3 Character Replacement",
         "kind": "guided-workflow",
@@ -227,6 +233,16 @@ def setup_phone_access(request: Request) -> dict:
     from .phone_access import phone_access
     port = (request.scope.get("server") or (None, 8000))[1] or 8000
     return phone_access(port)
+
+
+@router.get("/api/v1/setup/cloud-ssh")
+def cloud_ssh_status(request: Request) -> dict:
+    require_admin(request)
+    key = get_settings().cloud_ssh_key_file
+    # Paths and public readiness only. Private key contents never leave the host.
+    command = "ssh-keygen -t ed25519 -f '" + str(key).replace("'", "''") + "' -C comfy-commander"
+    return {"ready": key.is_file() and Path(str(key) + ".pub").is_file(),
+            "command": command, "directory": str(key.parent)}
 
 
 @router.post("/api/v1/setup/phone-access")

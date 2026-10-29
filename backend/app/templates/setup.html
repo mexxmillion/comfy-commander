@@ -4,7 +4,7 @@
   <title>Welcome · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=profile-import-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=profile-import-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
+  <script defer src="/static/community.js?v=cloud-ssh-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
 </head><body data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
   <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p><h1>Your ComfyUI.<br><em>Ready to command.</em></h1></div><a href="/">Skip to studio →</a></header>
   <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Phone'),('06','Profiles'),('07','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>
@@ -20,6 +20,7 @@
     <div class="compute-grid"><button class="choice-card" type="button" data-compute="local"><span>ON THIS MACHINE</span><h3>Local GPU</h3><p>16 GB VRAM is a tested, usable floor. No rental key required.</p></button><button class="choice-card recommended" type="button" data-compute="hybrid"><span>RECOMMENDED</span><h3>Local + cloud</h3><p>Stay local for ordinary work; rent more headroom only for unusually heavy jobs.</p></button><button class="choice-card" type="button" data-compute="cloud"><span>NO LOCAL GPU NEEDED</span><h3>Cloud only</h3><p>Run curated workers through RunPod or Vast.ai.</p></button></div>
     <div id="diagnostics" class="diagnostics"><span>Checking this machine…</span></div><p class="hardware-note"><strong>Tested:</strong> RTX 5070 Ti and RTX 5080-class 16 GB GPUs with 32 GB system RAM. Long 15–20 second, ~1.2 MP video jobs may exhaust memory; reduce duration/resolution or choose a roomier GPU.</p>
     <div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next id="compute-next" disabled>Continue →</button></div>
+    <div class="management-card" id="cloud-ssh-setup"><h3>Cloud SSH access</h3><p>Vast.ai and RunPod workers need a local SSH key pair, separate from your provider API keys.</p><p id="cloud-ssh-status" role="status">Sign in to check cloud SSH setup.</p><pre id="cloud-ssh-command"></pre><p>Create the key on this controller computer using the command above. Create its parent folder if needed. Keep the private key on this computer. If you set a passphrase, load the key into your SSH agent before renting.</p><p>Already have a dedicated key pair? Set <code>CLOUD_SSH_KEY_FILE</code> in this installation's private <code>.env</code> to its private-key path; its public key must be alongside it with <code>.pub</code> appended. Restart Commander after changing this setting.</p><button id="refresh-cloud-ssh" type="button" class="quiet">Check SSH setup</button></div>
   </section>
 
   <section class="wizard-panel" data-wizard-step="2">
@@ -49,7 +50,7 @@
   <section id="profile-import" class="wizard-panel" data-wizard-step="5">
     <div class="section-title"><span class="step">06</span><div><h2>Import an H3 rental profile</h2><p>Inspect a local ComfyUI API JSON workflow without executing it.</p></div></div>
     <label>Profile name<input id="import-profile-name" maxlength="80" placeholder="My H3 setup"></label>
-    <label>Base rental runtime<select id="import-profile-base"><option value="ref2v-int8">H3 Ref2V</option><option value="ref2v-singularity">Singularity Ref2VA</option><option value="fasth3-omni">FastH3 Omni</option></select></label>
+    <label>Base rental runtime<select id="import-profile-base"><option value="ref2v-int8">H3 Ref2V</option><option value="ref2v-singularity">Singularity Ref2VA</option><option value="fasth3-omni">FastH3 Omni</option><option value="flf2v-int8">H3 First / Last Frame</option></select></label>
     <label>Local workflow JSON<input id="import-profile-file" type="file" accept="application/json,.json"></label>
     <div class="launch-actions"><button id="inspect-profile" type="button">Validate JSON &amp; dependencies</button><button id="save-import-profile" type="button" disabled>Save profile</button></div>
     <pre id="import-profile-report" role="status">Choose an API-format JSON file to inspect.</pre>

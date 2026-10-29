@@ -16,6 +16,7 @@ from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
@@ -315,6 +316,13 @@ def build_bundle() -> None:
     # Fail before invoking the builder (and before any provider action). Do not
     # relay captured subprocess output: it can contain private paths or secrets.
     settings = get_settings()
+    if settings.cloud_runtime_source == "community":
+        from runtime.h3.build_community import build_bundle as build_community_bundle
+        try:
+            build_community_bundle(ROOT / "state/h3-cloud-runtime.tar.gz", settings.community_lora_manifest)
+        except (OSError, ValueError, RuntimeError, httpx.HTTPError) as exc:
+            raise RuntimeError("Public H3 runtime packaging failed. Check network access and the pinned runtime sources. No GPU rental was started.") from exc
+        return
     sources = {"COMFYUI_ROOT": settings.comfyui_root, "COMFYUI_PYTHON": settings.comfyui_python}
     for name, value in sources.items():
         if not value:
@@ -396,7 +404,7 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
     from .profile_import import rental_base
     profile = rental_base(profile)
     settings = get_settings()
-    if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
+    if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     if provider == "runpod":
         if not runpod.configured():
@@ -444,7 +452,7 @@ async def launch(payload: Launch, request: Request) -> dict:
     from .profile_import import rental_base
     imported_profile = payload.profile if payload.profile.startswith("profile-") else None
     payload.profile = rental_base(payload.profile)
-    if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
+    if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     settings = get_settings()
     if payload.max_price_per_hour > settings.max_gpu_price_per_hour:

@@ -31,3 +31,5 @@ In particular:
 
 Before redistributing a built worker image or model bundle, review the exact
 pinned revisions and include every notice required by those upstream works.
+
+The reference-preprocessing subset under `runtime/h3/source-overlays/custom_nodes/ComfyUI-TensorMaster-Preprocessors` is MIT licensed, copyright 2026 Tensor Master contributors. Its LICENSE is retained alongside the source. Model weights and their licenses remain separate.

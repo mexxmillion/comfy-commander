@@ -2,14 +2,15 @@
 import asyncio
 import hashlib
 import os
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps
+from pydantic import BaseModel, Field
 
 from .config import get_settings
 from .rental_ui import require_admin
@@ -19,6 +20,55 @@ IMAGES = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tif', '.tiff'}
 VIDEOS = {'.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'}
 AUDIO = {'.wav', '.mp3', '.m4a', '.aac', '.flac', '.ogg'}
 PREVIEW_LIMIT = asyncio.Semaphore(2)
+
+
+class SourceImport(BaseModel):
+    file: str = Field(min_length=1, max_length=1024)
+
+
+@router.post('/sources/import')
+def import_source(payload: SourceImport, request: Request):
+    require_admin(request, mutation=True)
+    relative = Path(payload.file)
+    if (relative.is_absolute() or '\\' in payload.file or ':' in payload.file
+            or '..' in relative.parts):
+        raise HTTPException(400, 'Choose a file from the source library')
+    source = media_path(relative.name, relative.parent.as_posix(), 'input')
+    suffix = source.suffix.lower()
+    if suffix not in IMAGES | VIDEOS | AUDIO:
+        raise HTTPException(400, 'Unsupported reference file type')
+    if not 0 < source.stat().st_size <= 2 * 1024**3:
+        raise HTTPException(413, 'Reference must be nonempty and no larger than 2 GiB')
+    root = get_settings().comfyui_input_dir.resolve()
+    if relative.parts[0] == 'h3_mobile' and source.relative_to(root).parts[0] == 'h3_mobile':
+        destination = source
+    else:
+        folder = (root / 'h3_mobile' / 'imported').resolve()
+        if not folder.is_relative_to(root) or folder.relative_to(root).parts[0] != 'h3_mobile':
+            raise HTTPException(400, 'Managed reference directory is unavailable')
+        folder.mkdir(parents=True, exist_ok=True)
+        temporary = folder / f'.{uuid4().hex}.import'
+        digest = hashlib.sha256()
+        size = 0
+        try:
+            with source.open('rb') as reader, temporary.open('xb') as writer:
+                while chunk := reader.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > 2 * 1024**3:
+                        raise HTTPException(413, 'Reference exceeds 2 GiB')
+                    digest.update(chunk)
+                    writer.write(chunk)
+            destination = (folder / f'{digest.hexdigest()}{suffix}').resolve()
+            if not destination.is_relative_to(root):
+                raise HTTPException(400, 'Managed reference path is unavailable')
+            if not destination.exists():
+                temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+    path = destination.relative_to(root)
+    return {'file': path.as_posix(), 'filename': destination.name,
+            'subfolder': path.parent.as_posix(), 'type': 'input',
+            'kind': 'image' if suffix in IMAGES else 'video' if suffix in VIDEOS else 'audio'}
 
 
 def ffmpeg_executable() -> str:
