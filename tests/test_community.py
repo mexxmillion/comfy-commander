@@ -171,3 +171,10 @@ def test_fresh_install_navigation_does_not_require_task_rows():
     assert early_navigation in console
     assert optional_queue_control in console
     assert console.index(early_navigation) < console.index(optional_queue_control)
+
+
+def test_homepage_defaults_to_generate():
+    console = (Path(__file__).parents[1] / "backend/app/static/console.js").read_text(encoding="utf-8")
+    assert "const route=location.hash||'#generator'" in console
+    assert "a.hash===(location.hash||'#generator')" in console
+    assert "location.hash||'#monitor'" not in console

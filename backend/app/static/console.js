@@ -355,7 +355,7 @@
   }
   function nav() {
     if(location.hash==='#ltx')location.hash='#generator';
-    const route=location.hash||'#monitor', generating=['#generator','#sources'].includes(route), outputs=route==='#outputs';
+    const route=location.hash||'#generator', generating=['#generator','#sources'].includes(route), outputs=route==='#outputs';
     if(!outputs)closeOutputPlayer();
     document.body.classList.toggle('generator-open',generating);document.body.classList.toggle('output-open',outputs);
     $('#generator').hidden=!generating;$('#outputs').hidden=!outputs;
@@ -367,7 +367,7 @@
     $('#dispatcher-nav').open=dispatching;
     $('#dispatcher-nav').classList.toggle('active',dispatching);
     if(outputs)loadDurableOutputs();
-    document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#monitor')));
+    document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
   }
   function closeOutputPlayer(){
