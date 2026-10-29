@@ -139,3 +139,41 @@ dialog.output-player{box-sizing:border-box;width:min(1100px,94vw);max-width:94vw
 .dispatcher-nav{margin-top:6px}.dispatcher-nav summary{padding:12px;border-radius:12px;cursor:pointer;color:#c2bfb9}.dispatcher-nav.active>summary{background:#38313e;color:#f2ff59}.dispatcher-nav>a{margin-left:12px!important;font-size:11px}.shell>aside nav .setup-nav{margin-top:24px;border-top:1px solid #403747;border-radius:0;padding-top:18px}
 .live-status-strip{display:flex!important;flex-wrap:wrap;gap:8px;width:100%;margin:0 0 12px}.live-status-strip a{display:flex;gap:10px;align-items:center;background:#2b2530;border:1px solid #514956;border-radius:999px;padding:7px 13px;color:#c2bfb9;text-decoration:none;font-size:12px}.live-status-strip span{color:#f2ff59;font-weight:700}
 .generator-open main>.live-status-strip,.output-open main>.live-status-strip{display:flex!important}
+
+/* Dispatcher uses the same Comfy palette as the creation workspace. */
+:root{--bg:#211927;--panel:#2b2530;--panel2:#38313e;--line:#514956;--text:#f0efed;--muted:#c2bfb9;--cyan:#f2ff59;--blue:#e1dbad;--amber:#fabc25;--red:#ff979e}
+body{background:#211927}
+@scope (#monitor) to (#generator) {
+  .panel,.metrics article{background:#2b2530;border-color:var(--line);border-radius:14px}
+  .metrics small,.eyebrow,.build-version{color:var(--muted)}
+  button,.primary-link{border-radius:9px;background:#38313e;border-color:var(--line);color:var(--text)}
+  .primary-link,.primary{background:#f2ff59;border-color:#f2ff59;color:#211927}
+  button:hover:not(:disabled){background:#48404f}
+  .primary-link:hover,.primary:hover:not(:disabled){background:#f7ff9a;color:#211927}
+  .danger{color:var(--red)}
+  input,select,textarea{background:#211927;border:1px solid var(--line);border-radius:9px;color:var(--text);accent-color:#f2ff59}
+  button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,tr:focus-visible{outline:2px solid #f2ff59;outline-offset:2px}
+  th{background:#211927;color:var(--muted)}
+  td code,a{color:#f2ff59}
+  .selectable-task:hover{background:#38313e}
+  .selectable-task.selected,.mobile-task.selected{background:#41412c;box-shadow:inset 3px 0 #f2ff59;border-color:#a3a84e}
+  .bulk-actions,.priority-editor,.rental-card,.phase-grid>div,.mobile-task,.mobile-worker-list article{background:#312a37;border-color:var(--line);border-radius:11px}
+  .bulk-actions strong,.rank-badge{color:#f2ff59}
+  .rank-badge,.spec-chips span,.prio-moves button{background:#38313e}
+  .prio-moves button{color:var(--text)}
+  .inspect-tabs button.active,.filters .selected{background:#41412c;color:#f2ff59;border-color:#a3a84e}
+  .inline-progress{background:#211927;border-radius:5px}.inline-progress i{background:#f2ff59}
+  .state{border-radius:7px;background:#38313e;color:var(--muted)}
+  .state.running,.state.busy{color:#fabc25;background:#49391f}
+  .state.completed,.state.ready{color:#b4d8a1;background:#2c3b2b}
+  .state.failed,.state.draining{color:#ff979e;background:#492d36}
+  .state.cancelled{color:#c2bfb9;background:#38313e}
+  .log-stream{background:#211927;border-radius:10px}
+  .log-entry,.log-row{border-color:var(--line)}
+  .table-wrap{scrollbar-color:#68606d #211927}
+}
+dialog#rental-dialog,dialog#ssh-access{background:#2b2530;border-color:#514956;border-radius:16px;color:#f0efed}
+.mobile-nav{background:#211927f5}.mobile-nav a.active{color:#f2ff59;background:#38313e}
+
+.live-status-strip{align-items:center;align-self:start;order:0}.live-status-strip a{align-self:start;min-height:34px}
+@media(min-width:1101px){.live-status-strip{grid-column:1/-1;grid-row:2}.metrics{grid-row:3}.rental-fleet,.cloud-trial:not(.historical){grid-column:1/-1;grid-row:4}.task-panel{grid-row:5}.inspector{grid-row:5/span 3}.worker-panel{grid-row:6}.log-panel{grid-row:7}}
