@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import hmac
 import json
-import os
 import sqlite3
 import subprocess
 import sys
@@ -315,8 +314,9 @@ def _state_path(rental_id: str) -> Path:
 def build_bundle() -> None:
     # Fail before invoking the builder (and before any provider action). Do not
     # relay captured subprocess output: it can contain private paths or secrets.
-    for name in ("COMFYUI_ROOT", "COMFYUI_PYTHON"):
-        value = os.environ.get(name, "").strip()
+    settings = get_settings()
+    sources = {"COMFYUI_ROOT": settings.comfyui_root, "COMFYUI_PYTHON": settings.comfyui_python}
+    for name, value in sources.items():
         if not value:
             raise RuntimeError(
                 f"Cloud runtime packaging requires {name}. Configure it on the controller "
@@ -333,6 +333,8 @@ def build_bundle() -> None:
     script = ROOT / "runtime" / "h3" / "build_local.ps1"
     manifest = str(get_settings().community_lora_manifest)
     result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-BundleOnly",
+                             "-ComfyRoot", str(settings.comfyui_root),
+                             "-LocalPython", str(settings.comfyui_python),
                              "-CommunityLoraManifest", manifest],
                             cwd=ROOT, capture_output=True, text=True, timeout=180, check=False,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
