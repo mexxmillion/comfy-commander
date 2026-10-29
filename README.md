@@ -42,14 +42,15 @@ powershell -ExecutionPolicy Bypass -File .\tools\first_run.ps1
 ```
 
 Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
-six screens:
+seven screens:
 
 1. Create the local admin password.
 2. Choose local, cloud, or hybrid compute.
 3. Connect only the providers you want.
 4. Review the Qwen Image and MiniMax H3 starter profiles.
 5. Connect your phone through Tailscale, or skip for now.
-6. Open the command center.
+6. Import and validate an H3 rental profile, or skip for now.
+7. Open the command center.
 
 First run starts with **no credentials, no jobs, no workers, no private models,
 and no cloud spend**. Connecting RunPod or Vast.ai validates a credential; it
@@ -196,24 +197,19 @@ For Docker, set `COMFYUI_MODELS_DIR` in `.env` to a host models directory. It is
 mounted read-only; an upload is a deliberate copy to Hugging Face, not a local
 move or deletion.
 
-## Built-in studio copilot
+## H3 profile import assistant
 
-The **AI** button opens the same copilot on the dashboard and Setup & Models.
-It uses the controller-owned OpenRouter credential and lets the user choose:
+Setup & Models includes a Profiles step for local ComfyUI API JSON. Validation
+checks the supported H3 graph and compares model references against the selected
+pinned rental runtime and human-registered LoRAs. Save a reviewed profile; only
+profiles whose dependencies resolve appear in rental choices. Unknown sources
+remain drafts. Importing never runs a workflow, rents hardware, or uploads files.
 
-- `google/gemini-3.8-flash` for a broad multimodal studio planner;
-- `deepseek/deepseek-v4.1-flash-1017` for an economical agent workflow.
-
-The model never receives the OpenRouter key. It can inspect an attached ComfyUI
-JSON workflow, identify node classes and model references, and draft a custom
-deployment profile. Unknown custom-node repositories, licenses, model sources,
-checksums and download paths stay marked `unresolved`; they are not guessed.
-
-The copilot can propose queueing the attached graph, open the correct rental
-profile, or navigate to setup. Proposals appear as confirmation cards. Graphs
-still pass the normal node/model allowlists, and rentals still require a live
-offer plus the existing price, fleet and lifetime confirmations. There is no
-shell tool and no automatic credential, LoRA-upload or rental action.
+The optional OpenRouter assistant appears only inside this step. It explains
+validation and asks whether missing models already have licensed Hugging Face
+sources or require a human-managed upload. The existing LoRA management forms
+handle uploads and immutable registration. Other model types and custom nodes
+require reviewed deployment support. No global AI companion is shown.
 
 ## Character replacement
 

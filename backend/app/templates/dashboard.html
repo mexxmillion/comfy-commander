@@ -5,13 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=media-player-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=play-first-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
-    <script defer src="/static/generator.js?v=reference-queue-16gb-20261029"></script>
+    <script defer src="/static/generator.js?v=play-first-20261029"></script>
     <script defer src="/static/console.js?v=generate-home-20261029"></script>
     <link rel="stylesheet" href="/static/generator.css?v=reference-queue-16gb-20261029">
-    <link rel="stylesheet" href="/static/agent-widget.css?v=1">
-    <script defer src="/static/agent-widget.js?v=1"></script>
   </head>
   <body>
     <div class="shell">
@@ -324,6 +322,17 @@
         }
         return data;
       }
+      async function loadImportedRentalProfiles() {
+        const response = await fetch('/api/v1/setup/profiles', {credentials:'same-origin'});
+        if (!response.ok) return;
+        const data = await response.json();
+        const select = document.querySelector('#rental-profile');
+        select.querySelectorAll('[data-imported-profile]').forEach(option=>option.remove());
+        for (const profile of data.profiles.filter(item=>item.ready)) {
+          const option = document.createElement('option');option.value=profile.id;option.textContent=profile.name;
+          option.dataset.importedProfile='true';select.append(option);
+        }
+      }
       async function loadOffers() {
         const list = document.querySelector('#rental-offers');
         list.replaceChildren();
@@ -355,7 +364,7 @@
       document.addEventListener('click', async event => {
         if (!event.target.closest('#add-gpu, #add-gpu-header')) return;
         rentalDialog.showModal();
-        try { await cloudRequest('status'); document.querySelector('#rental-unlock').hidden = true; document.querySelector('#rental-picker').hidden = false; document.querySelector('#rental-logout').hidden = false; await loadOffers(); }
+        try { await cloudRequest('status'); document.querySelector('#rental-unlock').hidden = true; document.querySelector('#rental-picker').hidden = false; document.querySelector('#rental-logout').hidden = false; await loadImportedRentalProfiles(); await loadOffers(); }
         catch(error) {
           if (error.status === 401) {
             await showSignIn(); rentalMessage.textContent = passwordSetup ? 'Create your password once to enable rental controls.' : 'Sign in on this device. Restarting the server does not change your password.';

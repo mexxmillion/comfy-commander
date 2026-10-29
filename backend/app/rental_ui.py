@@ -393,6 +393,8 @@ async def logs(kind: str, request: Request, rental_id: str | None = None) -> Pla
 @router.get("/offers")
 async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod", profile: str = "ref2v-int8") -> dict:
     _admin(request)
+    from .profile_import import rental_base
+    profile = rental_base(profile)
     settings = get_settings()
     if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
@@ -439,6 +441,9 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
 @router.post("/launch", status_code=202)
 async def launch(payload: Launch, request: Request) -> dict:
     _admin(request, mutation=True)
+    from .profile_import import rental_base
+    imported_profile = payload.profile if payload.profile.startswith("profile-") else None
+    payload.profile = rental_base(payload.profile)
     if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     settings = get_settings()
@@ -488,6 +493,8 @@ async def launch(payload: Launch, request: Request) -> dict:
                           "max_minutes": payload.max_minutes,
                           "max_price_per_hour": payload.max_price_per_hour,
                           "requested_at": datetime.now(UTC).isoformat()}
+                if imported_profile:
+                    record["imported_profile"] = imported_profile
                 if payload.provider == "vast":     # same host rules as the offer list
                     record.update(allow_non_datacenter=True, min_inet_down=VAST_MIN_INET_DOWN)
                 state_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")

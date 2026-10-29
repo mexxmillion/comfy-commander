@@ -57,6 +57,7 @@ from .rental_ui import (
 )
 from .store import DEFAULT_PRIORITY, MAX_PRIORITY, MIN_PRIORITY, QueueStore
 from .studio_agent import router as studio_agent_router
+from .profile_import import router as profile_import_router
 from .version import TENSOR_MASTER_VERSION
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -78,6 +79,7 @@ app.include_router(generator_router)
 app.include_router(media_router)
 app.include_router(community_router)
 app.include_router(studio_agent_router)
+app.include_router(profile_import_router)
 app.add_middleware(GalleryCompression, minimum_size=1000)
 
 

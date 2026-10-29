@@ -1754,7 +1754,7 @@ function outputActions(file, media = null) {
   if (["h3", "qwen", "faces", "krea", "ltx"].includes(file.recipe?.mode)) {
     const reuse = document.createElement("button");
     reuse.type = "button";
-    reuse.className = "reuse-setup";
+    reuse.className = "reuse-setup edit-rerun";
     reuse.textContent = "Edit & rerun";
     reuse.addEventListener("click", () => { location.hash = "#generator"; loadRecipe(file.recipe); });
     const requeue = document.createElement("button");
@@ -1772,7 +1772,7 @@ function outputActions(file, media = null) {
     }
   }
   if (file.filename) {
-    const view = document.createElement("button"); view.type = "button"; view.textContent = "View / play"; view.className = "reuse-setup";
+    const view = document.createElement("button"); view.type = "button"; view.textContent = /\.(mp4|webm|mov|mkv|m4v)$/i.test(file.filename) ? "▶ Play video" : "View image"; view.className = "reuse-setup play-output";
     view.onclick = () => viewGalleryOutput(file); actions.prepend(view);
     if (media?.tagName === "IMG") { media.style.cursor = "pointer"; media.onclick = () => viewGalleryOutput(file); }
     const share = document.createElement("button");
@@ -1780,7 +1780,7 @@ function outputActions(file, media = null) {
     share.textContent = isImageOutput(file) ? "Save image" : "Save video";
     share.addEventListener("click", () => shareMedia(file));
     actions.append(share);
-    const download = document.createElement("a"); download.href = mediaUrl(file); download.download = file.filename; download.textContent = "Download"; actions.append(download);
+    const download = document.createElement("a"); download.href = mediaUrl(file); download.download = file.filename; download.textContent = "Download"; download.className = "download-secondary"; actions.append(download);
   }
   return actions;
 }

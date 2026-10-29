@@ -29,7 +29,7 @@ const thumbnail = element('img');
 const actions = context.outputActions(file, thumbnail);
 assert.equal(calls.length, 0, 'Rendering actions must never submit or mutate');
 assert.deepEqual(actions.children.map(item => item.textContent),
-  ['View / play', 'Edit & rerun', 'Requeue same', 'Save preset', 'Save image', 'Download']);
+  ['View image', 'Edit & rerun', 'Requeue same', 'Save preset', 'Save image', 'Download']);
 actions.children[1].handlers.click();
 assert.equal(context.location.hash, '#generator');
 assert.equal(calls[0][1], file.recipe);
@@ -39,7 +39,7 @@ thumbnail.onclick();
 assert.equal(calls[2][1], file);
 assert.equal(actions.children.at(-1).download, file.filename);
 assert.deepEqual(context.outputActions({filename: 'old.mp4'}).children.map(item => item.textContent),
-  ['View / play', 'Save video', 'Download']);
+  ['▶ Play video', 'Save video', 'Download']);
 const saved = context.outputActions({...file, saved: true}).children.map(item => item.textContent);
 assert.ok(saved.includes('Rename preset') && saved.includes('Remove preset'));
 assert.equal(context.outputActions({...file, status: 'Running'}).children.length, 0);

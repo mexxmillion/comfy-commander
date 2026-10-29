@@ -30,7 +30,8 @@ const showStep = index => {
   currentStep = Math.max(0, Math.min(index, wizardPanels.length - 1));
   wizardPanels.forEach((panel, i) => panel.classList.toggle('active', i === currentStep));
   railButtons.forEach((button, i) => { button.classList.toggle('active', i === currentStep); button.classList.toggle('complete', i < currentStep); });
-  if (currentStep === 5) renderReadiness();
+  if (currentStep === 6) renderReadiness();
+  if (currentStep === 5) void loadImportedProfiles();
   if (currentStep === 4) void loadPhoneAccess();
   window.scrollTo({top: 0, behavior: 'smooth'});
 };
@@ -255,3 +256,38 @@ document.querySelector('#enable-phone-access').addEventListener('click', async e
     document.querySelector('#phone-access-status').textContent = error.message;
   } finally { button.disabled = false; }
 });
+
+let importedWorkflow = null;
+const importPayload = () => ({name: document.querySelector('#import-profile-name').value.trim() || 'Imported H3 profile', base_profile: document.querySelector('#import-profile-base').value, workflow: importedWorkflow});
+const importReport = text => { document.querySelector('#import-profile-report').textContent = text; };
+for (const selector of ['#import-profile-name','#import-profile-base']) document.querySelector(selector).addEventListener('input', () => {document.querySelector('#save-import-profile').disabled=true;});
+document.querySelector('#import-profile-file').addEventListener('change', async event => {
+  importedWorkflow = null;window.dispatchEvent(new CustomEvent('commander:profile-workflow',{detail:null}));document.querySelector('#save-import-profile').disabled = true;
+  const file = event.target.files[0];if (!file) return;
+  if (file.size > 4000000) return importReport('Invalid: workflow must be 4 MB or smaller.');
+  try {
+    importedWorkflow = JSON.parse(await file.text());
+    if (!importedWorkflow || Array.isArray(importedWorkflow) || typeof importedWorkflow !== 'object') throw Error('Choose a workflow JSON object.');
+    importReport('JSON syntax valid. Click Validate to check the H3 graph and rental dependencies.');
+  } catch (error) { importedWorkflow=null;importReport(`Invalid JSON: ${error.message}`); }
+});
+document.querySelector('#inspect-profile').addEventListener('click', async () => {
+  if (!importedWorkflow) return importReport('Choose a valid JSON file first.');
+  document.querySelector('#save-import-profile').disabled=true;
+  try {
+    const result=await jsonRequest('/api/v1/setup/profiles/inspect',{method:'POST',body:JSON.stringify(importPayload())});
+    importReport(JSON.stringify({valid:result.valid,rental_ready:result.ready,errors:result.errors,missing_models:result.unresolved_models,model_sources:result.analysis?.profile_draft,note:result.note},null,2));
+    document.querySelector('#save-import-profile').disabled=!result.valid;
+    document.querySelector('#import-model-help').hidden=!result.unresolved_models?.length;
+    if(result.valid)window.dispatchEvent(new CustomEvent('commander:profile-workflow',{detail:importedWorkflow}));
+  } catch(error){importReport(error.message);}
+});
+document.querySelector('#save-import-profile').addEventListener('click',async event=>{
+  if(!importedWorkflow||!confirm('Save this reviewed H3 profile? Unresolved dependencies keep it as a draft; this does not rent a GPU or run the workflow.'))return;
+  event.currentTarget.disabled=true;
+  try{const result=await jsonRequest('/api/v1/setup/profiles',{method:'POST',body:JSON.stringify(importPayload())});importReport(result.ready?'Profile saved and available in rental profile choices.':'Draft saved. Resolve missing model sources and validate again before renting.');await loadImportedProfiles();}catch(error){importReport(error.message);}
+});
+async function loadImportedProfiles(){
+  try{const data=await jsonRequest('/api/v1/setup/profiles');const root=document.querySelector('#import-saved-profiles');root.replaceChildren();for(const profile of data.profiles){const line=document.createElement('p');line.textContent=`${profile.name} · ${profile.ready?'Rental dependencies resolved':'Draft · dependencies unresolved'}`;root.append(line);}}catch{}
+}
+document.querySelector('#import-open-models').addEventListener('click',()=>{const panel=document.querySelector('#lora-management');panel.hidden=false;panel.scrollIntoView({behavior:'smooth'});});

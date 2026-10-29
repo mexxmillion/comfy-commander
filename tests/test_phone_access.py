@@ -46,7 +46,7 @@ def test_phone_is_a_complete_onboarding_step():
     from pathlib import Path
 
     template = (Path(__file__).parents[1] / "backend/app/templates/setup.html").read_text(encoding="utf-8")
-    assert re.findall(r'data-wizard-step="(\d+)"', template) == ["0", "1", "2", "3", "4", "5"]
+    assert re.findall(r'data-wizard-step="(\d+)"', template) == ["0", "1", "2", "3", "4", "5", "6"]
     assert 'id="phone-access" class="wizard-panel" data-wizard-step="4"' in template
     assert 'href="https://tailscale.com/download"' in template
     assert 'data-step-target="4">Phone access' in template
