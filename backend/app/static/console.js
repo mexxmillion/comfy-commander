@@ -355,12 +355,17 @@
   }
   function nav() {
     if(location.hash==='#ltx')location.hash='#generator';
-    const route=location.hash||'#monitor', generating=route==='#generator', outputs=route==='#outputs';
+    const route=location.hash||'#monitor', generating=['#generator','#sources'].includes(route), outputs=route==='#outputs';
     if(!outputs)closeOutputPlayer();
     document.body.classList.toggle('generator-open',generating);document.body.classList.toggle('output-open',outputs);
     $('#generator').hidden=!generating;$('#outputs').hidden=!outputs;
-    $('#workspace-title').textContent=generating?'Generator':outputs?'Output gallery':'Farm monitor';
+    $('#workspace-title').textContent=route==='#sources'?'Sources':generating?'Generate':outputs?'Outputs':'Dispatcher';
 
+    if(route==='#sources')window.tensorGenerator.showSources();
+    else if(route==='#generator')window.tensorGenerator.showGenerate();
+    const dispatching=!generating&&!outputs;
+    $('#dispatcher-nav').open=dispatching;
+    $('#dispatcher-nav').classList.toggle('active',dispatching);
     if(outputs)loadDurableOutputs();
     document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#monitor')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
@@ -482,6 +487,7 @@
   $('#output-remove-selected').onclick=()=>removeOutputEntries([...checkedOutputs]);
   $('#output-search').addEventListener('input',()=>{outputPage=0;renderDurableOutputs();});$('#output-page-size').addEventListener('change',()=>{outputPage=0;renderDurableOutputs();});$('#output-prev').onclick=()=>{outputPage--;renderDurableOutputs();};$('#output-next').onclick=()=>{outputPage++;renderDurableOutputs();};
   function syncNavCounts(metrics) {
+    document.querySelectorAll('[data-live-queued]').forEach(badge=>{badge.textContent=String(metrics.queued ?? 0);});
     for(const [hash,key] of [['monitor','running'],['tasks','active_tasks'],['workers','active_workers']]) {
       document.querySelectorAll(`a[href="#${hash}"] span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
     }

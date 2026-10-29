@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=generate-first-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=comfy-sidebar-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
-    <script defer src="/static/generator.js?v=output-gallery-20261029"></script>
-    <script defer src="/static/console.js?v=output-gallery-20261029"></script>
-    <link rel="stylesheet" href="/static/generator.css?v=soft-studio-20261029">
+    <script defer src="/static/generator.js?v=comfy-sidebar-20261029"></script>
+    <script defer src="/static/console.js?v=comfy-sidebar-20261029"></script>
+    <link rel="stylesheet" href="/static/generator.css?v=comfy-palette-20261029">
     <link rel="stylesheet" href="/static/agent-widget.css?v=1">
     <script defer src="/static/agent-widget.js?v=1"></script>
   </head>
@@ -19,14 +19,18 @@
         <div class="brand"><span class="pulse"></span> Tensor Master</div>
         <nav aria-label="Main navigation">
           <a class="generate-primary" href="#generator">Generate</a>
-          <a class="active" href="#monitor">Monitor <span>{{ state.metrics.running }}</span></a>
-          <a href="#tasks">Tasks <span>{{ state.metrics.active_tasks }}</span></a>
-          <a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a>
-          <a href="#rentals">Rentals <span>{{ active_rentals|length }}</span></a>
-          <a href="#activity">Activity</a>
-          <a href="#history">Benchmarks</a>
+          <a href="#sources">Sources</a>
           <a href="#outputs">Outputs</a>
-          <a href="/setup">Setup & Models</a>
+          <details class="dispatcher-nav" id="dispatcher-nav">
+            <summary>Dispatcher</summary>
+            <a href="#tasks">Queue <span>{{ state.metrics.active_tasks }}</span></a>
+            <a href="#monitor">Monitor <span>{{ state.metrics.running }}</span></a>
+            <a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a>
+            <a href="#rentals">Rentals <span>{{ active_rentals|length }}</span></a>
+            <a href="#activity">Activity</a>
+            <a href="#history">Benchmarks</a>
+          </details>
+          <a class="setup-nav" href="/setup">Setup &amp; Models</a>
         </nav>
         <div class="provider-status">
           <small>CONTROL PLANE</small>
@@ -44,6 +48,11 @@
           <div><p class="eyebrow">COMFY COMMANDER / BY TENSOR MASTER</p><h1 id="workspace-title">Farm monitor</h1></div>
           <div class="header-actions"><button type="button" class="primary-link" id="add-gpu-header">+ Add GPU worker</button><span id="sync-status" role="status">Connecting…</span><button id="pause-live" type="button">Pause updates</button><button id="refresh-console" type="button">Refresh</button><a class="primary-link" href="#generator">Generate</a></div>
         </header>
+        <nav class="live-status-strip" aria-label="Live dispatcher status">
+          <a href="#monitor">Running <span>{{ state.metrics.running }}</span></a>
+          <a href="#tasks">Queued <span data-live-queued>{{ state.metrics.queued }}</span></a>
+          <a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a>
+        </nav>
         <section id="generator" class="generator-workspace" hidden aria-label="AI Generator workspace">
           {% include "generator.html" %}
         </section>

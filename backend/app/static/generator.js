@@ -2339,6 +2339,7 @@ function useSource(file, frameKind) {
     if (!addFiles([fake], {kind: file.kind, file: file.file})) return;
   }
   const mode = state.mode, h3Type = state.h3Type;
+  location.hash = "#generator";
   setMode(mode);
   if (mode === "h3") setH3Type(h3Type);
   renderReferences(); renderFrameInputs(); markAiPromptStale();
@@ -2642,7 +2643,7 @@ $('#generator-login-form').onsubmit = async event => {
     await initialize();await window.creativeMaster?.reconnect();
   } catch(error){$('#generator-login-error').textContent=error.message;}
 };
-window.tensorGenerator = {loadJob: restoreDispatchedJob, outputActions};
+window.tensorGenerator = {loadJob: restoreDispatchedJob, outputActions, showSources, showGenerate: () => setMode(state.mode)};
 for (const event of ['input','change']) $('#studio-form').addEventListener(event,()=>{
   if (!draftReady) draftEarlyEdit=true;
   saveDraft();
