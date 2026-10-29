@@ -48,7 +48,7 @@ COMMUNITY_PROFILES = {
     "ref2v-int8": {
         "name": "MiniMax H3 Ref2V Community",
         "kind": "video",
-        "summary": "Public INT8 Ref2VA with native and bring-your-own 4/8-step Turbo recipe choices.",
+        "summary": "Public INT8 Ref2VA with LightX2V 4/8-step Ref2V LoRAs by default, with optional VSA.",
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
         "gated": False,

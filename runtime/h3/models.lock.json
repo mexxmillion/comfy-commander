@@ -13,7 +13,8 @@
       "vsa",
       "face-refine",
       "reference-isolate",
-      "veda-r2va"
+      "veda-r2va",
+      "lightx2v-ref2v"
     ],
     "ref2v-singularity": [
       "common",
@@ -22,7 +23,8 @@
       "vsa",
       "face-refine",
       "reference-isolate",
-      "veda-r2va"
+      "veda-r2va",
+      "lightx2v-ref2v"
     ],
     "fasth3-omni": [
       "common",
@@ -284,6 +286,24 @@
       "local_dir": "veda",
       "size": 275415752,
       "sha256": "23edace948693772be33d5cc945d302d2b037a29bd44bd57071bfbdd8b02517d"
+    },
+    {
+      "group": "lightx2v-ref2v",
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "30f485ed874aa44c8183348ad361c5eabad318da",
+      "file": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+      "local_dir": "loras",
+      "size": 1956193000,
+      "sha256": "5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c"
+    },
+    {
+      "group": "lightx2v-ref2v",
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "30f485ed874aa44c8183348ad361c5eabad318da",
+      "file": "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
+      "local_dir": "loras",
+      "size": 1956193000,
+      "sha256": "6a56f41ab4229c9dd845b9501bbd475ee57e112d846cf2e819d534a1ae928c5a"
     }
   ]
 }

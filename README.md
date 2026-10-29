@@ -18,7 +18,7 @@ The Community Edition intentionally stays focused:
 
 - Qwen Image 2.1 image generation and reference editing
 - MiniMax H3 Ref2VA INT8, Singularity and FastH3 Omni profiles
-- native and bring-your-own 4/8-step Turbo recipes
+- native and LightX2V 4/8-step Ref2V Turbo recipes
 - RunPod and Vast.ai worker launch controls with explicit cost limits
 - optional Hugging Face credentials plus pinned personal-LoRA deployment
 - a BYOK OpenRouter studio copilot with Gemini and DeepSeek Flash choices
@@ -54,6 +54,12 @@ First run starts with **no credentials, no jobs, no workers, no private models,
 and no cloud spend**. Connecting RunPod or Vast.ai validates a credential; it
 does not rent anything. GPU rental always has a separate offer, price, lifetime,
 and confirmation step.
+
+Ref2V defaults to the matching LightX2V 4-step or 8-step LoRA at strength 1.0,
+using Euler / simple sampling. VSA is optional and off by default. Cloud Ref2V
+profiles include both pinned LoRAs; local workers need the corresponding files
+in their ComfyUI `models/loras` directory. Saved recipes retain their recorded
+LoRA and VSA selections.
 
 ### Tested hardware floor
 

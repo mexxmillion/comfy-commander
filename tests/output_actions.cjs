@@ -55,3 +55,23 @@ vm.runInContext(loadGuard + '\n' + requeue, context);
 context.requeueRecipe({mode: 'h3', turbo: 10});
 assert.match(calls.at(-1)[1], /ACC presets are no longer supported/);
 console.log('Historical ACC requeue rejection passed');
+
+// Exercise the production H3 model chain for both Ref2V step presets.
+const chainStart = source.indexOf('  let previous = "127";', source.indexOf('function buildH3Workflow'));
+const chainEnd = source.indexOf('  if (!frameMode && !singleFrame', chainStart);
+const constants = source.slice(source.indexOf('const TURBO_LORAS ='), source.indexOf('const FRAME_H3_MODEL'));
+for (const steps of [4, 8]) {
+  for (const vsa of [false, true]) {
+    const graphContext = {workflow: {'168': {inputs: {}}}, turboEnabled: true,
+      turboSteps: steps, frameMode: false, omni: false, eros: false,
+      VSA_LORA: 'fasth3_vsa_gate.safetensors', selectedLoraEntries: () => [],
+      $: selector => { assert.equal(selector, '#vsa-enabled'); return {checked: vsa}; }};
+    vm.createContext(graphContext);
+    vm.runInContext(constants + source.slice(chainStart, chainEnd), graphContext);
+    assert.match(graphContext.workflow['145'].inputs.lora_name, new RegExp(`ref2v_turbo_${steps}step`));
+    assert.equal(graphContext.workflow['145'].inputs.strength_model, 1);
+    assert.equal(Boolean(graphContext.workflow['146']), vsa);
+    assert.equal(graphContext.workflow['168'].inputs.model[0], vsa ? '146' : '145');
+  }
+}
+console.log('LightX2V model chain and optional VSA passed');

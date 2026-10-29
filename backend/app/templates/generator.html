@@ -122,17 +122,22 @@
         <div class="segmented h3-only" role="radiogroup" aria-label="Acceleration LoRA preset">
           <label>
             <input type="radio" name="turbo" value="4" checked>
-            <span><strong>Fast · 4 steps</strong><small>Bring-your-own 4-step Turbo + VSA</small></span>
+            <span><strong>Fast · 4 steps</strong><small>LightX2V Ref2V · 4-step LoRA</small></span>
           </label>
           <label>
             <input type="radio" name="turbo" value="8">
-            <span><strong>Quality · 8 steps</strong><small>Bring-your-own 8-step Turbo + VSA</small></span>
+            <span><strong>Quality · 8 steps</strong><small>LightX2V Ref2V · 8-step LoRA</small></span>
           </label>
         </div>
         <label class="switch-row h3-only turbo-stack-toggle">
-          <input id="turbo-enabled" type="checkbox">
+          <input id="turbo-enabled" type="checkbox" checked>
           <span class="switch-track" aria-hidden="true"><i></i></span>
-          <span><strong>External acceleration LoRA</strong><small id="turbo-stack-help">4/8-step modes use your own compatible LoRA</small></span>
+          <span><strong>External acceleration LoRA</strong><small id="turbo-stack-help">LightX2V Ref2V · matching 4/8-step LoRA enabled by default</small></span>
+        </label>
+        <label class="switch-row h3-only">
+          <input id="vsa-enabled" type="checkbox">
+          <span class="switch-track" aria-hidden="true"><i></i></span>
+          <span><strong>VSA acceleration</strong><small>Optional sparse attention · off by default</small></span>
         </label>
         <input id="h3-single-frame" type="checkbox" hidden>
         <label class="switch-row qwen-only" hidden>
@@ -241,7 +246,7 @@
             <label id="denoise-backend-field" class="field"><span>SupaVoice backend</span><select id="denoise-backend"><option>Resemble Enhance</option><option>DeepFilterNet</option></select></label>
           </div>
         </div>
-        <p id="engine-note" class="hint">Sampler: Euler · Scheduler: simple · VSA 0.75 · Built-in model turbo · Comfy Kitchen</p>
+        <p id="engine-note" class="hint">Sampler: Euler · Scheduler: simple · LightX2V Ref2V · VSA off · Comfy Kitchen</p>
       </section>
 
       <section id="lora-panel" class="panel">

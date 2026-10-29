@@ -838,7 +838,7 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
   const omni = !frameMode && $('#h3-model').value === OMNI_MODEL;
   if (singularity && ![4, 8].includes(turboSteps)) throw new Error('Singularity requires the 4-step or 8-step Ref2VA LoRA.');
   const turboEnabled = singularity || (!omni && !eros && $("#turbo-enabled").checked);
-  const useErSde = eros || (!frameMode && turboEnabled);
+  const useErSde = eros;
   const steps = Number($("#total-steps").value);
   const megapixels = Number($("#megapixels").value);
   const duration = singleFrame ? 5 / 24 : Number($("#duration").value);
@@ -948,7 +948,7 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
     workflow["145"] = { inputs: { lora_name: (frameMode ? FRAME_TURBO_LORAS : TURBO_LORAS)[turboSteps], strength_model: frameMode ? Number($("#frame-turbo-strength").value) : 1, model: [previous, 0] }, class_type: "LoraLoaderModelOnly" };
     previous = "145";
   }
-  if (!omni && (eros || (!frameMode))) {
+  if (!omni && (eros || !frameMode) && $("#vsa-enabled").checked) {
     workflow["146"] = { inputs: { gate_file: VSA_LORA, sparsity: 0.75, model: [previous, 0] }, class_type: "Ref2VAVSAGatePatch" };
     previous = "146";
   }
@@ -1255,6 +1255,7 @@ function recipeFromHistoryEntry(entry) {
     references,
     turbo,
     turboEnabled,
+    vsaEnabled: Boolean(prompt["146"]),
     singleFrame,
     audioLock: Object.values(prompt).some(node => node.class_type === "MiniMaxH3NativeAudioLock"),
     turboStrength: prompt["145"]?.inputs?.strength_model ?? 0.75,
@@ -1432,6 +1433,7 @@ function captureH3Recipe(references, seed) {
     references,
     turbo: Number(studioRoot.querySelector('input[name="turbo"]:checked').value),
     turboEnabled: $("#turbo-enabled").checked && (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) !== EROSMAX_MODEL,
+    vsaEnabled: $("#vsa-enabled").checked,
     turboStrength: Number($("#frame-turbo-strength").value),
     baseModel: state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value,
     steps: Number($("#total-steps").value),
@@ -1571,6 +1573,7 @@ function loadRecipe(recipe) {
   if (state.h3Type === "frames") $("#frame-h3-model").value = recipe.baseModel || FRAME_H3_MODEL;
   else $("#h3-model").value = recipe.baseModel || LEGACY_H3_MODEL;
   $("#turbo-enabled").checked = recipe.turboEnabled ?? (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) !== EROSMAX_MODEL;
+  $("#vsa-enabled").checked = recipe.vsaEnabled === true;
   $("#frame-turbo-strength").value = recipe.turboStrength ?? 0.75;
   $("#aspect-ratio").value = normalizeAspect(recipe.aspect || $("#aspect-ratio").value);
   $("#megapixels").value = recipe.megapixels ?? 0.4;
@@ -2183,7 +2186,7 @@ function setH3Type(type) {
     syncPromptEnhancement();
     $("#turbo-stack-help").textContent = frameMode
       ? "Default: 768p non-SLA 4-step Turbo · strength 0.5 · 5 sampling steps · no VSA"
-      : "Automatically off for ErosMax · VSA always stays on";
+      : "LightX2V Ref2V · VSA optional and off by default";
     renderLoraList();
     syncTurboStack();
     syncH3OutputMode();
@@ -2307,18 +2310,19 @@ function syncTurboStack() {
     return;
   }
   const enabled = $("#turbo-enabled").checked;
+  const vsa = $("#vsa-enabled").checked ? "VSA 0.75" : "VSA off";
   studioRoot.querySelectorAll('input[name="turbo"]').forEach((input) => {
     input.nextElementSibling.querySelector("small").textContent = enabled
-      ? `${input.value}-step Ref2V + VSA`
-      : "VSA · no external Turbo LoRA";
+      ? `LightX2V Ref2V · ${input.value}-step LoRA · ${vsa}`
+      : `${vsa} · no external Turbo LoRA`;
     if (singularity && input.value === '10') input.nextElementSibling.querySelector('small').textContent = 'Singularity uses 4-step or 8-step Ref2VA Turbo';
   });
   $('#turbo-stack-help').textContent = singularity
-    ? 'Singularity · matching 4/8-step Ref2VA LoRA required · VSA 0.75'
-    : 'Automatically off for ErosMax · 4/8-step Turbo only';
+    ? `Singularity · matching 4/8-step Ref2VA LoRA required · ${vsa}`
+    : `LightX2V Ref2V · matching 4/8-step LoRA · ${vsa}`;
   $("#engine-note").textContent = enabled
-    ? "Sampler: er_sde · Scheduler: beta57 · VSA 0.75 · Turbo 1.0 · Comfy Kitchen"
-    : `Sampler: Euler · Scheduler: simple · VSA 0.75 · ${$("#h3-model").value === EROSMAX_MODEL ? "Built-in model turbo" : "No external Turbo LoRA"} · Comfy Kitchen`;
+    ? `Sampler: Euler · Scheduler: simple · LightX2V Ref2V 1.0 · ${vsa} · Comfy Kitchen`
+    : `Sampler: Euler · Scheduler: simple · ${vsa} · ${$("#h3-model").value === EROSMAX_MODEL ? "Built-in model turbo" : "No external Turbo LoRA"} · Comfy Kitchen`;
 }
 
 let sourcePage = 0, sourceLoad = 0;
@@ -2552,6 +2556,7 @@ for (const [kind, prefix] of [["first_frame", "first"], ["last_frame", "last"]])
   });
 }
 $("#turbo-enabled").addEventListener("change", syncTurboStack);
+$("#vsa-enabled").addEventListener("change", syncTurboStack);
 $("#qwen-turbo").addEventListener("change", syncQwenTurbo);
 $("#qwen-steps").addEventListener("input", syncQwenTurbo);
 $("#qwen-cfg").addEventListener("input", syncQwenTurbo);

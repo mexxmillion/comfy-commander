@@ -88,6 +88,21 @@ def test_h3_profiles_do_not_download_acc():
     assert 'name="turbo" value="10"' not in template
 
 
+def test_ref2v_defaults_and_pinned_lightx2v_downloads():
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
+    artifacts = [a for a in manifest["artifacts"] if a["group"] == "lightx2v-ref2v"]
+    assert len(artifacts) == 2
+    assert all(a["repo"] == "lightx2v/Minimax-h3-Turbo" for a in artifacts)
+    assert all(len(a["revision"]) == 40 and len(a["sha256"]) == 64 for a in artifacts)
+    assert all(a["local_dir"] == "loras" and a["size"] > 0 for a in artifacts)
+    for profile in ("ref2v-int8", "ref2v-singularity"):
+        assert "lightx2v-ref2v" in manifest["profiles"][profile]
+    template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert '<input id="turbo-enabled" type="checkbox" checked>' in template
+    assert '<input id="vsa-enabled" type="checkbox">' in template
+
+
 def test_community_lora_manifest_round_trip(tmp_path):
     path = tmp_path / "community-loras.json"
     entry = {
