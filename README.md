@@ -365,3 +365,10 @@ Generation defaults are validated before saving to the controller's `state/prefe
 Select **Replacement**, add at least one source video and one replacement image, and describe the target person. **Run H3** submits one job through `/api/v1/jobs`: the controller composes the approved SAM3 detect/track branch, inverts only the tracked person's pixels, and feeds those frames directly into the H3 video reference. The background and image references remain intact. Audio lock turns on when Replacement is selected and can be changed explicitly. The completed job retains the SAM3 mask and inverted-guide evidence alongside the final H3 video. Generation runs without an intermediate approval pause; completion still requires visual/audio QC. The separate preparation endpoint remains available for a guided preview workflow.
 
 Bulk routing now preserves each task's existing pool, worker preference and architecture unless a different value is chosen. A VRAM-only change therefore keeps local-only LoRAs on the local pool. Failed changes remain selected and show the server's rejection reason.
+
+
+### Password changes and recovery
+
+Open **Settings → Password & sign in → Change password**, enter your current password and the new password twice, then click **Update password & sign out devices**. Changing a password signs out every saved device, while preserving worker credentials and the installation identity.
+
+If the password is forgotten, click **Forgot password?** on that same page. Recovery is available only on the host PC at `http://127.0.0.1:8000/settings#access`, requires the existing local recovery key, and shows its configured file location without displaying its contents. Phone/tailnet users are directed back to the host computer. Recovery attempts are rate limited; there is no unauthenticated reset or automatic key replacement.

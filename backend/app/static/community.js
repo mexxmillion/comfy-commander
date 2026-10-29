@@ -85,7 +85,7 @@ document.querySelector('#manage-models')?.addEventListener('click', () => {
   document.querySelector('#lora-management').hidden = false;
   document.querySelector('#lora-management').scrollIntoView({behavior: 'smooth'});
 });
-showStep(settingsMode ? 7 : 0);
+showStep(settingsMode && location.hash !== '#access' ? 7 : 0);
 
 document.querySelectorAll('.service-card').forEach(card => {
   card.querySelector('form').addEventListener('submit', async event => {
@@ -336,3 +336,32 @@ document.querySelector('#preferences-form')?.addEventListener('submit',event=>{e
 document.querySelector('#validate-preferences')?.addEventListener('click',()=>void submitPreferences(false));
 document.querySelector('#reload-preferences')?.addEventListener('click',()=>void loadPreferences());
 if(settingsMode)void loadPreferences();
+
+document.querySelector('#show-password-change')?.addEventListener('click',()=>{
+  document.querySelector('#change-password-form').hidden=false;
+  document.querySelector('#password-recovery-panel').hidden=true;
+});
+document.querySelector('#show-password-recovery')?.addEventListener('click',async()=>{
+  document.querySelector('#change-password-form').hidden=true;
+  document.querySelector('#password-recovery-panel').hidden=false;
+  const help=document.querySelector('#password-recovery-help');
+  try {
+    const data=await jsonRequest('/api/v1/cloud/password-recovery');
+    document.querySelector('#recover-password-form').hidden=!data.available;
+    document.querySelector('#recovery-key-file').textContent=data.recovery_key_file||'';
+    help.textContent=data.available?'Use the recovery key stored on this host PC. Your password and recovery key are never displayed.':'On the computer running Commander, open http://127.0.0.1:8000/settings#access and choose Forgot password. Recovery is unavailable over phone/tailnet connections.';
+  } catch(error){help.textContent=error.message;}
+});
+for(const [id,endpoint,credential] of [['change-password-form','password-change','current_password'],['recover-password-form','password-recover','recovery_key']]) {
+  document.querySelector('#'+id)?.addEventListener('submit',async event=>{
+    event.preventDefault();const form=event.currentTarget,status=form.querySelector('[role="status"]'),button=event.submitter;
+    if(form.elements.new_password.value!==form.elements.confirm_password.value){status.textContent='The new passwords do not match. Nothing changed.';return;}
+    button.disabled=true;status.textContent='Updating password…';
+    try {
+      const data=await jsonRequest('/api/v1/cloud/'+endpoint,{method:'POST',body:JSON.stringify({[credential]:form.elements[credential].value,new_password:form.elements.new_password.value})});
+      form.reset();status.textContent=data.message;
+      const signIn=document.querySelector('#password-form');signIn.reset();signIn.querySelector('button').disabled=false;signIn.querySelector('button').textContent='Sign in';
+    } catch(error){status.textContent=error.message;}
+    finally{button.disabled=false;}
+  });
+}

@@ -22,3 +22,5 @@ body[data-settings-mode="true"] .advanced-section{margin-top:0}
 @media(max-width:760px){.settings-tabs{grid-template-columns:repeat(2,minmax(0,1fr));position:static}.preferences-grid{grid-template-columns:1fr}.launch-actions{flex-wrap:wrap}.setup-hero{grid-template-columns:auto 1fr}.setup-hero>a{grid-column:1/-1}}
 body[data-settings-mode="true"] .setup-hero>a{display:block}
 body[data-settings-mode="true"] .setup-hero div>p:last-child{letter-spacing:normal;color:var(--muted);font-weight:400}
+
+.password-management{margin-top:24px}.password-management form:not([hidden]){display:grid;gap:16px;margin-top:20px}.password-management pre{white-space:pre-wrap;overflow-wrap:anywhere}

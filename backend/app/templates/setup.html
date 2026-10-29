@@ -3,18 +3,43 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ 'Settings' if settings_mode else 'Welcome' }} · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=settings-final-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=settings-final-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
+  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=password-settings-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
+  <script defer src="/static/community.js?v=password-settings-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
 </head><body data-settings-mode="{{ 'true' if settings_mode else 'false' }}" data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
   <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p>{% if settings_mode %}<h1>Settings</h1><p>Manage your studio whenever you need.</p>{% else %}<h1>Your ComfyUI.<br><em>Ready to command.</em></h1>{% endif %}</div><a href="/">Back to Generate →</a></header>
   {% if settings_mode %}
-  <nav class="wizard-rail settings-tabs" aria-label="Settings sections">{% for index, label in [(7,'Defaults'),(1,'Compute'),(2,'Connections'),(4,'Phone access'),(5,'Profiles'),(8,'Models & LoRAs'),(0,'Sign in')] %}<button type="button" data-step-target="{{ index }}">{{ label }}</button>{% endfor %}</nav>
+  <nav class="wizard-rail settings-tabs" aria-label="Settings sections">{% for index, label in [(7,'Defaults'),(1,'Compute'),(2,'Connections'),(4,'Phone access'),(5,'Profiles'),(8,'Models & LoRAs'),(0,'Password & sign in')] %}<button type="button" data-step-target="{{ index }}">{{ label }}</button>{% endfor %}</nav>
   <p class="settings-intro">Changes are saved only when you use each section's update or confirmation button. <a href="/setup">Revisit guided onboarding →</a></p>
   {% else %}  <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Phone'),('06','Profiles'),('07','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>{% endif %}
 
   <section class="wizard-panel active" data-wizard-step="0">
     <div class="welcome-copy"><span class="step">01 · YOUR CONTROL PLANE</span><h2>One password.<br>No mystery setup.</h2><p>Comfy Commander coordinates your own ComfyUI workers. It does not bundle provider keys, rent hardware, or upload a model until you ask.</p><div class="trust-grid"><span>✓ Credentials stay on this machine</span><span>✓ Empty-state safe</span><span>✓ Agent-readable API</span><span>✓ Open-source profiles</span></div></div>
     <div class="intro-card compact"><div><span class="step">LOCAL ADMIN</span><h2>{{ 'Unlock settings' if status.password else 'Protect your studio' }}</h2><p>{{ 'Sign in to manage credentials and models.' if status.password else 'Create the password used for rentals and configuration. First-time creation is localhost-only.' }}</p></div><form id="password-form" data-mode="{{ 'login' if status.password else 'setup' }}"><label>Admin password<input id="password" type="password" minlength="12" autocomplete="{{ 'current-password' if status.password else 'new-password' }}" required></label>{% if not status.password %}<label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>{% endif %}<button type="submit">{{ 'Sign in' if status.password else 'Create password' }}</button></form></div>
+    {% if status.password %}
+    <div class="management-card password-management">
+      <h3>Password &amp; recovery</h3>
+      <div class="launch-actions"><button type="button" id="show-password-change">Change password</button><button type="button" id="show-password-recovery" class="quiet">Forgot password?</button></div>
+      <form id="change-password-form" hidden>
+        <p>Sign in above first. Changing your password signs out every device.</p>
+        <label>Current password<input name="current_password" type="password" autocomplete="current-password" maxlength="256" required></label>
+        <label>New password<input name="new_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+        <label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+        <button type="submit">Update password &amp; sign out devices</button><p role="status"></p>
+      </form>
+      <section id="password-recovery-panel" hidden>
+        <h3>Recover a forgotten password</h3>
+        <p id="password-recovery-help" role="status">Checking recovery options…</p>
+        <form id="recover-password-form" hidden>
+          <p>On this computer, open the recovery key file below and paste its contents. Keep this key private; never send it in chat.</p>
+          <pre id="recovery-key-file"></pre>
+          <label>Recovery key<input name="recovery_key" type="password" autocomplete="off" maxlength="256" required></label>
+          <label>New password<input name="new_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+          <label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+          <button type="submit">Reset password &amp; sign out devices</button><p role="status"></p>
+        </form>
+      </section>
+    </div>
+    {% endif %}
     <div class="wizard-actions"><span>Password setup changes no cloud resources.</span><button type="button" data-next disabled id="protect-next">Continue →</button></div>
   </section>
 

@@ -53,6 +53,45 @@ class PasswordLogin(BaseModel):
     remember: bool = True
 
 
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256, repr=False)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256, repr=False)
+
+
+class PasswordRecovery(BaseModel):
+    recovery_key: str = Field(min_length=1, max_length=256, repr=False)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256, repr=False)
+
+
+def _password_attempt(request: Request) -> None:
+    with LOGIN_LOCK:
+        now = time.monotonic()
+        peer = request.client.host if request.client else 'unknown'
+        attempts = [stamp for stamp in LOGIN_ATTEMPTS.get(peer, []) if now - stamp < 60]
+        LOGIN_ATTEMPTS[peer] = attempts
+        if len(attempts) >= 5:
+            raise HTTPException(429, "Too many attempts. Try again in one minute.")
+        attempts.append(now)
+
+
+def _password_matches(password: str, saved: str) -> bool:
+    record = json.loads(saved)
+    digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(record["salt"]), n=16384, r=8, p=1).hex()
+    return hmac.compare_digest(digest, record["hash"])
+
+
+def _save_changed_password(password: str) -> JSONResponse:
+    try:
+        identity = authority(get_settings().token_file)
+        identity.set_password(password_record(password))
+        identity.export()
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        raise HTTPException(503, "Password update could not be completed. Try signing in before retrying.") from exc
+    response = JSONResponse({"ok": True, "message": "Password updated. All devices are signed out. Sign in with your new password."})
+    response.delete_cookie(COOKIE)
+    return response
+
+
 def _password_path() -> Path:
     return get_settings().token_file.with_name("admin_password.json")
 
@@ -117,14 +156,7 @@ async def password_setup(payload: PasswordLogin, request: Request) -> JSONRespon
 async def password_login(payload: PasswordLogin, request: Request) -> JSONResponse:
     if not _origin_ok(request):
         raise HTTPException(403, "Same-origin request required")
-    with LOGIN_LOCK:
-        now = time.monotonic()
-        peer = request.client.host if request.client else 'unknown'
-        attempts = [stamp for stamp in LOGIN_ATTEMPTS.get(peer, []) if now - stamp < 60]
-        LOGIN_ATTEMPTS[peer] = attempts
-        if len(attempts) >= 5:
-            raise HTTPException(429, "Too many attempts. Try again in one minute.")
-        attempts.append(now)
+    _password_attempt(request)
     try:
         saved = authority(get_settings().token_file).setting('password')
     except (OSError, RuntimeError, sqlite3.Error) as exc:
@@ -136,6 +168,41 @@ async def password_login(payload: PasswordLogin, request: Request) -> JSONRespon
     if not hmac.compare_digest(digest, record["hash"]):
         raise HTTPException(401, "Incorrect password")
     return _password_cookie(payload.remember, request)
+
+
+@router.post("/password-change")
+async def change_password(payload: PasswordChange, request: Request) -> JSONResponse:
+    require_admin(request, mutation=True)
+    _password_attempt(request)
+    try:
+        saved = authority(get_settings().token_file).setting('password')
+        valid = bool(saved) and _password_matches(payload.current_password, saved)
+    except (OSError, RuntimeError, sqlite3.Error, ValueError, KeyError) as exc:
+        raise HTTPException(503, "Sign-in store is unavailable; restore it before changing your password.") from exc
+    if not valid:
+        raise HTTPException(401, "Current password is incorrect")
+    return _save_changed_password(payload.new_password)
+
+
+@router.get("/password-recovery")
+async def password_recovery_info(request: Request) -> dict:
+    local = _local_setup(request)
+    return {"host_only": True, "available": local,
+            "recovery_key_file": str(get_settings().token_file) if local else None}
+
+
+@router.post("/password-recover")
+async def recover_password(payload: PasswordRecovery, request: Request) -> JSONResponse:
+    if not _origin_ok(request) or not _local_setup(request):
+        raise HTTPException(403, "Recover your password on the host PC at http://127.0.0.1:8000/settings#access")
+    _password_attempt(request)
+    try:
+        principal = authority(get_settings().token_file).principal(payload.recovery_key)
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        raise HTTPException(503, "Saved identity is unavailable; restore it before recovering your password.") from exc
+    if not principal or principal['role'] != 'bootstrap':
+        raise HTTPException(401, "Recovery key is incorrect")
+    return _save_changed_password(payload.new_password)
 
 
 @router.post("/logout")
