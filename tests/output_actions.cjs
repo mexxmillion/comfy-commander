@@ -98,3 +98,21 @@ assert.equal(controls['#sparse-enabled'].checked, false);
 controls['#sparse-enabled'].checked = true;controls['#sparse-method'].value = 'untrusted';
 assert.throws(() => defaults.sparseAttentionInputs(['127', 0]), /Choose SLA, VSA or SOL/);
 console.log('Sparse methods, model chains and Omni/Ref2V defaults passed');
+
+const consoleSource = fs.readFileSync(path.join(__dirname, '../backend/app/static/console.js'), 'utf8');
+const countsStart = consoleSource.indexOf('  function syncNavCounts(metrics)');
+const countsEnd = consoleSource.indexOf('  function onJobSubmitted()', countsStart);
+const badges = new Map();
+const countContext = {document: {querySelectorAll(selector) {
+  if (!badges.has(selector)) badges.set(selector, [{}]);
+  return badges.get(selector);
+}}};
+vm.createContext(countContext);
+vm.runInContext(consoleSource.slice(countsStart, countsEnd), countContext);
+countContext.syncNavCounts({queued: 3, running: 2, active_workers: 4});
+assert.equal(badges.get('[data-dispatch-queued]')[0].textContent, '3');
+assert.equal(badges.get('[data-dispatch-running]')[0].textContent, '2');
+countContext.syncNavCounts({queued: 0, running: 0});
+assert.equal(badges.get('[data-dispatch-queued]')[0].textContent, '0');
+assert.equal(badges.get('[data-dispatch-running]')[0].textContent, '0');
+console.log('Live Dispatcher sidebar counts passed');

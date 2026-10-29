@@ -487,6 +487,9 @@
   $('#output-remove-selected').onclick=()=>removeOutputEntries([...checkedOutputs]);
   $('#output-search').addEventListener('input',()=>{outputPage=0;renderDurableOutputs();});$('#output-page-size').addEventListener('change',()=>{outputPage=0;renderDurableOutputs();});$('#output-prev').onclick=()=>{outputPage--;renderDurableOutputs();};$('#output-next').onclick=()=>{outputPage++;renderDurableOutputs();};
   function syncNavCounts(metrics) {
+    for (const [selector, key] of [['[data-dispatch-queued]', 'queued'], ['[data-dispatch-running]', 'running']]) {
+      document.querySelectorAll(selector).forEach(badge => { badge.textContent = String(metrics[key] ?? 0); });
+    }
     document.querySelectorAll('[data-live-queued]').forEach(badge=>{badge.textContent=String(metrics.queued ?? 0);});
     for(const [hash,key] of [['monitor','running'],['tasks','active_tasks'],['workers','active_workers']]) {
       document.querySelectorAll(`a[href="#${hash}"] span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});

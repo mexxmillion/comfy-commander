@@ -177,3 +177,5 @@ dialog#rental-dialog,dialog#ssh-access{background:#2b2530;border-color:#514956;b
 
 .live-status-strip{align-items:center;align-self:start;order:0}.live-status-strip a{align-self:start;min-height:34px}
 @media(min-width:1101px){.live-status-strip{grid-column:1/-1;grid-row:2}.metrics{grid-row:3}.rental-fleet,.cloud-trial:not(.historical){grid-column:1/-1;grid-row:4}.task-panel{grid-row:5}.inspector{grid-row:5/span 3}.worker-panel{grid-row:6}.log-panel{grid-row:7}}
+
+.dispatcher-counts{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;font-size:10px;color:#c2bfb9}.dispatcher-counts>span{white-space:nowrap}.dispatcher-counts b{color:#f2ff59;font-variant-numeric:tabular-nums}
