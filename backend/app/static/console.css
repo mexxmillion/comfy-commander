@@ -181,3 +181,5 @@ dialog#rental-dialog,dialog#ssh-access{background:#2b2530;border-color:#514956;b
 .dispatcher-counts{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;font-size:10px;color:#c2bfb9}.dispatcher-counts>span{white-space:nowrap}.dispatcher-counts b{color:#f2ff59;font-variant-numeric:tabular-nums}
 
 .rendering-slate{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:170px;aspect-ratio:16/10;padding:20px;background:linear-gradient(135deg,#302834,#211927);color:#f2ff59;text-align:center;border-bottom:1px solid #514956}.rendering-slate strong{font-size:18px}.rendering-slate span{font-size:12px;color:#c2bfb9;overflow-wrap:anywhere}
+
+#gallery-viewer{width:min(1100px,95vw);max-height:94dvh;overflow:auto;color:#f0efed;background:#2b2530;border:1px solid #514956;border-radius:14px}#gallery-viewer::backdrop{background:#000c}#gallery-viewer form{display:flex;justify-content:flex-end;margin-bottom:10px}#gallery-viewer video,#gallery-viewer img{display:block;width:100%;max-height:74dvh;object-fit:contain;background:#000}#gallery-viewer audio{width:100%}#gallery-viewer-title{overflow-wrap:anywhere}

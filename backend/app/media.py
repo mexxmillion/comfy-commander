@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import os
 import subprocess
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -18,6 +19,14 @@ IMAGES = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tif', '.tiff'}
 VIDEOS = {'.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'}
 AUDIO = {'.wav', '.mp3', '.m4a', '.aac', '.flac', '.ogg'}
 PREVIEW_LIMIT = asyncio.Semaphore(2)
+
+
+def ffmpeg_executable() -> str:
+    executable = shutil.which('ffmpeg')
+    if executable:
+        return executable
+    from imageio_ffmpeg import get_ffmpeg_exe
+    return get_ffmpeg_exe()
 
 
 def media_path(filename: str, subfolder: str = '', type: str = 'output', task_id: str = '') -> Path:
@@ -47,7 +56,7 @@ def make_preview(source: Path, destination: Path) -> None:
                 image.thumbnail((480, 480))
                 image.convert('RGB').save(temporary, quality=78)
         else:
-            subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-threads', '1',
+            subprocess.run([ffmpeg_executable(), '-nostdin', '-v', 'error', '-threads', '1',
                             '-i', str(source), '-frames:v', '1', '-vf',
                             'scale=480:480:force_original_aspect_ratio=decrease',
                             '-q:v', '5', '-y', str(temporary)],

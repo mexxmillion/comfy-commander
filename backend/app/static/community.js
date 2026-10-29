@@ -48,6 +48,7 @@ document.querySelectorAll('[data-compute]').forEach(card => {
 if (computeMode) document.querySelector('#compute-next').disabled = false;
 fetch('/api/v1/setup/diagnostics').then(response => response.json()).then(data => {
   diagnostics = data;
+  void loadPhoneAccess();
   const gpuText = data.gpus.length ? data.gpus.map(gpu => `${gpu.name} · ${gpu.vram_gb} GB`).join(' · ') : 'No NVIDIA GPU detected';
   document.querySelector('#diagnostics').innerHTML = `<span class="${data.gpus.length ? 'good' : ''}">${escapeHtml(gpuText)}</span><span class="${data.comfyui_reachable ? 'good' : ''}">${data.comfyui_reachable ? 'ComfyUI is responding' : 'No local ComfyUI running'}</span><span class="${data.tailscale_available ? 'good' : ''}">${data.tailscale_available ? 'Tailscale available' : 'Tailscale optional'}</span>`;
 }).catch(() => { document.querySelector('#diagnostics').textContent = 'Local checks unavailable; cloud-only setup still works.'; });
@@ -66,6 +67,7 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
     button.textContent = 'Settings unlocked ✓';
     document.querySelector('#protect-next').disabled = false;
     await loadLoras();
+    await loadPhoneAccess();
   } catch (error) {
     alert(error.message);
     button.disabled = false;
@@ -74,7 +76,7 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
 
 if (document.body.dataset.firstRun === 'false') document.querySelector('#protect-next').disabled = false;
 document.querySelector('#manage-models')?.addEventListener('click', () => {
-  document.querySelectorAll('.advanced-section').forEach(section => section.hidden = false);
+  document.querySelector('#lora-management').hidden = false;
   document.querySelector('#lora-management').scrollIntoView({behavior: 'smooth'});
 });
 showStep(0);
@@ -204,3 +206,50 @@ document.querySelector('#lora-register-form')?.addEventListener('submit', async 
 });
 
 loadLoras();
+
+async function loadPhoneAccess() {
+  const section = document.querySelector('#phone-access');
+  const status = document.querySelector('#phone-access-status');
+  const input = document.querySelector('#phone-access-url');
+  const copy = document.querySelector('#copy-phone-url');
+  try {
+    const data = await jsonRequest('/api/v1/setup/phone-access');
+    section.hidden = !data.available;
+    input.value = data.url || '';
+    document.querySelector('#enable-phone-access').hidden = !data.can_enable || !!data.url;
+    copy.disabled = !data.url;
+    document.querySelector('#phone-access-setup').hidden = data.state !== 'not_shared';
+    status.textContent = data.url ? 'Ready for phone · private Tailscale HTTPS' :
+      data.state === 'not_shared' ? 'Tailscale is connected. Enable private sharing to get your phone URL.' :
+      data.state === 'disconnected' ? 'Open Tailscale on this computer and sign in, then refresh.' :
+      'Could not read Tailscale sharing status. Check Tailscale on this computer, then refresh.';
+  } catch {
+    section.hidden = !diagnostics.tailscale_available;
+    input.value = '';copy.disabled = true;
+    document.querySelector('#enable-phone-access').hidden = true;
+    status.textContent = 'Sign in to Commander settings to view the private phone URL.';
+  }
+}
+document.querySelector('#refresh-phone-access').addEventListener('click', loadPhoneAccess);
+document.querySelector('#copy-phone-url').addEventListener('click', async () => {
+  const input = document.querySelector('#phone-access-url');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    document.querySelector('#phone-access-status').textContent = 'URL copied. Open it on your phone with Tailscale connected.';
+  } catch {
+    input.focus();input.select();
+    document.querySelector('#phone-access-status').textContent = 'Select and copy the URL above.';
+  }
+});
+loadPhoneAccess();
+
+document.querySelector('#enable-phone-access').addEventListener('click', async event => {
+  if (!confirm('Enable private HTTPS access to this Commander through your Tailscale network? Devices allowed by your tailnet can reach the sign-in page.')) return;
+  const button = event.currentTarget;button.disabled = true;
+  try {
+    await jsonRequest('/api/v1/setup/phone-access', {method: 'POST'});
+    await loadPhoneAccess();
+  } catch (error) {
+    document.querySelector('#phone-access-status').textContent = error.message;
+  } finally { button.disabled = false; }
+});

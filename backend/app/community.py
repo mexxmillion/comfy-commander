@@ -221,6 +221,25 @@ async def diagnostics() -> dict:
     return _local_diagnostics()
 
 
+@router.get("/api/v1/setup/phone-access")
+def setup_phone_access(request: Request) -> dict:
+    require_admin(request)
+    from .phone_access import phone_access
+    port = (request.scope.get("server") or (None, 8000))[1] or 8000
+    return phone_access(port)
+
+
+@router.post("/api/v1/setup/phone-access")
+def enable_setup_phone_access(request: Request) -> dict:
+    require_admin(request, mutation=True)
+    from .phone_access import enable_phone_access
+    port = (request.scope.get("server") or (None, 8000))[1] or 8000
+    try:
+        return enable_phone_access(port)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise HTTPException(409, "Private phone access could not be enabled. Sign into Tailscale and check existing Serve routes on this computer.") from exc
+
+
 @router.post("/api/v1/setup/secret")
 async def save_secret(payload: SecretSetup, request: Request) -> dict:
     require_admin(request, mutation=True)

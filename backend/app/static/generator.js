@@ -1668,9 +1668,11 @@ function viewGalleryOutput(file) {
   media.src = mediaUrl(file);
   if (["VIDEO", "AUDIO"].includes(media.tagName)) { media.controls = true; media.playsInline = true; media.autoplay = true; }
   else media.alt = file.recipe?.direction || file.filename;
-  $("#gallery-viewer-media").replaceChildren(media);
-  $("#gallery-viewer-title").textContent = file.preset_name || file.filename;
-  $("#gallery-viewer").showModal();
+  const viewer = document.querySelector("#gallery-viewer");
+  document.body.append(viewer);
+  viewer.querySelector("#gallery-viewer-media").replaceChildren(media);
+  viewer.querySelector("#gallery-viewer-title").textContent = file.preset_name || file.filename;
+  viewer.showModal();
 }
 
 const gallerySelection = new Set();
@@ -2643,7 +2645,7 @@ for (const id of ["gallery-search", "gallery-collection", "gallery-sort", "galle
 }
 $("#gallery-prev").onclick = () => { state.galleryPage--; renderGallery(state.galleryFiles); };
 $("#gallery-next").onclick = () => { state.galleryPage++; renderGallery(state.galleryFiles); };
-$("#gallery-viewer").addEventListener("close", () => { $("#gallery-viewer-media video, #gallery-viewer-media audio")?.pause(); $("#gallery-viewer-media").replaceChildren(); });
+document.querySelector("#gallery-viewer").addEventListener("close", () => { document.querySelector("#gallery-viewer-media video, #gallery-viewer-media audio")?.pause(); document.querySelector("#gallery-viewer-media").replaceChildren(); });
 $("#share-result").addEventListener("click", () => shareMedia(state.lastOutput));
 $("#clear-log").addEventListener("click", () => {
   $("#run-log").textContent = "";

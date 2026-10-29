@@ -70,6 +70,9 @@ Restart the web server after changing these environment variables. The
 controller's own Python environment is not a substitute for the ComfyUI runtime.
 Missing packaging prerequisites stop the launch before a GPU rental starts.
 
+FFmpeg for video previews is installed with Commander through `imageio-ffmpeg`.
+An existing system FFmpeg is preferred when available.
+
 ### Tested hardware floor
 
 The curated profiles are usable on tested 16 GB GPUs, including RTX 5070 Ti and
@@ -129,7 +132,11 @@ tailscale serve --bg --yes http://127.0.0.1:8000
 tailscale serve status
 ```
 
-Open the printed HTTPS URL on the phone and sign in. Do not use Telnet, expose
+Alternatively, open **Setup & Models → Phone access**, sign in, and click
+**Enable private phone access**. The section shows a Copy URL button once
+Tailscale Serve points to this controller. Existing HTTPS routes are preserved.
+
+Open the printed or copied HTTPS URL on the phone and sign in. Do not use Telnet, expose
 port 8000 on a router, change the Compose binding to all interfaces, or use
 Tailscale Funnel for normal private access. Funnel makes the service public.
 See [the complete phone-access and troubleshooting guide](docs/PHONE_ACCESS.md).

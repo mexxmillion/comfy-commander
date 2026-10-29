@@ -125,3 +125,22 @@ countContext.syncNavCounts({queued: 0, running: 0});
 assert.equal(badges.get('[data-dispatch-queued]')[0].textContent, '0');
 assert.equal(badges.get('[data-dispatch-running]')[0].textContent, '0');
 console.log('Live Dispatcher sidebar counts passed');
+
+const viewerChildren = new Map([
+  ['#gallery-viewer-media', {replaceChildren(media) { this.media = media; }}],
+  ['#gallery-viewer-title', {}],
+]);
+let movedToBody = false;
+const viewer = {querySelector: selector => viewerChildren.get(selector),
+  showModal() { assert.equal(movedToBody, true, 'Outputs player must escape the hidden Generator'); }};
+const viewerContext = {document: {createElement: element,
+  querySelector: selector => { assert.equal(selector, '#gallery-viewer'); return viewer; },
+  body: {append(node) { assert.equal(node, viewer); movedToBody = true; }}},
+  mediaUrl: file => `/media/${file.filename}`};
+vm.createContext(viewerContext);
+const viewerStart = source.indexOf('function viewGalleryOutput(');
+vm.runInContext(source.slice(viewerStart, source.indexOf('\nconst gallerySelection', viewerStart)), viewerContext);
+viewerContext.viewGalleryOutput({filename: 'result.mp4'});
+assert.equal(viewerChildren.get('#gallery-viewer-media').media.tagName, 'VIDEO');
+assert.equal(viewerChildren.get('#gallery-viewer-media').media.src, '/media/result.mp4');
+console.log('Outputs video player placement passed');
