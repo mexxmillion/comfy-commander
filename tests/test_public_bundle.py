@@ -33,3 +33,20 @@ def test_source_archive_keeps_license_and_excludes_git(tmp_path):
     extract_source(archive, tmp_path / 'stage', True)
     assert (tmp_path / 'stage/LICENSE').read_text() == 'MIT'
     assert not (tmp_path / 'stage/.git').exists()
+
+
+def test_packaged_snapshot_sources_are_pinned_utf8_python():
+    import hashlib
+    import json
+    from pathlib import Path
+    runtime = Path(__file__).parents[1] / 'runtime/h3'
+    manifest = json.loads((runtime / 'sources.lock.json').read_text(encoding='utf-8'))
+    for entry in manifest['custom_nodes'].values():
+        if entry.get('type') != 'snapshot':
+            continue
+        for filename, expected in entry.get('files', {}).items():
+            source = (runtime / entry['overlay'] / filename).read_bytes().replace(b'\r\n',b'\n')
+            assert hashlib.sha256(source).hexdigest() == expected
+            source.decode('utf-8')
+            if filename.endswith('.py'):
+                compile(source, filename, 'exec')
