@@ -104,7 +104,7 @@ textarea:focus, select:focus, input:focus { border-color: var(--accent); box-sha
 .upload-icon { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; margin-bottom: .65rem; border-radius: 50%; background: var(--accent-dark); color: var(--accent); font-size: 1.6rem; }
 .reference-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin-top: .7rem; }
 .reference { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: .75rem; background: #0c0c0b; border: 1px solid var(--line); }
-.reference img, .reference video { width: 100%; height: 100%; object-fit: cover; }
+.reference img, .reference video { width: 100%; height: 100%; object-fit: contain; }
 .reference audio { width: calc(100% - .7rem); height: 2.5rem; margin: 2.5rem .35rem 0; }
 .reference .file-kind { position: absolute; left: .35rem; bottom: 3.5rem; padding: .22rem .4rem; border-radius: .35rem; background: #000b; font-size: .66rem; font-weight: 700; }
 .reference button { position: absolute; right: .35rem; top: .35rem; width: 1.75rem; height: 1.75rem; border: 0; border-radius: 50%; color: white; background: #000b; cursor: pointer; }
@@ -480,7 +480,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
   .prompt-tools .switch-row{min-height:30px}.prompt-tools .ai-model-settings{margin-top:4px}
   .dropzone{min-height:86px;padding:8px}.upload-icon{display:none}.dropzone strong{font-size:13px}.dropzone small{font-size:11px}
   .frame-slot{min-height:75px;padding:10px}.frame-slot strong{font-size:12px}.reference-list{grid-template-columns:repeat(5,minmax(0,1fr));margin-top:8px}
-  .reference{aspect-ratio:1.4}.switch-row small{font-size:10px}.field{gap:4px}.field>span{font-size:11px}.compact-grid{gap:8px}
+  .reference{aspect-ratio:1}.switch-row small{font-size:10px}.field{gap:4px}.field>span{font-size:11px}.compact-grid{gap:8px}
   .run-panel{padding:10px 12px;min-height:62px}.h3-advanced{padding:10px 12px}.h3-advanced>summary{font-size:12px}
   #creative-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:start}
   #creative-controls>.field{grid-row:1/span 2;margin:0}#creative-controls textarea{height:80px;min-height:80px;padding:8px}
@@ -522,7 +522,3 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
 .video-trim-timeline input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;pointer-events:auto;width:22px;height:36px;border:2px solid #f1ff68;border-radius:5px;background:#555b26;cursor:ew-resize}
 .video-trim-timeline input[type=range]::-moz-range-thumb{pointer-events:auto;width:18px;height:32px;border:2px solid #f1ff68;border-radius:5px;background:#555b26;cursor:ew-resize}
 .video-trim-timeline input[type=range]:focus-visible{outline:2px solid #f1ff68;outline-offset:3px}
-/* Reference removal must remain obvious and easy to tap over any thumbnail. */
-#reference-list .reference button.remove-reference{width:auto;min-width:88px;min-height:44px;height:44px;padding:0 10px;border:1px solid #f1a1ac;border-radius:8px;background:#55232b;color:#fff;font-size:13px;font-weight:700;line-height:1;z-index:2}
-#reference-list .reference button.remove-reference:hover{background:#79303c}
-#reference-list .reference button.remove-reference:focus-visible{outline:3px solid #f1ff68;outline-offset:2px}
