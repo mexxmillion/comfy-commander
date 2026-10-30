@@ -14,9 +14,9 @@ MCP-capable client at the Python executable inside this clone:
 {
   "mcpServers": {
     "comfy-commander": {
-      "command": "C:\\path\\to\\tensor-master-community\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\comfy-commander\\.venv\\Scripts\\python.exe",
       "args": ["-m", "backend.app.mcp_server"],
-      "cwd": "C:\\path\\to\\tensor-master-community"
+      "cwd": "C:\\path\\to\\comfy-commander"
     }
   }
 }
