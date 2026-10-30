@@ -18,7 +18,9 @@ from .config import get_settings
 from .generator_prompts import director
 from .generator_prompts.refs import ReferenceError, ReferenceSet
 from .prompt_secret import read_key
+from . import llm
 from .reference_preprocess import role_notes
+from .media import ffmpeg_executable
 
 PROMPTS = Path(__file__).with_name('generator_prompts')
 
@@ -31,7 +33,7 @@ class EnhanceRequest(BaseModel):
     aspect_ratio: str = Field(default='16:9 (Landscape)', max_length=64)
     megapixels: float = Field(default=0.7, ge=0.1, le=16)
     duration: float = Field(default=5, ge=0.25, le=60)
-    model: Literal['google/gemini-3-flash-preview', 'google/gemini-2.5-flash-lite', 'x-ai/grok-4.3'] = 'google/gemini-3-flash-preview'
+    model: str = Field(default='google/gemini-3-flash-preview', min_length=1, max_length=200)
 
 
 def reference_path(name: str) -> Path:
@@ -52,7 +54,7 @@ async def convert_media(path: Path, kind: str, crop=None, trim=None):
     suffix = '.mp4' if kind == 'video' else '.wav'
     with tempfile.TemporaryDirectory(prefix='tensor-prompt-') as directory:
         output = Path(directory) / ('reference' + suffix)
-        command = ['ffmpeg', '-nostdin', '-v', 'error', '-threads', '1']
+        command = [ffmpeg_executable(), '-nostdin', '-v', 'error', '-threads', '1']
         if trim:
             command += ['-ss', str(trim[0])]
         command += ['-i', str(path)]
@@ -118,9 +120,7 @@ async def reference_content(references: ReferenceSet):
 
 
 async def enhance(payload: EnhanceRequest):
-    key = await asyncio.to_thread(read_key)
-    if not key:
-        raise HTTPException(409, 'Prompt enhancement needs the saved controller OpenRouter credential')
+    provider = await asyncio.to_thread(llm.connection, read_key)
     normalized = [{**item, 'kind': 'image' if item.get('kind') in {'first_frame', 'last_frame'} else item.get('kind')}
                   for item in payload.references]
     try:
@@ -129,6 +129,8 @@ async def enhance(payload: EnhanceRequest):
     except ReferenceError as error:
         raise HTTPException(400, str(error))
     parts, manifest = await reference_content(references)
+    provider.body({'model': payload.model, 'max_tokens': 6000,
+                   'messages': [{'role': 'user', 'content': parts}]})
     counts = references.counts()
     aspect = payload.aspect_ratio.split()[0]
     try:
@@ -139,15 +141,15 @@ async def enhance(payload: EnhanceRequest):
         raise HTTPException(400, 'Invalid output aspect ratio')
     try:
         async with httpx.AsyncClient(timeout=180) as client:
-            headers = {'Authorization': f'Bearer {key}'}
+            headers = provider.headers
             mode = payload.job_type
             if not payload.frame_mode and mode == 'auto':
                 mode = 'standard'
                 if counts['video'] and counts['image']:
-                    classification = await client.post('https://openrouter.ai/api/v1/chat/completions', headers=headers,
-                        json={'model': 'google/gemini-2.5-flash-lite', 'max_tokens': 6, 'temperature': 0,
+                    classification = await client.post(provider.url, headers=headers,
+                        json=provider.body({'model': 'google/gemini-2.5-flash-lite', 'max_tokens': 6, 'temperature': 0,
                               'messages': [{'role': 'system', 'content': (PROMPTS/'classifier.txt').read_text(encoding='utf-8')},
-                                           {'role': 'user', 'content': payload.prompt}]})
+                                           {'role': 'user', 'content': payload.prompt}]}))
                     if classification.status_code == 200:
                         answer = classification.json().get('choices', [{}])[0].get('message', {}).get('content') or ''
                         mode = 'replacement' if 'REPLACEMENT' in answer.upper() else 'standard'
@@ -163,11 +165,11 @@ async def enhance(payload: EnhanceRequest):
                 user += '\n\nReference manifest:\n' + '\n'.join(manifest)
             if notes := role_notes(payload.references):
                 user += '\n\nReference preprocessing contract:\n' + '\n'.join(notes)
-            result = await client.post('https://openrouter.ai/api/v1/chat/completions', headers=headers,
-                json={'model': payload.model, 'max_tokens': 6000, 'temperature': 0.4,
+            request_body = provider.body({'model': payload.model, 'max_tokens': 6000, 'temperature': 0.4,
                       'reasoning': {'effort': 'none'},
                       'messages': [{'role': 'system', 'content': system},
                                    {'role': 'user', 'content': [{'type': 'text', 'text': user}, *parts]}]})
+            result = await client.post(provider.url, headers=headers, json=request_body)
         if result.status_code != 200:
             raise HTTPException(502, f'Prompt provider returned HTTP {result.status_code}')
         prompt = director.clean_output(result.json()['choices'][0]['message']['content'])
@@ -175,6 +177,6 @@ async def enhance(payload: EnhanceRequest):
             prompt = re.sub(r'\bflush\b', '', prompt, flags=re.IGNORECASE).strip()
         if not prompt or len(prompt) > 24000:
             raise ValueError('Empty or oversized prompt')
-        return {'prompt': prompt, 'model': payload.model, 'mode': mode}
+        return {'prompt': prompt, 'model': request_body['model'], 'mode': mode}
     except (httpx.HTTPError, KeyError, TypeError, ValueError):
         raise HTTPException(502, 'Prompt provider returned an invalid response or timed out')

@@ -31,3 +31,7 @@ In particular:
 
 Before redistributing a built worker image or model bundle, review the exact
 pinned revisions and include every notice required by those upstream works.
+
+The reference-preprocessing subset under `runtime/h3/source-overlays/custom_nodes/ComfyUI-TensorMaster-Preprocessors` is MIT licensed, copyright 2026 Tensor Master contributors. Its LICENSE is retained alongside the source. Model weights and their licenses remain separate.
+
+The optional H3 Character Swap v1.5 adapter is provided by Akatz Labs at https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA under the MiniMax H3 Community License Agreement. Weights are downloaded separately from a pinned revision; they are not redistributed in this repository.

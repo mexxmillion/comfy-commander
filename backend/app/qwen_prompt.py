@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from .prompt_secret import read_key
+from . import llm
 
 
 class EnhanceRequest(BaseModel):
@@ -14,11 +15,7 @@ class EnhanceRequest(BaseModel):
     reference_count: int = Field(default=0, ge=0, le=10)
     aspect_ratio: str = Field(default="1:1 (Square)", max_length=64)
     megapixels: float = Field(default=1, ge=0.1, le=16)
-    model: Literal[
-        "google/gemini-3-flash-preview",
-        "google/gemini-2.5-flash-lite",
-        "x-ai/grok-4.3",
-    ] = "google/gemini-3-flash-preview"
+    model: str = Field(default="google/gemini-3-flash-preview", min_length=1, max_length=200)
 
 
 def system_prompt(mode: str, reference_count: int) -> str:
@@ -50,9 +47,7 @@ async def enhance(payload: EnhanceRequest) -> dict:
         raise HTTPException(400, "Text-to-image cannot include references")
     if payload.mode == "image-edit" and not payload.reference_count:
         raise HTTPException(400, "Image edit needs at least one reference")
-    key = read_key()
-    if not key:
-        raise HTTPException(409, "Qwen prompt enhancement needs the controller OpenRouter credential")
+    provider = llm.connection(read_key)
     context = (
         f"Output canvas: {payload.aspect_ratio}, approximately {payload.megapixels:g} megapixels.\n"
         f"User brief:\n{payload.prompt.strip()}"
@@ -60,9 +55,9 @@ async def enhance(payload: EnhanceRequest) -> dict:
     try:
         async with httpx.AsyncClient(timeout=90) as client:
             response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}"},
-                json={
+                provider.url,
+                headers=provider.headers,
+                json=provider.body({
                     "model": payload.model,
                     "messages": [
                         {"role": "system", "content": system_prompt(payload.mode, payload.reference_count)},
@@ -70,12 +65,12 @@ async def enhance(payload: EnhanceRequest) -> dict:
                     ],
                     "temperature": 0.4,
                     "max_tokens": 2200,
-                },
+                }),
             )
         if response.status_code != 200:
             raise HTTPException(502, f"Prompt provider returned HTTP {response.status_code}")
         rewritten = clean_result(response.json()["choices"][0]["message"]["content"])
-        return {"prompt": rewritten, "model": payload.model, "mode": payload.mode}
+        return {"prompt": rewritten, "model": provider.settings.model if provider.settings.provider == 'compatible' else payload.model, "mode": payload.mode}
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, TypeError, ValueError):

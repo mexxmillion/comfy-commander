@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import json
-import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -17,11 +17,12 @@ from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from runtime.h3.managed_worker import eligible_offer, preflight
+from runtime.h3.managed_worker import eligible_offer, preflight, validate_startup_scripts
 
 from .auth import MIN_PASSWORD_LENGTH, ensure_token, password_record, session_signature
 from .config import get_settings
@@ -30,6 +31,7 @@ from .providers import runpod
 from .providers.base import OfferSearch
 from .providers.vast import VastProvider
 from .rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS, estimate, vast_estimate
+from .rental_preferences import GPUClass, filter_offers, read_rental_preferences, selected_gpu_preferences
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "managed-rental.json"
@@ -51,6 +53,45 @@ class Unlock(BaseModel):
 class PasswordLogin(BaseModel):
     password: str = Field(min_length=1, max_length=256)
     remember: bool = True
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256, repr=False)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256, repr=False)
+
+
+class PasswordRecovery(BaseModel):
+    recovery_key: str = Field(min_length=1, max_length=256, repr=False)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256, repr=False)
+
+
+def _password_attempt(request: Request) -> None:
+    with LOGIN_LOCK:
+        now = time.monotonic()
+        peer = request.client.host if request.client else 'unknown'
+        attempts = [stamp for stamp in LOGIN_ATTEMPTS.get(peer, []) if now - stamp < 60]
+        LOGIN_ATTEMPTS[peer] = attempts
+        if len(attempts) >= 5:
+            raise HTTPException(429, "Too many attempts. Try again in one minute.")
+        attempts.append(now)
+
+
+def _password_matches(password: str, saved: str) -> bool:
+    record = json.loads(saved)
+    digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(record["salt"]), n=16384, r=8, p=1).hex()
+    return hmac.compare_digest(digest, record["hash"])
+
+
+def _save_changed_password(password: str) -> JSONResponse:
+    try:
+        identity = authority(get_settings().token_file)
+        identity.set_password(password_record(password))
+        identity.export()
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        raise HTTPException(503, "Password update could not be completed. Try signing in before retrying.") from exc
+    response = JSONResponse({"ok": True, "message": "Password updated. All devices are signed out. Sign in with your new password."})
+    response.delete_cookie(COOKIE)
+    return response
 
 
 def _password_path() -> Path:
@@ -117,14 +158,7 @@ async def password_setup(payload: PasswordLogin, request: Request) -> JSONRespon
 async def password_login(payload: PasswordLogin, request: Request) -> JSONResponse:
     if not _origin_ok(request):
         raise HTTPException(403, "Same-origin request required")
-    with LOGIN_LOCK:
-        now = time.monotonic()
-        peer = request.client.host if request.client else 'unknown'
-        attempts = [stamp for stamp in LOGIN_ATTEMPTS.get(peer, []) if now - stamp < 60]
-        LOGIN_ATTEMPTS[peer] = attempts
-        if len(attempts) >= 5:
-            raise HTTPException(429, "Too many attempts. Try again in one minute.")
-        attempts.append(now)
+    _password_attempt(request)
     try:
         saved = authority(get_settings().token_file).setting('password')
     except (OSError, RuntimeError, sqlite3.Error) as exc:
@@ -136,6 +170,41 @@ async def password_login(payload: PasswordLogin, request: Request) -> JSONRespon
     if not hmac.compare_digest(digest, record["hash"]):
         raise HTTPException(401, "Incorrect password")
     return _password_cookie(payload.remember, request)
+
+
+@router.post("/password-change")
+async def change_password(payload: PasswordChange, request: Request) -> JSONResponse:
+    require_admin(request, mutation=True)
+    _password_attempt(request)
+    try:
+        saved = authority(get_settings().token_file).setting('password')
+        valid = bool(saved) and _password_matches(payload.current_password, saved)
+    except (OSError, RuntimeError, sqlite3.Error, ValueError, KeyError) as exc:
+        raise HTTPException(503, "Sign-in store is unavailable; restore it before changing your password.") from exc
+    if not valid:
+        raise HTTPException(401, "Current password is incorrect")
+    return _save_changed_password(payload.new_password)
+
+
+@router.get("/password-recovery")
+async def password_recovery_info(request: Request) -> dict:
+    local = _local_setup(request)
+    return {"host_only": True, "available": local,
+            "recovery_key_file": str(get_settings().token_file) if local else None}
+
+
+@router.post("/password-recover")
+async def recover_password(payload: PasswordRecovery, request: Request) -> JSONResponse:
+    if not _origin_ok(request) or not _local_setup(request):
+        raise HTTPException(403, "Recover your password on the host PC at http://127.0.0.1:8000/settings#access")
+    _password_attempt(request)
+    try:
+        principal = authority(get_settings().token_file).principal(payload.recovery_key)
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        raise HTTPException(503, "Saved identity is unavailable; restore it before recovering your password.") from exc
+    if not principal or principal['role'] != 'bootstrap':
+        raise HTTPException(401, "Recovery key is incorrect")
+    return _save_changed_password(payload.new_password)
 
 
 @router.post("/logout")
@@ -164,6 +233,9 @@ class Launch(BaseModel):
     max_minutes: int = Field(default=90, ge=15, le=180)
     max_price_per_hour: float = Field(gt=0)
     count: int = Field(default=1, ge=1, le=10)
+    max_budget_usd: float | None = Field(default=None, gt=0, le=10000, allow_inf_nan=False)
+    gpu_class: GPUClass | None = None
+    gpu_name: str | None = Field(default=None, max_length=100)
 
 
 def _origin_ok(request: Request) -> bool:
@@ -245,6 +317,23 @@ TERMINAL = {"destroyed", "failed", "creation_unknown"}
 def _decorate(record: dict, path: Path) -> dict:
     record = dict(record)
     record.setdefault("rental_id", path.stem)
+    record["failure"] = bool(record.get("error") or record.get("status") in {"failed", "destroy_failed", "creation_unknown"}
+                             or "failed" in str(record.get("destroy_reason", "")).lower())
+    record["failure_message"] = record.get("error") or record.get("destroy_reason") or ""
+    record["failure_message"] = redact_log(record["failure_message"])
+    if record.get("destroyed_at") and record.get("destroy_reason"):
+        record["cleanup_explanation"] = "Commander terminated this instance: " + redact_log(str(record["destroy_reason"]))
+    else:
+        record["cleanup_explanation"] = ""
+    lifecycle = path.with_suffix(".log")
+    if record["failure"] and lifecycle.is_file():
+        tail = lifecycle.read_text(encoding="utf-8", errors="replace")[-8000:]
+        if "pipefail" in tail and "invalid option name" in tail:
+            record["failure_message"] = "Commander deployment bug: the startup script had Windows line endings; Linux rejected pipefail."
+            record["failed_stage"] = "worker startup (model download completed)" if record.get("models_ready_at") else "startup"
+    if record.get("error"):
+        record["error"] = redact_log(record["error"])
+    record["cleanup_status"] = ("Instance terminated" if record.get("destroyed_at") else "No GPU allocated" if not record.get("instance_id") and record.get("status") != "creation_unknown" else "Check provider; instance may still be billable")
     try:
         if "rented_at" in record:
             from datetime import UTC, datetime
@@ -301,6 +390,22 @@ def active_rentals() -> list[dict]:
             if item.get("status") not in TERMINAL and not item.get("destroyed_at")]
 
 
+def worker_health(record: dict, workers: list[dict]) -> dict:
+    record = dict(record, worker_warning="")
+    if record.get("destroyed_at") or record.get("status") in TERMINAL or not record.get("instance_id"):
+        return record
+    worker_id = record.get("worker_id") or f"{record.get('provider', 'vast')}-{record['instance_id']}"
+    worker = next((item for item in workers if item["id"] == worker_id), None)
+    if worker and worker.get("runtime") != f"pocket-h3-cloud-{record['profile']}":
+        record["worker_warning"] = f"Worker {worker_id} registered an incompatible runtime. Expected pocket-h3-cloud-{record['profile']}. It cannot serve this profile."
+    elif worker and worker.get("status") in {"offline", "unhealthy"}:
+        age = round(float(worker.get("heartbeat_age_seconds") or 0))
+        record["worker_warning"] = f"Worker {worker_id} is {worker['status']} (last heartbeat {age}s ago). Check Worker and ComfyUI logs; the instance may still be billable."
+    elif worker is None and (record.get("worker_ready_at") or record.get("status") == "ready"):
+        record["worker_warning"] = f"Worker {worker_id} disappeared after becoming ready. Check logs and provider state; the instance may still be billable."
+    return record
+
+
 def _state_path(rental_id: str) -> Path:
     if STATE != DEFAULT_STATE:
         return STATE
@@ -315,8 +420,16 @@ def _state_path(rental_id: str) -> Path:
 def build_bundle() -> None:
     # Fail before invoking the builder (and before any provider action). Do not
     # relay captured subprocess output: it can contain private paths or secrets.
-    for name in ("COMFYUI_ROOT", "COMFYUI_PYTHON"):
-        value = os.environ.get(name, "").strip()
+    settings = get_settings()
+    if settings.cloud_runtime_source == "community":
+        from runtime.h3.build_community import build_bundle as build_community_bundle
+        try:
+            build_community_bundle(ROOT / "state/h3-cloud-runtime.tar.gz", settings.community_lora_manifest)
+        except (OSError, ValueError, RuntimeError, httpx.HTTPError) as exc:
+            raise RuntimeError("Public H3 runtime packaging failed. Check network access and the pinned runtime sources. No GPU rental was started.") from exc
+        return
+    sources = {"COMFYUI_ROOT": settings.comfyui_root, "COMFYUI_PYTHON": settings.comfyui_python}
+    for name, value in sources.items():
         if not value:
             raise RuntimeError(
                 f"Cloud runtime packaging requires {name}. Configure it on the controller "
@@ -333,6 +446,8 @@ def build_bundle() -> None:
     script = ROOT / "runtime" / "h3" / "build_local.ps1"
     manifest = str(get_settings().community_lora_manifest)
     result = subprocess.run(["pwsh", "-NoProfile", "-File", str(script), "-BundleOnly",
+                             "-ComfyRoot", str(settings.comfyui_root),
+                             "-LocalPython", str(settings.comfyui_python),
                              "-CommunityLoraManifest", manifest],
                             cwd=ROOT, capture_output=True, text=True, timeout=180, check=False,
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -379,29 +494,62 @@ async def logs(kind: str, request: Request, rental_id: str | None = None) -> Pla
     if not path.is_file():
         raise HTTPException(status_code=404)
     content = path.read_text(encoding="utf-8", errors="replace")[-250_000:]
+    return PlainTextResponse(redact_log(content))
+
+
+def redact_log(content: str) -> str:
+    from .credential_paths import provider_secret
+    for provider in ("vast", "runpod", "huggingface"):
+        secret = provider_secret(provider)
+        if secret:
+            content = content.replace(secret, "[REDACTED]")
     for secret_path in (get_settings().vast_api_key_file, get_settings().huggingface_token_file,
                         get_settings().runpod_api_key_file, get_settings().token_file):
         if secret_path.is_file():
             secret = secret_path.read_text(encoding="utf-8").strip()
             if secret:
                 content = content.replace(secret, "[REDACTED]")
-    return PlainTextResponse(content)
+    content = re.sub(r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----", "[REDACTED PRIVATE KEY]", content, flags=re.S)
+    content = re.sub(r"\b(?:hf_|sk-|ghp_|github_pat_)[A-Za-z0-9_-]{16,}", "[REDACTED]", content)
+    content = re.sub(r"(?i)(Bearer\s+)[A-Za-z0-9._~-]+", r"\1[REDACTED]", content)
+    return re.sub(r"(https?://[^\s?]+)\?[^\s]+", r"\1?[REDACTED QUERY]", content)
+
+
+@router.get("/diagnostics/{rental_id}")
+async def diagnostics(rental_id: str, request: Request) -> dict:
+    _admin(request)
+    path = _state_path(rental_id)
+    record = _decorate(json.loads(path.read_text(encoding="utf-8")), path)
+    result = {key: record.get(key) for key in ("rental_id", "provider", "profile", "status", "instance_id", "failure_message", "failed_stage", "cleanup_status", "requested_at", "failed_at", "destroyed_at")}
+    logs = []
+    for label, suffix in (("Lifecycle", ""), ("Runtime setup", "-prepare"), ("Models", "-models"), ("Worker", "-worker"), ("ComfyUI", "-comfy")):
+        logfile = path.with_name(path.stem + suffix + ".log")
+        if logfile.is_file():
+            lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]
+            logs.append(f"=== {label} ===\n" + "\n".join(lines)[-30000:])
+    result["log"] = redact_log("\n\n".join(logs)) or "No log output yet. The rental record is retained."
+    result["failure_message"] = redact_log(str(result.get("failure_message") or ""))
+    return result
 
 
 @router.get("/offers")
-async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod", profile: str = "ref2v-int8") -> dict:
+async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod", profile: str = "ref2v-int8", gpu_class: GPUClass | None = None) -> dict:
     _admin(request)
+    from .profile_import import rental_base
+    profile = rental_base(profile)
     settings = get_settings()
-    if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
+    preferences = selected_gpu_preferences(read_rental_preferences(), gpu_class)
+    if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     if provider == "runpod":
         if not runpod.configured():
             return {"offers": [], "configured": False,
                     "message": "Connect RunPod in Setup first. No Pod is rented when you connect."}
         try:
-            available = runpod.client().offers(settings.max_gpu_price_per_hour)
+            available = runpod.client().offers(preferences.max_price_per_hour)
             for item in available:   # Runpod does not bill data transfer: the model sync is free
                 item.update(estimate(float(item["price_per_hour"]), 0.0, profile))
+            available = filter_offers(available, preferences)
             return {"offers": available, "configured": True,
                     "message": None if available else
                     f"No supported Runpod Secure Cloud GPU is in stock under the ${settings.max_gpu_price_per_hour:.2f}/hr safety cap. Refresh later or choose Vast.ai."}
@@ -410,7 +558,7 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
     from .credential_paths import provider_secret
     key = provider_secret("vast", settings.vast_api_key_file)
     results = VastProvider(key).search_offers(OfferSearch(
-        VAST_GPUS, MIN_CLOUD_VRAM_GB, settings.max_gpu_price_per_hour, 0.98, 150,
+        VAST_GPUS, max(MIN_CLOUD_VRAM_GB, preferences.minimum_vram_gb), preferences.max_price_per_hour, 0.98, 150,
         extra_query=f"inet_down>={VAST_MIN_INET_DOWN} direct_port_count>=1 cuda_max_good>=13"))
     # Datacenter and verified non-datacenter hosts alike, as long as the download is fast enough for the model sync
     available = [offer for offer in results if eligible_offer(
@@ -426,6 +574,7 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
                     "datacenter": item.raw.get("datacenter") is True,
                     "location": item.raw.get("geolocation") or "", **vast_estimate(item.raw, profile)} for item in available),
                   key=lambda row: row["first_hour_cost"])
+    rows = filter_offers(rows, preferences)
     return {"offers": rows[:20],
             "message": None if rows else
             f"No Vast offer meets the safety filters (>= {VAST_MIN_INET_DOWN} Mbps download, model download <= ${settings.max_download_cost_per_gb:g}/GB). Refresh later or choose Runpod.",
@@ -437,9 +586,18 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
 @router.post("/launch", status_code=202)
 async def launch(payload: Launch, request: Request) -> dict:
     _admin(request, mutation=True)
-    if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}:
+    from .profile_import import rental_base
+    imported_profile = payload.profile if payload.profile.startswith("profile-") else None
+    payload.profile = rental_base(payload.profile)
+    if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     settings = get_settings()
+    preferences = selected_gpu_preferences(read_rental_preferences(), payload.gpu_class)
+    if payload.max_minutes > preferences.max_minutes or payload.max_price_per_hour > preferences.max_price_per_hour:
+        raise HTTPException(422, "Requested rental exceeds saved duration or hourly price limits; update Settings first")
+    budget = min(preferences.max_budget_usd, payload.max_budget_usd or preferences.max_budget_usd)
+    if payload.count * payload.max_price_per_hour * payload.max_minutes / 60 > budget:
+        raise HTTPException(422, "Requested GPU time exceeds the total launch budget")
     if payload.max_price_per_hour > settings.max_gpu_price_per_hour:
         raise HTTPException(status_code=422, detail="Price ceiling exceeds the configured GPU limit")
     if payload.provider == "vast" and (not isinstance(payload.offer_id, int) or payload.offer_id <= 0):
@@ -453,6 +611,7 @@ async def launch(payload: Launch, request: Request) -> dict:
     def prepare_runtime() -> None:
         with BUILD_LOCK:
             build_bundle()
+            validate_startup_scripts()
             if payload.provider == "runpod":
                 from runtime.h3.runpod_worker import preflight as runpod_preflight
                 runpod_preflight()
@@ -485,7 +644,14 @@ async def launch(payload: Launch, request: Request) -> dict:
                           "provider": payload.provider, "profile": payload.profile,
                           "max_minutes": payload.max_minutes,
                           "max_price_per_hour": payload.max_price_per_hour,
+                          "max_budget_usd": budget / payload.count,
+                          "gpu_class": preferences.gpu_class,
+                          "minimum_vram_gb": preferences.minimum_vram_gb,
                           "requested_at": datetime.now(UTC).isoformat()}
+                if payload.gpu_name:
+                    record["gpu_name"] = payload.gpu_name
+                if imported_profile:
+                    record["imported_profile"] = imported_profile
                 if payload.provider == "vast":     # same host rules as the offer list
                     record.update(allow_non_datacenter=True, min_inet_down=VAST_MIN_INET_DOWN)
                 state_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")

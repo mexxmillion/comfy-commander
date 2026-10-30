@@ -11,68 +11,74 @@
       </div>
     </header>
 
-    <nav class="mode-switch" aria-label="Studio mode">
+    <nav class="mode-switch" aria-label="Studio mode" hidden>
       <button type="button" data-mode="h3" class="active">H3 Video</button>
       <button type="button" data-mode="qwen">Qwen Image 2.1</button>
       <button id="sources-button" type="button">Sources</button>
       <button id="gallery-button" type="button">Gallery</button>
-      <a id="monitor-link" href="#monitor">Farm monitor</a>
     </nav>
 
     <p id="draft-status" class="hint" role="status">Your last draft is saved automatically in this browser.</p>
     <form id="studio-form">
-      <div class="segmented h3-only h3-type-switch" role="radiogroup" aria-label="H3 workflow">
-        <label><input type="radio" name="h3-type" value="reference" checked><span><strong>Reference video</strong><small>Images, clips and audio</small></span></label>
-        <label hidden><input type="radio" name="h3-type" value="frames"><span><strong>First / last frame</strong><small>Not included in Community Edition</small></span></label>
+      <div class="segmented h3-only h3-type-switch" role="radiogroup" aria-label="H3 video mode">
+        <label><input type="radio" name="h3-mode" value="standard" checked><span><strong>References</strong><small>Text, images, video, audio</small></span></label>
+        <label><input type="radio" name="h3-mode" value="frames"><span><strong>Frames</strong><small>Optional start / end</small></span></label>
+        <label><input type="radio" name="h3-mode" value="replacement"><span><strong>Motion control</strong><small>One image + one video</small></span></label>
       </div>
       <section class="panel hero-panel">
-        <div id="single-prompt"><div class="section-label"><span>01</span><h2 id="prompt-title">User prompt</h2><button id="clear-prompt" class="text-button" type="button" aria-label="Clear prompt" aria-controls="direction">Clear</button></div>
-        <textarea id="direction" rows="5" required placeholder="Replace the person in &lt;Video 1&gt; with the person from &lt;Picture 1&gt;. Keep the camera movement, lighting, clothes and original sound."></textarea>
+        <div id="single-prompt"><div class="section-label"><span>01</span><h2 id="prompt-title">Describe your video</h2><button id="clear-prompt" class="text-button" type="button" aria-label="Clear prompt" aria-controls="direction">Clear</button></div>
+        <textarea id="direction" rows="5" required placeholder="Describe the video you want. Add references below, or leave them empty for text-to-video."></textarea>
         <label id="qwen-negative-field" class="field qwen-only" hidden><span>Negative prompt · native mode only</span><textarea id="qwen-negative" rows="2" placeholder="Optional. Leave blank when CFG is 1."></textarea></label>
         </div>
-        <section class="h3-only creative-master" aria-label="Creative Engine">
-          <label class="switch-row"><input id="creative-enabled" type="checkbox" disabled><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Creative Engine</strong><small id="creative-availability">Loading Creative Engine…</small></span></label>
-          <div id="creative-controls" hidden>
-            <label class="field"><span>Creative brief</span><textarea id="creative-brief" rows="4" disabled placeholder="Create five distinct toothpaste commercials using my product images."></textarea></label>
-            <div class="compact-grid"><label class="field"><span>Variations</span><select id="creative-count"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select></label><label class="switch-row"><input id="creative-review" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Review before queuing</strong><small>On: generate ideas only. Off: generate and queue renders.</small></span></label></div>
-            <label class="field"><span>Creative direction · what may change, what must stay fixed</span><textarea id="creative-direction" rows="2" placeholder="Keep the product identity. Explore different stories, lighting and camera motion."></textarea></label>
-            <label class="field"><span>Reference notes</span><textarea id="creative-reference-notes" rows="2" placeholder="Describe your supplied images, clips, audio or frame endpoints."></textarea></label>
-            <label class="field"><span>Creative model</span><select id="creative-model"><option value="google/gemini-3-flash-preview">Gemini 3 Flash</option><option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option><option value="x-ai/grok-4.3">Grok 4.3 · budget, edgier</option></select></label>
-            <p class="hint">Develops distinct ideas, then sends each through the normal H3 AI enhancer using the selected Creative model and your reference media, including crop/trim settings (OpenRouter API charges apply). Reference notes define what each asset supplies. All original inputs stay attached to each render. Local targets use local workers; no automatic GPU rental.</p>
-            <p class="hint">One idea call plus one enhancement call per video variation. Review shows each original idea and its editable final prompt before queuing. Still images use their dedicated image writer. Queued prompts render exactly as reviewed.</p>
-          </div>
-          <details id="creative-library"><summary>Creative Engine batches</summary><div class="creative-toolbar"><select id="creative-history" aria-label="Saved creative batch"><option value="">Choose a saved batch</option></select><button id="creative-restore" type="button" class="text-button" hidden>Restore brief &amp; setup</button><button id="creative-refresh" type="button" class="text-button">Refresh batches</button><button id="creative-clear" type="button" class="text-button">Clear loaded batch</button></div><p id="creative-status" role="status"></p><div id="creative-cards"></div><button id="creative-queue" type="button" class="text-button" hidden>Queue selected concepts</button></details>
-        </section>
+      <section id="prompt-tools" class="prompt-tools" aria-label="AI creative tools">
         <div class="prompt-options h3-only">
           <label class="switch-row">
             <input id="ai-enhance" type="checkbox" checked>
             <span class="switch-track" aria-hidden="true"><i></i></span>
             <span><strong>AI enhance prompt</strong><small id="ai-enhance-description">Use the H3 Reference Manager writer</small></span>
           </label>
-          <label id="ai-model-field" class="field model-field"><span>OpenRouter model</span>
+          <details class="ai-model-settings"><summary>AI model &amp; options</summary><label id="ai-model-field" class="field model-field"><span>OpenRouter model</span>
             <select id="ai-model">
               <option value="google/gemini-3-flash-preview">Gemini 3 Flash</option>
               <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite · cheaper</option>
               <option value="x-ai/grok-4.3">Grok 4.3 · budget, edgier</option>
             </select>
-          </label>
+          </label><p id="prompt-mode-note" class="hint h3-only">Uses your saved OpenRouter key and the Reference Manager's packaged H3 system prompt. The standalone word ‘flush’ is removed from the AI result.</p></details>
         </div>
+<section class="h3-only creative-master" aria-label="Creative Engine">
+          <label class="switch-row"><input id="creative-enabled" type="checkbox" disabled><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Creative Engine</strong><small id="creative-availability">Loading Creative Engine…</small></span></label>
+          <div id="creative-controls" hidden>
+            <label class="field"><span>Creative brief</span><textarea id="creative-brief" rows="4" disabled placeholder="Create five distinct toothpaste commercials using my product images."></textarea></label>
+            <div class="compact-grid"><label class="field"><span>Variations</span><select id="creative-count"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select></label>
+        <label class="switch-row"><input id="creative-review" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Review before queuing</strong><small>On: generate ideas only. Off: generate and queue renders.</small></span></label></div>
+            <details class="creative-options"><summary>Creative options · direction, references &amp; model</summary>
+            <label class="field"><span>Creative direction · what may change, what must stay fixed</span><textarea id="creative-direction" rows="2" placeholder="Keep the product identity. Explore different stories, lighting and camera motion."></textarea></label>
+            <label class="field"><span>Reference notes</span><textarea id="creative-reference-notes" rows="2" placeholder="Describe your supplied images, clips, audio or frame endpoints."></textarea></label>
+            <label class="field"><span>Creative model</span><select id="creative-model"><option value="google/gemini-3-flash-preview">Gemini 3 Flash</option><option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option><option value="x-ai/grok-4.3">Grok 4.3 · budget, edgier</option></select></label>
+            <p class="hint">Develops distinct ideas, then sends each through the normal H3 AI enhancer using the selected Creative model and your reference media, including crop/trim settings (OpenRouter API charges apply). Reference notes define what each asset supplies. All original inputs stay attached to each render. Local targets use local workers; no automatic GPU rental.</p>
+            <p class="hint">One idea call plus one enhancement call per video variation. Review shows each original idea and its editable final prompt before queuing. Still images use their dedicated image writer. Queued prompts render exactly as reviewed.</p>
+            </details>
+          </div>
+
+        </section>
+
         <div class="prompt-options qwen-only" hidden>
           <label class="switch-row">
             <input id="qwen-enhance" type="checkbox" checked>
             <span class="switch-track" aria-hidden="true"><i></i></span>
             <span><strong>AI enhance prompt</strong><small id="qwen-enhance-description">Rewrite for Qwen Image 2.1 before generation</small></span>
           </label>
-          <label id="qwen-ai-model-field" class="field model-field"><span>OpenRouter model</span>
+          <details class="ai-model-settings"><summary>AI model &amp; options</summary><label id="qwen-ai-model-field" class="field model-field"><span>OpenRouter model</span>
             <select id="qwen-ai-model">
               <option value="google/gemini-3-flash-preview">Gemini 3 Flash</option>
               <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite · cheaper</option>
               <option value="x-ai/grok-4.3">Grok 4.3 · budget, edgier</option>
             </select>
           </label>
-          <p class="hint">Text-to-image becomes a complete scene prompt. Image edit uses Qwen's ordered &lt;image1&gt;, &lt;image2&gt; references and preserves anything you did not ask to change. Images stay local; only your text and generation settings are sent.</p>
+          <p class="hint">Text-to-image becomes a complete scene prompt. Image edit uses Qwen's ordered &lt;image1&gt;, &lt;image2&gt; references and preserves anything you did not ask to change. Images stay local; only your text and generation settings are sent.</p></details>
         </div>
-        <details id="ai-generated-panel" class="ai-generated" hidden>
+        <details id="creative-library" class="h3-only"><summary>Creative Engine batches</summary><div class="creative-toolbar"><select id="creative-history" aria-label="Saved creative batch"><option value="">Choose a saved batch</option></select><button id="creative-restore" type="button" class="text-button" hidden>Restore brief &amp; setup</button><button id="creative-refresh" type="button" class="text-button">Refresh batches</button><button id="creative-clear" type="button" class="text-button">Clear loaded batch</button></div><p id="creative-status" role="status"></p><div id="creative-cards"></div><button id="creative-queue" type="button" class="text-button" hidden>Queue selected concepts</button></details>
+<details id="ai-generated-panel" class="ai-generated" hidden>
           <summary><span>AI</span><strong>AI enhanced prompt</strong><small>View or edit the separate prompt used for rendering</small></summary>
           <div class="ai-generated-body">
             <div class="ai-generated-actions"><button id="regenerate-ai-prompt" class="text-button" type="button">Generate again</button><button id="clear-ai-prompt" class="text-button" type="button">Clear</button></div>
@@ -81,26 +87,34 @@
             <p id="ai-generated-status" class="hint" role="status">Your original prompt above is never replaced.</p>
           </div>
         </details>
-        <p id="prompt-mode-note" class="hint h3-only">Uses your saved OpenRouter key and the Reference Manager's packaged H3 system prompt. The standalone word ‘flush’ is removed from the AI result.</p>
-        <div class="job-type h3-only reference-mode-only">
-          <span>Prompt mode</span>
-          <div class="segmented segmented-three" role="radiogroup" aria-label="H3 prompt mode">
-            <label><input type="radio" name="job-type" value="auto" checked><span><strong>Auto</strong><small>Choose for me</small></span></label>
-            <label><input type="radio" name="job-type" value="replacement"><span><strong>Replacement</strong><small>Swap identity/object</small></span></label>
-            <label><input type="radio" name="job-type" value="standard"><span><strong>Standard</strong><small>Full scene prompt</small></span></label>
-          </div>
-        </div>
+
+
+
+
+      </section>
+
       </section>
 
       <section class="panel reference-mode-section">
         <div class="section-label"><span>02</span><h2 id="reference-section-title">References · optional</h2></div>
-        <label class="dropzone" for="reference-files">
+        <label id="general-reference-upload" class="dropzone" for="reference-files">
           <input id="reference-files" type="file" accept="image/*,video/*,audio/*" multiple>
           <div class="upload-icon" aria-hidden="true">＋</div>
           <strong id="reference-title">Choose photos, videos or audio</strong>
           <small id="reference-help">No reference creates video from your prompt · up to 9 photos, 3 videos and 3 audio files</small>
         </label>
+        <div id="motion-reference-inputs" class="frame-inputs" hidden>
+          <label class="frame-slot" for="motion-video"><span>Motion video</span><input id="motion-video" type="file" accept="video/*"><strong id="motion-video-label">Add motion to copy</strong><small>Exactly one source video</small></label>
+          <label class="frame-slot" for="motion-image"><span>Character image</span><input id="motion-image" type="file" accept="image/*"><strong id="motion-image-label">Add your character</strong><small>Exactly one image</small></label>
+        </div>
         <div id="reference-list" class="reference-list" aria-live="polite"></div>
+        <div id="replacement-settings" class="h3-only reference-mode-only" hidden>
+          <label class="field"><span>Person to replace · SAM3 tracking prompt</span><input id="replacement-target" type="text" minlength="3" maxlength="300" value="person" placeholder="The person in the red shirt"></label>
+          <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength 1.0 · off by default</small></span></label>
+          <button id="use-character-swap-profile" class="text-button" type="button">Use v1.5 starter profile</button><button id="copy-character-swap-profile" class="text-button" type="button">Copy profile JSON</button>
+          <p class="hint">Requires exactly one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
+        </div>
+
         <label id="h3-audio-lock-row" class="switch-row h3-only reference-mode-only">
           <input id="h3-audio-lock" type="checkbox">
           <span class="switch-track" aria-hidden="true"><i></i></span>
@@ -108,37 +122,25 @@
         </label>
       </section>
 
+
+
+
       <section class="panel frame-mode-section" hidden>
-        <div class="section-label"><span>02</span><h2>Set keyframes</h2></div>
+        <div class="section-label"><span>02</span><h2>Start / end frames</h2></div>
         <p class="hint frame-hint">Add a first frame, a last frame, both, or neither for text-to-video.</p>
         <div class="frame-inputs">
-          <label class="frame-slot" for="first-frame"><span>First frame · optional</span><input id="first-frame" type="file" accept="image/*"><strong id="first-frame-label">Choose image</strong><img id="first-frame-preview" alt="First frame preview" hidden></label>
-          <label class="frame-slot" for="last-frame"><span>Last frame · optional</span><input id="last-frame" type="file" accept="image/*"><strong id="last-frame-label">Choose image</strong><img id="last-frame-preview" alt="Last frame preview" hidden></label>
+          <label class="frame-slot" for="first-frame"><span>Start frame · optional</span><input id="first-frame" type="file" accept="image/*"><strong id="first-frame-label">Choose image</strong><img id="first-frame-preview" alt="First frame preview" hidden></label>
+          <label class="frame-slot" for="last-frame"><span>End frame · optional</span><input id="last-frame" type="file" accept="image/*"><strong id="last-frame-label">Choose image</strong><img id="last-frame-preview" alt="Last frame preview" hidden></label>
         </div>
         <div class="frame-actions"><button id="clear-first-frame" type="button" hidden>Clear first</button><button id="clear-last-frame" type="button" hidden>Clear last</button></div>
       </section>
 
       <section class="panel">
         <div class="section-label"><span>03</span><h2 id="settings-title">Generation settings</h2></div>
-        <div class="segmented h3-only" role="radiogroup" aria-label="Acceleration LoRA preset">
-          <label>
-            <input type="radio" name="turbo" value="4" checked>
-            <span><strong>Fast · 4 steps</strong><small>Bring-your-own 4-step Turbo + VSA</small></span>
-          </label>
-          <label>
-            <input type="radio" name="turbo" value="8">
-            <span><strong>Quality · 8 steps</strong><small>Bring-your-own 8-step Turbo + VSA</small></span>
-          </label>
-          <label>
-            <input type="radio" name="turbo" value="10">
-            <span><strong>ACC · 10 steps</strong><small>ACC 8-step LoRA · no VSA</small></span>
-          </label>
-        </div>
-        <label class="switch-row h3-only turbo-stack-toggle">
-          <input id="turbo-enabled" type="checkbox">
-          <span class="switch-track" aria-hidden="true"><i></i></span>
-          <span><strong>External acceleration LoRA</strong><small id="turbo-stack-help">4/8-step modes use your own compatible LoRA · ACC runs without VSA</small></span>
-        </label>
+
+
+
+
         <input id="h3-single-frame" type="checkbox" hidden>
         <label class="switch-row qwen-only" hidden>
           <input id="qwen-turbo" type="checkbox">
@@ -146,19 +148,10 @@
           <span><strong>Viggle Turbo · optional 6-step mode</strong><small>Off by default · native Qwen uses the official 25-step Euler/Simple recipe</small></span>
         </label>
         <div class="compact-grid">
-          <label class="field h3-only h3-model-field reference-mode-only"><span>Base H3 model</span>
-            <select id="h3-model">
-              <option value="minimax_h3_ref2va_pruned_int8_convrot.safetensors" selected>Ref2V · Community default</option>
-              <option value="fasth3_omniref_8step_pruned_int8_convrot.safetensors">FastH3 Omni · native 8 steps</option>
-              <option value="Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors">Singularity Ref2VA v1.3 INT8</option>
-            </select>
+<label id="h3-duration-field" class="field h3-only"><span>Duration · seconds</span>
+            <input id="duration" type="number" inputmode="decimal" min="0.25" max="60" step="0.25" value="5" required>
           </label>
-          <label class="field h3-only h3-model-field frame-mode-only" hidden><span>Base H3 model</span>
-            <select id="frame-h3-model" disabled>
-              <option value="minimax_h3_fl2va_pruned_int8_convrot.safetensors">FL2VA</option>
-            </select>
-          </label>
-          <label class="field visual-only"><span>Format</span>
+<label class="field visual-only"><span>Aspect ratio</span>
             <select id="aspect-ratio">
               <option value="9:16 (Portrait Widescreen)">Portrait · 9:16</option>
               <option value="16:9 (Widescreen)">Landscape · 16:9</option>
@@ -169,21 +162,21 @@
               <option value="4:3 (Standard)">Landscape · 4:3</option>
             </select>
           </label>
-          <label class="field visual-only"><span>Resolution · megapixels</span>
-            <input id="megapixels" type="number" inputmode="decimal" min="0.1" max="16" step="any" value="0.4" required>
+<label class="field visual-only"><span>Resolution · megapixels</span>
+            <input id="megapixels" type="number" inputmode="decimal" min="0.1" max="16" step="any" value="0.5" required>
           </label>
-          <label class="field h3-only"><span>Total steps · override</span>
-            <input id="total-steps" type="number" inputmode="numeric" min="1" max="10000" step="1" value="4" required>
-          </label>
-          <label id="h3-duration-field" class="field h3-only"><span>Length · seconds</span>
-            <input id="duration" type="number" inputmode="decimal" min="0.25" max="60" step="0.25" value="5" required>
-          </label>
-          <label class="field h3-only"><span>Seed · −1 is random</span>
-            <input id="seed" type="number" inputmode="numeric" min="-1" max="9007199254740991" step="1" value="-1" required>
-          </label>
-          <label id="frame-strength-field" class="field" hidden><span>FL2V Turbo strength</span>
-            <input id="frame-turbo-strength" type="number" step="0.05" value="0.5" disabled>
-          </label>
+<label class="field h3-only"><span>Quality</span><select id="h3-quality"><option value="preview" selected>Preview · fast</option><option value="normal">Normal</option><option value="hq">HQ · best quality</option><option value="custom" disabled>Advanced settings</option></select></label>
+<label class="field h3-only"><span>Bitrate / encoding</span><select id="h3-encoding"><option value="standard">Standard · smaller files</option><option value="high" selected>High · more detail</option></select><small>Adaptive bitrate</small></label>
+
+
+
+
+
+
+
+
+
+
           <label class="field qwen-only" hidden><span>Steps</span>
             <input id="qwen-steps" type="number" inputmode="numeric" min="1" max="100" step="1" value="25" data-native-steps="25" data-turbo-active="false">
           </label>
@@ -246,18 +239,60 @@
             <label id="denoise-backend-field" class="field"><span>SupaVoice backend</span><select id="denoise-backend"><option>Resemble Enhance</option><option>DeepFilterNet</option></select></label>
           </div>
         </div>
-        <p id="engine-note" class="hint">Sampler: Euler · Scheduler: simple · VSA 0.75 · Built-in model turbo · Comfy Kitchen</p>
-      </section>
 
+      </section>
+      <details id="image-advanced" class="panel qwen-only h3-advanced" hidden><summary>Advanced · model, sampling &amp; LoRAs</summary><div id="image-advanced-fields" class="compact-grid"></div></details>
+      <details id="h3-advanced" class="panel h3-only h3-advanced"><summary>Advanced · model, sampling &amp; LoRAs</summary><div class="compact-grid"><label class="field"><span>Sampler</span><select id="h3-sampler"><option value="euler">Euler</option><option value="res_multistep">RES multistep</option></select></label>        <div class="segmented h3-only" role="radiogroup" aria-label="Acceleration LoRA preset">
+          <label>
+            <input type="radio" name="turbo" value="4" checked>
+            <span><strong>Fast · 4 steps</strong><small>LightX2V Ref2V · 4-step LoRA</small></span>
+          </label>
+          <label>
+            <input type="radio" name="turbo" value="8">
+            <span><strong>Quality · 8 steps</strong><small>LightX2V Ref2V · 8-step LoRA</small></span>
+          </label>
+        </div><label class="switch-row h3-only turbo-stack-toggle">
+          <input id="turbo-enabled" type="checkbox" checked>
+          <span class="switch-track" aria-hidden="true"><i></i></span>
+          <span><strong>External acceleration LoRA</strong><small id="turbo-stack-help">LightX2V Ref2V · matching 4/8-step LoRA enabled by default</small></span>
+        </label>
+        <label class="switch-row h3-only">
+          <input id="sparse-enabled" type="checkbox">
+          <span class="switch-track" aria-hidden="true"><i></i></span>
+          <span><strong>Sparse attention</strong><small>Ref2V: off by default · FastH3 Omni: VSA by default</small></span>
+        </label>
+        <label class="field h3-only"><span>Sparse attention method</span><select id="sparse-method"><option value="sla">SLA</option><option value="vsa" selected>VSA</option><option value="sol-attn">SOL</option></select><small class="hint">VSA uses FastH3-trained weights; SLA uses SLA-trained weights. SOL uses adaptive sparsity.</small></label>
+        <label class="field h3-only h3-model-field reference-mode-only"><span>Base H3 model</span>
+            <select id="h3-model">
+              <option value="minimax_h3_ref2va_pruned_int8_convrot.safetensors" selected>Ref2V · Community default</option>
+              <option value="fasth3_omniref_8step_pruned_int8_convrot.safetensors">FastH3 Omni · native 8 steps</option>
+              <option value="Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors">Singularity Ref2VA v1.3 INT8</option>
+            </select>
+          </label>
+        <label class="field h3-only h3-model-field frame-mode-only" hidden><span>Base H3 model</span>
+            <select id="frame-h3-model" disabled>
+              <option value="minimax_h3_fl2va_pruned_int8_convrot.safetensors">FL2VA</option>
+            </select>
+          </label>
+        <label class="field h3-only"><span>Total steps · override</span>
+            <input id="total-steps" type="number" inputmode="numeric" min="1" max="10000" step="1" value="4" required>
+          </label>
+        <label class="field h3-only"><span>Seed · −1 is random</span>
+            <input id="seed" type="number" inputmode="numeric" min="-1" max="9007199254740991" step="1" value="-1" required>
+          </label>
+        <label id="frame-strength-field" class="field" hidden><span>FL2V Turbo strength</span>
+            <input id="frame-turbo-strength" type="number" step="0.05" value="0.5" disabled>
+          </label></div>
+        <p id="engine-note" class="hint">Sampler: Euler · Scheduler: simple · LightX2V Ref2V · VSA off · Comfy Kitchen</p>
       <section id="lora-panel" class="panel">
         <div class="section-label"><span>04</span><h2>Pick LoRAs</h2><button id="toggle-loras" class="text-button" type="button">Add</button></div>
-        <div id="selected-loras" class="selected-loras"><p class="empty-copy">No extra LoRAs. The matching turbo LoRA is always applied.</p></div>
+        <div id="selected-loras" class="selected-loras"><p class="empty-copy">Optional style LoRAs. The quality preset controls acceleration.</p></div>
         <div id="lora-picker" class="lora-picker" hidden>
           <label class="search"><span class="sr-only">Search LoRAs</span><input id="lora-search" type="search" placeholder="Search installed LoRAs"></label>
           <div id="lora-list" class="lora-list"></div>
         </div>
       </section>
-
+      </details>
       <section class="panel ltx-only" hidden>
         <div class="section-label"><span>03</span><h2>LTX video settings</h2></div>
         <label class="field"><span>Operation</span><select id="ltx-operation"><option value="upscale">2× Pixel Upscale</option><option value="hdr">SDR → HLG HDR</option></select></label>
@@ -331,7 +366,17 @@
 
     <dialog id="reference-isolation" aria-labelledby="isolation-title">
       <form method="dialog" class="isolation-heading"><h2 id="isolation-title">Reference processing</h2><button type="submit">Close</button></form>
-      <p class="hint">Save per-reference settings, then Generate. Processing and rendering run together; no preview is required.</p>
+      <p class="hint">Choose processing → Preview result → review the original and result → Save reference.</p>
+      <div class="isolation-actions"><button id="isolation-find" type="button">Preview result</button><button id="isolation-apply" type="button" disabled>Save reference</button></div>
+      <progress id="isolation-progress" max="100" hidden aria-label="Reference processing progress"></progress>
+      <p id="isolation-status" class="hint" role="status">Uses the worker target selected in Generate. Closing keeps submitted work in Tasks.</p>
+      <section id="reference-process-preview" aria-label="Reference processing preview">
+      <div class="isolation-previews" hidden>
+        <figure><figcaption>Original</figcaption><img id="isolation-original" alt="Original reference"></figure>
+        <figure><figcaption id="isolation-preview-label">Cutout preview</figcaption><img id="isolation-preview" alt="Isolation preview" hidden></figure>
+      </div>
+        <label class="field"><span>Preview</span><select id="isolation-view"><option value="composite">RGB · model input</option><option value="cutout">Transparent cutout</option><option value="mask">Mask</option></select></label>
+      </section>
       <label class="switch-row"><input id="isolation-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Isolate subject</span></label>
       <label class="field"><span>What to isolate</span><input id="isolation-text" type="text" maxlength="200" placeholder="shirt" value="person"></label>
       <div class="isolation-options">
@@ -343,17 +388,16 @@
       <label class="switch-row"><input id="reference-depth" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Depth Anything V2 · convert reference to depth</span></label>
       <label class="switch-row"><input id="reference-depth-invert" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Invert depth · default keeps near objects lighter</span></label>
       <label class="switch-row"><input id="reference-cache" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span>Reuse cached results · save isolation and depth for future runs</span></label>
-      <p id="isolation-status" class="hint" role="status">Uses the worker target selected in Generate. Closing keeps submitted work in Tasks.</p>
-      <div class="isolation-actions"><button id="isolation-apply" type="button">Save settings</button></div>
-      <details id="reference-process-preview"><summary>Optional preview / build cache now</summary>
-      <div class="isolation-previews" hidden>
-        <figure><figcaption>Original</figcaption><img id="isolation-original" alt="Original reference"></figure>
-        <figure><figcaption id="isolation-preview-label">Cutout preview</figcaption><img id="isolation-preview" alt="Isolation preview" hidden></figure>
-      </div>
-        <label class="field"><span>Preview</span><select id="isolation-view"><option value="composite">RGB · model input</option><option value="cutout">Transparent cutout</option><option value="mask">Mask</option></select></label>
-        <button id="isolation-find" type="button">Process &amp; cache now</button>
-      </details>
+
+
+
       <p class="hint">Your original stays unchanged. With both options enabled, depth is estimated first, then the subject mask is applied. Saved processing results are available in Sources.</p>
+    </dialog>
+    <dialog id="video-processing" aria-label="Video processing">
+      <form method="dialog"><h2>Process video reference</h2><button type="submit">Close</button></form>
+      <p id="video-processing-plan"></p><p class="hint">Resize, preserve framing, resample to 24 fps and limit to the requested output window. Runs on this controller’s CPU. The same stage is included in replacement API graphs.</p>
+      <div class="launch-actions"><button type="button" id="video-processing-preview">Process &amp; preview</button><button type="button" id="video-processing-save" disabled>Save reference</button></div>
+      <p id="video-processing-status" role="status"></p><video id="video-processing-result" controls playsinline hidden style="width:100%;max-height:45vh"></video>
     </dialog>
     <dialog id="gallery-viewer" aria-label="Job output viewer"><form method="dialog"><button type="submit">Close player</button></form><div id="gallery-viewer-media"></div><p id="gallery-viewer-title"></p></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -365,5 +409,6 @@
 <label id="generator-confirm-field" hidden>Confirm password<input id="generator-confirm" type="password" autocomplete="new-password"></label>
 <label><input id="generator-remember" type="checkbox" checked>Remember this device</label>
 <p id="generator-login-error" role="status"></p>
+<a href="/settings#access">Change or recover your password</a>
 <div><button type="submit">Sign in</button><button id="generator-login-close" type="button">Cancel</button></div>
 </form></dialog>

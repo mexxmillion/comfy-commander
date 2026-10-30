@@ -1,0 +1,301 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const source = fs.readFileSync(path.join(__dirname, '../backend/app/static/generator.js'), 'utf8');
+const helper = source.slice(source.indexOf('function outputActions('), source.indexOf('function renderGallery('));
+function element(tag) {
+  return {tagName: tag.toUpperCase(), children: [], style: {}, handlers: {},
+    setAttribute(name, value) { this[name] = value; },
+    append(...items) { this.children.push(...items); },
+    prepend(...items) { this.children.unshift(...items); },
+    addEventListener(name, callback) { this.handlers[name] = callback; }};
+}
+const calls = [];
+const context = {document: {createElement: element}, location: {},
+  loadRecipe: recipe => calls.push(['edit', recipe]),
+  requeueRecipe: recipe => calls.push(['requeue', recipe]),
+  keepSetup: file => calls.push(['save', file]),
+  removeGalleryItem: file => calls.push(['unsave', file]),
+  viewGalleryOutput: file => calls.push(['view', file]),
+  shareMedia: file => calls.push(['share', file]),
+  isImageOutput: file => file.filename.endsWith('.png'),
+  mediaUrl: file => `/media/${file.filename}`};
+vm.createContext(context);
+vm.runInContext(helper, context);
+const file = {filename: 'result.png', job_id: 'job-1', task_id: 'task-1',
+  recipe: {mode: 'qwen', seed: 42}};
+const thumbnail = element('img');
+const actions = context.outputActions(file, thumbnail);
+assert.equal(calls.length, 0, 'Rendering actions must never submit or mutate');
+assert.deepEqual(actions.children.map(item => item.textContent),
+  ['View image', 'Edit & rerun', 'Requeue same', 'Save preset', 'Save image', 'Download']);
+actions.children[1].handlers.click();
+assert.equal(context.location.hash, '#generator');
+assert.equal(calls[0][1], file.recipe);
+actions.children[2].handlers.click();
+assert.equal(calls[1][0], 'requeue');
+thumbnail.onclick();
+assert.equal(calls[2][1], file);
+assert.equal(actions.children.at(-1).download, file.filename);
+assert.deepEqual(context.outputActions({filename: 'old.mp4'}).children.map(item => item.textContent),
+  ['▶ Play video', 'Save video', 'Download']);
+const saved = context.outputActions({...file, saved: true}).children.map(item => item.textContent);
+assert.ok(saved.includes('Rename preset') && saved.includes('Remove preset'));
+assert.equal(context.outputActions({...file, status: 'Running'}).children.length, 0);
+assert.equal(context.outputActions({...file, status: 'Queued'}).children.length, 0);
+const slateStart = source.indexOf('function outputSlate(');
+vm.runInContext(source.slice(slateStart, source.indexOf('function outputActions(', slateStart)), context);
+const slate = context.outputSlate({status: 'Running', progress: 35});
+assert.equal(slate.children[0].textContent, 'Rendering');
+assert.equal(slate.children[1].textContent, '35%');
+assert.equal(slate.role, 'status');
+console.log('Shared gallery/output action behavior passed');
+
+// Historical ACC recipes must not fall through to submission after rejection.
+const loadStart = source.indexOf('function loadRecipe(recipe)');
+const loadGuard = source.slice(loadStart, source.indexOf("  $('#ai-prompt-only')", loadStart)) + '\n}';
+const requeueStart = source.indexOf('function requeueRecipe(recipe)');
+const requeue = source.slice(requeueStart, source.indexOf('\nasync function keepSetup', requeueStart));
+context.normalizeRecipe = recipe => recipe;
+context.toast = message => calls.push(['toast', message]);
+context.setTimeout = () => assert.fail('Rejected ACC recipe must not schedule submission');
+vm.runInContext(loadGuard + '\n' + requeue, context);
+context.requeueRecipe({mode: 'h3', turbo: 10});
+assert.match(calls.at(-1)[1], /ACC presets are no longer supported/);
+console.log('Historical ACC requeue rejection passed');
+
+// Exercise the production model chain and native DynamicCombo serialization.
+const chainStart = source.indexOf('  let previous = "127";', source.indexOf('function buildH3Workflow'));
+const chainEnd = source.indexOf('  if (!frameMode && !singleFrame', chainStart);
+const constants = source.slice(source.indexOf('const TURBO_LORAS ='), source.indexOf('const FRAME_H3_MODEL'));
+const sparseHelpers = source.slice(source.indexOf('function sparseAttentionInputs('), source.indexOf('function buildH3Workflow('));
+for (const steps of [4, 8]) {
+  for (const enabled of [false, true]) {
+    for (const method of ['sla', 'vsa', 'sol-attn']) {
+      for (const omni of [false, true]) {
+        const controls = {'#sparse-enabled': {checked: enabled}, '#sparse-method': {value: method}};
+        const graphContext = {workflow: {'168': {inputs: {}}}, turboEnabled: !omni,
+          turboSteps: steps, frameMode: false, omni, eros: false,
+          selectedLoraEntries: () => [], $: selector => controls[selector]};
+        vm.createContext(graphContext);
+        vm.runInContext(constants + sparseHelpers + source.slice(chainStart, chainEnd), graphContext);
+        assert.equal(Boolean(graphContext.workflow['145']), !omni);
+        if (!omni) assert.match(graphContext.workflow['145'].inputs.lora_name, new RegExp(`ref2v_turbo_${steps}step`));
+        const node = graphContext.workflow['146'];
+        assert.equal(Boolean(node), enabled);
+        if (enabled) {
+          assert.equal(node.class_type, 'BlockSparseAttention');
+          assert.equal(node.inputs.selection, method);
+          assert.equal(node.inputs[method === 'sol-attn' ? 'selection.tau' : 'selection.keep_percent'], method === 'sol-attn' ? 1.3 : 10);
+          assert.equal(node.inputs.sink_conditioning, 'exact_kv_and_rows');
+          assert.equal(node.inputs.model[0], omni ? '127' : '145');
+        }
+        assert.equal(graphContext.workflow['168'].inputs.model[0], enabled ? '146' : omni ? '127' : '145');
+      }
+    }
+  }
+}
+const controls = {'#h3-model': {value: 'omni'}, '#sparse-enabled': {}, '#sparse-method': {}};
+const defaults = {state: {h3Type: 'reference'}, OMNI_MODEL: 'omni', $: selector => controls[selector]};
+vm.createContext(defaults);vm.runInContext(sparseHelpers, defaults);
+defaults.sparseAttentionDefaults();
+assert.equal(controls['#sparse-enabled'].checked, true);
+assert.equal(controls['#sparse-method'].value, 'vsa');
+controls['#h3-model'].value = 'ref2v';defaults.sparseAttentionDefaults();
+assert.equal(controls['#sparse-enabled'].checked, false);
+controls['#sparse-enabled'].checked = true;controls['#sparse-method'].value = 'untrusted';
+assert.throws(() => defaults.sparseAttentionInputs(['127', 0]), /Choose SLA, VSA or SOL/);
+console.log('Sparse methods, model chains and Omni/Ref2V defaults passed');
+
+const consoleSource = fs.readFileSync(path.join(__dirname, '../backend/app/static/console.js'), 'utf8');
+const countsStart = consoleSource.indexOf('  function syncNavCounts(metrics)');
+const countsEnd = consoleSource.indexOf('  function onJobSubmitted()', countsStart);
+const badges = new Map();
+const countContext = {document: {querySelectorAll(selector) {
+  if (!badges.has(selector)) badges.set(selector, [{}]);
+  return badges.get(selector);
+}}};
+vm.createContext(countContext);
+vm.runInContext(consoleSource.slice(countsStart, countsEnd), countContext);
+countContext.syncNavCounts({queued: 3, running: 2, active_workers: 4});
+assert.equal(badges.get('[data-dispatch-queued]')[0].textContent, '3');
+assert.equal(badges.get('[data-dispatch-running]')[0].textContent, '2');
+countContext.syncNavCounts({queued: 0, running: 0});
+assert.equal(badges.get('[data-dispatch-queued]')[0].textContent, '0');
+assert.equal(badges.get('[data-dispatch-running]')[0].textContent, '0');
+console.log('Live Dispatcher sidebar counts passed');
+
+const viewerChildren = new Map([
+  ['#gallery-viewer-media', {replaceChildren(media) { this.media = media; }}],
+  ['#gallery-viewer-title', {}],
+]);
+let movedToBody = false;
+const viewer = {querySelector: selector => viewerChildren.get(selector),
+  showModal() { assert.equal(movedToBody, true, 'Outputs player must escape the hidden Generator'); }};
+const viewerContext = {document: {createElement: element,
+  querySelector: selector => { assert.equal(selector, '#gallery-viewer'); return viewer; },
+  body: {append(node) { assert.equal(node, viewer); movedToBody = true; }}},
+  mediaUrl: file => `/media/${file.filename}`};
+vm.createContext(viewerContext);
+const viewerStart = source.indexOf('function viewGalleryOutput(');
+vm.runInContext(source.slice(viewerStart, source.indexOf('\nconst gallerySelection', viewerStart)), viewerContext);
+viewerContext.viewGalleryOutput({filename: 'result.mp4'});
+assert.equal(viewerChildren.get('#gallery-viewer-media').media.tagName, 'VIDEO');
+assert.equal(viewerChildren.get('#gallery-viewer-media').media.src, '/media/result.mp4');
+console.log('Outputs video player placement passed');
+
+const processingControls = new Map();
+for (const id of ['isolation-text', 'isolation-confidence', 'isolation-selection', 'isolation-crop',
+  'isolation-background', 'isolation-find', 'isolation-enabled', 'reference-depth',
+  'reference-depth-invert', 'reference-cache', 'isolation-apply', 'reference-isolation']) {
+  processingControls.set('#' + id, {value: '', checked: false});
+}
+processingControls.get('#isolation-text').value = 'person';
+processingControls.get('#isolation-confidence').value = '0.25';
+processingControls.get('#isolation-enabled').checked = true;
+let editorClosed = false;
+processingControls.get('#reference-isolation').close = () => { editorClosed = true; };
+const reference = {kind: 'image', file: 'original.png'};
+const processingContext = {$: selector => processingControls.get(selector),
+  isolationEditor: {target: reference, mode: 'h3', busy: false, result: null},
+  state: {mode: 'h3', savedReferences: [reference]}, toast() {},
+  markAiPromptStale() {}, renderReferences() {}, setStatus() {}};
+vm.createContext(processingContext);
+const busyStart = source.indexOf('function setIsolationBusy(');
+vm.runInContext(source.slice(busyStart, source.indexOf('function showIsolationPreview(', busyStart)), processingContext);
+processingContext.setIsolationBusy(false);
+assert.equal(processingControls.get('#isolation-apply').disabled, true);
+assert.equal(processingControls.get('#isolation-find').disabled, false);
+const saveStart = source.indexOf('$("#isolation-apply").onclick = () => {');
+const saveEnd = source.indexOf('\n};', saveStart) + 3;
+vm.runInContext(source.slice(saveStart, saveEnd), processingContext);
+processingControls.get('#isolation-apply').onclick();
+assert.equal(processingContext.state.savedReferences[0], reference);
+assert.equal(editorClosed, false);
+processingContext.isolationEditor.result = {kind: 'image', file: 'processed.png', preprocess: {source: 'original.png'}};
+processingContext.setIsolationBusy(false);
+assert.equal(processingControls.get('#isolation-apply').disabled, false);
+processingControls.get('#isolation-apply').onclick();
+assert.equal(processingContext.state.savedReferences[0].file, 'processed.png');
+assert.equal(processingContext.state.savedReferences[0].preprocess.source, 'original.png');
+assert.equal(editorClosed, true);
+console.log('Reference preview-before-save and reviewed-image reuse passed');
+
+vm.runInContext(source.slice(source.indexOf('function isolationProgressText('), source.indexOf('async function previewIsolation()')), context);
+assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'no_worker'}), /Waiting for a compatible/);
+assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'queue', queue_position: 4}), /position 4/);
+assert.match(context.isolationProgressText({status: 'queued', wait_reason: 'workers_paused'}), /paused/);
+assert.match(context.isolationProgressText({status: 'running', progress: 25}), /Processing.*25%/);
+console.log('Preview queue and worker waiting messages passed');
+
+const buildStart = source.indexOf('function buildH3Workflow(');
+const buildEnd = source.indexOf('\nfunction ', buildStart + 5);
+for (const roles of [[], ['first_frame'], ['last_frame'], ['first_frame', 'last_frame']]) {
+  const values = {'#frame-h3-model': 'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+    '#h3-model': 'ref2v', '#total-steps': 5, '#megapixels': 0.5, '#duration': 5,
+    '#aspect-ratio': '9:16', '#frame-turbo-strength': 0.5, '#direction': 'A cinematic camera move'};
+  const buildContext = {state: {h3Type: 'frames'},h3JobType:()=> 'standard', EROSMAX_MODEL: 'unsupported',
+    SINGULARITY_MODEL: 'singularity', OMNI_MODEL: 'omni', H3_TEXT_ENCODER: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
+    VSA_LORA: 'fasth3_vsa_gate.safetensors', selectedLoraEntries: () => [], sparseAttentionInputs: () => null,
+    studioRoot: {querySelector: () => ({value: '4'})},
+    $: selector => ({value: values[selector] ?? '', checked: selector === '#turbo-enabled'})};
+  vm.createContext(buildContext);
+  vm.runInContext(constants + source.slice(buildStart, buildEnd), buildContext);
+  const graph = buildContext.buildH3Workflow(roles.map(kind => ({kind, file: `h3_mobile/${kind}.png`})), 42);
+  assert.equal(graph['131'].class_type, 'MiniMaxH3ImageToVideo');
+  assert.equal(graph['127'].inputs.unet_name, values['#frame-h3-model']);
+  assert.match(graph['145'].inputs.lora_name, /fl2v_turbo_4step/);
+  for (const kind of ['first_frame', 'last_frame']) assert.equal(Boolean(graph['131'].inputs[kind]), roles.includes(kind));
+  assert.equal(Boolean(graph['146']), false);
+}
+console.log('FLF2V text-only, first, last and both-keyframe graph checks passed');
+(async()=>{
+  const controls={};
+  const get=selector=>controls[selector] ||= {value:'',type:'text'};
+  controls['#aspect-ratio']={options:[{value:'9:16 (Portrait Widescreen)'},{value:'16:9 (Widescreen)'}]};
+  for(const id of ['ai-enhance','h3-audio-lock','turbo-enabled','sparse-enabled'])get('#'+id).type='checkbox';
+  const preferences={aspect_ratio:'16:9',megapixels:.75,duration:8,render_target:'local',h3_type:'reference',h3_model:'fasth3-omni',turbo_steps:8,sparse_attention:'SOL',ai_enhance:false,audio_lock:true};
+  let fetched=0,draft='saved draft';
+  const defaultsContext={URLSearchParams,DRAFT_KEY:'draft',location:{search:''},localStorage:{getItem:()=>draft},draftEarlyEdit:false,
+    $:get,studioRoot:{querySelector:get},setH3Type:()=>{},SINGULARITY_MODEL:'singularity',OMNI_MODEL:'omni',
+    syncTurboStack:()=>{},syncPromptEnhancement:()=>{},sparseAttentionDefaults:()=>{},
+    fetch:async()=>{fetched++;return {ok:true,json:async()=>preferences};}};
+  vm.createContext(defaultsContext);
+  vm.runInContext(source.slice(source.indexOf('function applyGenerationDefaults('),source.indexOf("$('#generator-sign-in').onclick")),defaultsContext);
+  await defaultsContext.loadGenerationDefaults();
+  assert.equal(fetched,0,'Existing drafts take precedence over defaults');
+  draft=null;
+  await defaultsContext.loadGenerationDefaults();
+  assert.equal(get('#aspect-ratio').value,'16:9 (Widescreen)');
+  assert.equal(get('#render-target').value,'tensor-master');
+  assert.equal(get('#sparse-method').value,'sol-attn');
+  assert.equal(get('#ai-enhance').checked,false);
+  assert.equal(get('#h3-audio-lock').checked,true);
+  defaultsContext.draftEarlyEdit=true;get('#duration').value=12;
+  await defaultsContext.loadGenerationDefaults();
+  assert.equal(get('#duration').value,12,'Late responses preserve edits');
+  console.log('Shared server defaults, formatted aspect selection and draft/edit preservation passed');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+const bulkContext={};vm.createContext(bulkContext);
+vm.runInContext(consoleSource.slice(consoleSource.indexOf('function bulkRoutePayload('),consoleSource.indexOf("  $('#bulk-apply').onclick")),bulkContext);
+const taskRoute={policy:'local',min_vram_gb:24,architecture:'blackwell',preferred_worker_id:'local-test',status:'queued'};
+const preserved=bulkContext.bulkRoutePayload(taskRoute,{pool:'keep',worker:'keep',vram:'16',architecture:'keep'});
+assert.equal(preserved.pool,'local');assert.equal(preserved.min_vram_gb,16);assert.equal(preserved.architecture,'blackwell');assert.equal(preserved.preferred_worker_id,'local-test');assert.equal(preserved.requeue,false);
+const explicitRoute=bulkContext.bulkRoutePayload(taskRoute,{pool:'any',worker:'',vram:'',architecture:'any'});
+assert.equal(explicitRoute.pool,'any');assert.equal(explicitRoute.preferred_worker_id,null);assert.equal(explicitRoute.min_vram_gb,24);
+console.log('Bulk VRAM updates preserve existing pool, worker and architecture unless explicitly changed');
+const replacementControls={},replacementGet=selector=>replacementControls[selector] ||= {};
+let replacementType='replacement';
+const replacementContext={h3JobType:()=>replacementType,state:{mode:'h3',h3Type:'reference'},$:replacementGet,studioRoot:{querySelector:()=>({value:replacementType})}};
+vm.createContext(replacementContext);
+vm.runInContext(source.slice(source.indexOf('function validateReplacementReferences('),source.indexOf("studioRoot.querySelectorAll('input[name=\"h3-mode\"]')",source.indexOf('function validateReplacementReferences('))),replacementContext);
+for(const refs of [[],[{kind:'image'}],[{kind:'video'}],[{kind:'video'},{kind:'image'},{kind:'audio'}]])assert.throws(()=>replacementContext.validateReplacementReferences(refs),/one source video and one replacement image/);
+assert.doesNotThrow(()=>replacementContext.validateReplacementReferences([{kind:'video'},{kind:'image'}]));
+replacementContext.syncReplacementMode(true);
+assert.equal(replacementGet('#h3-audio-lock').checked,true);assert.equal(replacementGet('#replacement-target').required,true);
+replacementType='standard';replacementContext.syncReplacementMode();assert.equal(replacementGet('#replacement-settings').hidden,true);
+console.log('Replacement media requirements and audio-lock default passed');
+// Exercise real generated graphs for the new simple quality presets.
+{
+  const controls={},get=selector=>controls[selector] ||= {value:'',checked:false,addEventListener:()=>{}};
+  Object.assign(get('#duration'),{value:5});Object.assign(get('#megapixels'),{value:.5});get('#aspect-ratio').value='9:16';get('#direction').value='A slow camera move';get('#h3-encoding').value='high';
+  let turbo='4';
+  const simpleContext={FRAME_H3_MODEL:'minimax_h3_fl2va_pruned_int8_convrot.safetensors',h3JobType:()=> 'standard',state:{h3Type:'reference'},$:get,EROSMAX_MODEL:'unsupported',SINGULARITY_MODEL:'singularity',OMNI_MODEL:'omni',H3_TEXT_ENCODER:'encoder',VSA_LORA:'vsa',
+    studioRoot:{querySelector:selector=>{
+      if(selector.includes('h3-mode'))return {value:'standard'};
+      if(selector.includes(':checked'))return {value:turbo};
+      return {set checked(value){if(value)turbo=selector.includes('"8"')?'8':'4';}};
+    }},selectedLoraEntries:()=>[],sparseAttentionInputs:()=>null,preprocessReferenceImage:(graph,input)=>input,
+    sparseAttentionDefaults:()=>{},syncTurboStack:()=>{},markAiPromptStale:()=>{}};
+  vm.createContext(simpleContext);
+  vm.runInContext(constants+source.slice(source.indexOf('function applyQualityPreset('),source.indexOf('function syncTurboStack('))+source.slice(buildStart,buildEnd),simpleContext);
+  for(const [preset,steps,lora,sampler] of [['preview',4,true,'euler'],['normal',8,true,'euler'],['hq',20,false,'res_multistep']]){
+    simpleContext.applyQualityPreset(preset);simpleContext.syncQualityPreset();assert.equal(get('#h3-quality').value,preset);
+    for(const refs of [[],[{kind:'image',file:'h3_mobile/person.png'}]]){
+      const graph=simpleContext.buildH3Workflow(refs,42);
+      assert.equal(graph['131'].class_type,'MiniMaxH3ReferenceToVideo');
+      assert.equal(graph['124'].inputs.steps,steps);assert.equal(Boolean(graph['145']),lora);
+      assert.equal(graph['142'].inputs.sampler_name,sampler);assert.equal(graph['155'].inputs.crf,18);
+      assert.equal(Boolean(graph['131'].inputs['ref_images.ref_image_0']),refs.length===1);
+      assert.equal(Object.values(graph).some(node=>node.class_type==='MiniMaxH3AddGuide'),false);
+    }
+  }
+  get('#h3-encoding').value='standard';assert.equal(simpleContext.buildH3Workflow([],42)['155'].inputs.crf,23);
+  simpleContext.CHARACTER_SWAP_LORA='h3_character_swap_v1.5.safetensors';
+  simpleContext.h3JobType=()=> 'replacement';get('#character-swap-enabled').checked=true;
+  simpleContext.applyQualityPreset('normal');
+  const adapterGraph=simpleContext.buildH3Workflow([{kind:'image',file:'h3_mobile/person.png'},{kind:'video',file:'h3_mobile/source.mp4'}],42);
+  assert.equal(adapterGraph['189'].inputs.lora_name,simpleContext.CHARACTER_SWAP_LORA);
+  assert.equal(adapterGraph['189'].inputs.strength_model,1);assert.equal(adapterGraph['145'].inputs.model[0],'189');
+  get('#character-swap-enabled').checked=false;assert.equal(Boolean(simpleContext.buildH3Workflow([],42)['189']),false);
+  simpleContext.h3JobType=()=> 'standard';
+  simpleContext.state.h3Type='frames';get('#frame-h3-model').value=simpleContext.FRAME_H3_MODEL;get('#frame-turbo-strength').value=.5;
+  for(const [preset,steps,turboEnabled,sampler] of [['preview',5,true,'euler'],['normal',8,true,'euler'],['hq',20,false,'res_multistep']]) {
+    simpleContext.applyQualityPreset(preset);simpleContext.syncQualityPreset();assert.equal(get('#h3-quality').value,preset);
+    const graph=simpleContext.buildH3Workflow([],42);
+    assert.equal(graph['131'].class_type,'MiniMaxH3ImageToVideo');assert.equal(graph['124'].inputs.steps,steps);
+    assert.equal(Boolean(graph['145']),turboEnabled);assert.equal(graph['142'].inputs.sampler_name,sampler);
+  }
+  console.log('Ref2V text/image modes, Preview/Normal/HQ sampling and encoding graph checks passed');
+}

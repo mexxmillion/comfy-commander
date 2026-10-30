@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app import rental_ui
+from backend.app.config import Settings
 
 
 @pytest.fixture
@@ -15,6 +16,7 @@ def runtime_env(monkeypatch, tmp_path):
     python.touch()
     monkeypatch.setenv("COMFYUI_ROOT", str(root))
     monkeypatch.setenv("COMFYUI_PYTHON", str(python))
+    monkeypatch.setattr(rental_ui, "get_settings", lambda: Settings(_env_file=None, cloud_runtime_source="local"))
 
 
 @pytest.mark.parametrize("name", ["COMFYUI_ROOT", "COMFYUI_PYTHON"])
@@ -70,3 +72,42 @@ def test_launch_returns_actionable_conflict_before_provider_actions(monkeypatch,
     assert response.status_code == 409
     assert "COMFYUI_PYTHON" in response.json()["detail"]
     assert "restart the web server" in response.json()["detail"]
+
+
+def test_bundle_passes_runtime_paths_from_dotenv(monkeypatch, tmp_path):
+    root = tmp_path / "comfy"
+    (root / "custom_nodes").mkdir(parents=True)
+    python = tmp_path / "comfy-python.exe"
+    python.touch()
+    config = tmp_path / ".env"
+    config.write_text(
+        f"COMFYUI_ROOT={root.as_posix()}\nCOMFYUI_PYTHON={python.as_posix()}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("COMFYUI_ROOT", raising=False)
+    monkeypatch.delenv("COMFYUI_PYTHON", raising=False)
+    settings = Settings(_env_file=config, cloud_runtime_source="local")
+    monkeypatch.setattr(rental_ui, "get_settings", lambda: settings)
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(rental_ui.subprocess, "run", run)
+    rental_ui.build_bundle()
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("-ComfyRoot") + 1] == str(root)
+    assert calls[0][calls[0].index("-LocalPython") + 1] == str(python)
+
+
+def test_default_cloud_bundle_needs_no_local_comfyui(monkeypatch, tmp_path):
+    from runtime.h3 import build_community
+    settings = Settings(_env_file=None, comfyui_root=None, comfyui_python=None)
+    monkeypatch.setattr(rental_ui, "ROOT", tmp_path)
+    monkeypatch.setattr(rental_ui, "get_settings", lambda: settings)
+    calls = []
+    monkeypatch.setattr(build_community, "build_bundle", lambda *args: calls.append(args))
+    rental_ui.build_bundle()
+    assert len(calls) == 1
+    assert calls[0][0] == tmp_path / "state/h3-cloud-runtime.tar.gz"

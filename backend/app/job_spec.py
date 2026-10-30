@@ -10,8 +10,8 @@ import re
 from sqlalchemy.orm import Session
 
 from . import creative
-from .store import JobRecipeRow, JobRow, TaskRow
 from .recipes import normalize_recipe
+from .store import JobRecipeRow, JobRow, TaskRow
 
 
 def _resolution(aspect, megapixels, multiple=32):
@@ -64,6 +64,22 @@ def job_spec(store, task_id):
     def inputs(node_id):
         return graph.get(node_id, {}).get("inputs", {})
 
+    def resolve(value, depth=0):
+        if depth > 8 or not isinstance(value, list) or len(value) != 2:
+            return value if isinstance(value, (int, float, str)) else None
+        node = graph.get(str(value[0]), {})
+        data = node.get('inputs', {})
+        if node.get('class_type') in {'PrimitiveFloat', 'PrimitiveInt'}:
+            return data.get('value')
+        if node.get('class_type') == 'ResolutionSelector':
+            size = _resolution(data.get('aspect_ratio'), data.get('megapixels'), data.get('multiple') or 8)
+            return size[value[1]] if size and value[1] in (0, 1) else None
+        if (node.get('class_type') == 'ComfyMathExpression' and value[1] == 1
+                and data.get('expression') == 'max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17'):
+            seconds = resolve(data.get('values.a'), depth + 1)
+            return _h3_frames(seconds) if isinstance(seconds, (int, float)) else None
+        return None
+
     spec = {"job_id": job.id, "workflow": job.workflow, "policy": job.policy,
             "render_target": recipe.get("renderTarget"), "seed": None, "steps": None,
             "sampler": None, "cfg": None, "width": None, "height": None,
@@ -111,8 +127,10 @@ def job_spec(store, task_id):
             spec["size_note"] = "Matches the first reference image"
         else:
             spec.update(width=size.get("width"), height=size.get("height"))
-    elif graph.get("131", {}).get("class_type") in {"MiniMaxH3ImageToVideo", "MiniMaxH3ReferenceToVideo"}:
-        frames_mode = graph["131"]["class_type"] == "MiniMaxH3ImageToVideo"
+    elif any(n.get('class_type') in {'MiniMaxH3ImageToVideo', 'MiniMaxH3ReferenceToVideo'} for n in graph.values()):
+        h3_id = next(key for key, n in graph.items() if n.get('class_type') in {'MiniMaxH3ImageToVideo', 'MiniMaxH3ReferenceToVideo'})
+        h3_inputs = inputs(h3_id)
+        frames_mode = graph[h3_id]['class_type'] == 'MiniMaxH3ImageToVideo'
         still = graph.get("155", {}).get("class_type") == "SaveImage"
         label = "H3 first/last frame" if frames_mode else "H3 reference video"
         spec["type"] = f"{label}{' · still image' if still else ''}"
@@ -137,11 +155,23 @@ def job_spec(store, task_id):
         spec.update(aspect=inputs("162").get("aspect_ratio"), megapixels=inputs("162").get("megapixels"),
                     steps=inputs("124").get("steps"), sampler=inputs("142").get("sampler_name"),
                     scheduler=inputs("124").get("scheduler"), seed=inputs("129").get("noise_seed"))
+        width, height = resolve(h3_inputs.get('width')), resolve(h3_inputs.get('height'))
+        if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+            spec.update(width=width, height=height, actual_megapixels=round(width*height/(1024*1024), 3),
+                        encoded_aspect=f'{int(width)//math.gcd(int(width),int(height))}:{int(height)//math.gcd(int(width),int(height))}')
         seconds = inputs("133").get("value")
+        spec['requested_duration_seconds'] = seconds
         if isinstance(seconds, (int, float)):
             spec["frames"] = 1 if still else _h3_frames(seconds)
             spec["fps"] = None if still else 24
             spec["duration_seconds"] = None if still else round(spec["frames"] / 24, 2)
+        frames = resolve(h3_inputs.get('length'))
+        if not still and isinstance(frames, (int, float)):
+            spec.update(frames=_h3_frames(frames/24), fps=24, duration_seconds=round(_h3_frames(frames/24)/24, 2))
+        if spec.get('job_type') == 'replacement':
+            spec['type'] = 'H3 Motion control · SAM3 → H3'
+            spec['video_preparation'] = 'Target size · 24 fps · requested frame window' if 'replacement_video_prepare' in graph else 'Original reference resolution'
+        spec['frame_note'] = 'Output frames; SAM3 source-tracking frames are a separate stage.'
     elif any(node.get("class_type") == "H3FaceTrackCrop" for node in graph.values()):
         nodes = {node.get("class_type"): node.get("inputs", {}) for node in graph.values()}
         spec["type"] = "H3 Face Refine"
@@ -160,6 +190,13 @@ def job_spec(store, task_id):
     else:
         spec["type"] = job.workflow
         spec["references"] = []
+
+    # Legacy selector titles include "Portrait Widescreen". Describe the actual
+    # output canvas instead, so those titles cannot mislabel a portrait job.
+    width, height = spec.get("width"), spec.get("height")
+    if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
+        orientation = "Portrait" if height > width else "Landscape" if width > height else "Square"
+        spec["aspect_label"] = orientation
 
     recipe = normalize_recipe(recipe)
     original = recipe.get("sourceDirection", recipe.get("direction")) or ""

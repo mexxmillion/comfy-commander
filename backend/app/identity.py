@@ -122,6 +122,7 @@ class IdentityStore:
             if initial and db.execute("SELECT 1 FROM settings WHERE name='password'").fetchone():
                 raise ValueError('Password already configured')
             db.execute("INSERT OR REPLACE INTO settings VALUES ('password',?)", (json.dumps(record),))
+            db.execute("INSERT OR REPLACE INTO settings VALUES ('legacy_sessions_disabled','1')")
             db.execute('UPDATE sessions SET revoked=? WHERE revoked IS NULL', (time.time(),))
 
     def new_session(self, lifetime):
@@ -143,6 +144,8 @@ class IdentityStore:
 
     def legacy_revoked(self, value):
         with self.connection() as db:
+            if db.execute("SELECT 1 FROM settings WHERE name='legacy_sessions_disabled' AND value='1'").fetchone():
+                return True
             return bool(db.execute('SELECT 1 FROM sessions WHERE hash=? AND revoked IS NOT NULL',
                                    (digest(value),)).fetchone())
 

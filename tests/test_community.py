@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,7 @@ def request(**overrides):
 def test_community_profiles_are_deliberately_small():
     assert set(COMMUNITY_PROFILES) == {
         "qwen-image-21", "ref2v-int8", "ref2v-singularity",
-        "fasth3-omni", "h3-character-replacement",
+        "fasth3-omni", "flf2v-int8", "h3-character-replacement",
     }
     assert all(profile["minimum_vram_gb"] == 16 for profile in COMMUNITY_PROFILES.values())
     assert all(profile["recommended_vram_gb"] >= 24 for profile in COMMUNITY_PROFILES.values())
@@ -61,9 +62,11 @@ def test_prepare_request_accepts_only_pocket_uploads():
         request(source_video="C:/private/source.mkv")
 
 
-def test_character_recipe_requires_human_review():
+def test_character_recipe_supports_one_shot_and_retains_post_render_qc():
     text = json.dumps(character_replacement_recipe())
-    assert "reviewed SAM3" in text
+    assert "SAM3_Detect" in text
+    assert "same job" in text
+    assert "completion is not creative acceptance" in text
     assert "No MiniMaxH3AddGuide" in text
 
 
@@ -71,11 +74,41 @@ def test_model_manifest_has_only_public_profiles_and_pinned_sam3():
     manifest = json.loads((Path(__file__).parents[1] / "runtime/h3/models.lock.json")
                           .read_text(encoding="utf-8"))
     assert set(manifest["profiles"]) == {
-        "qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni"
+        "qwen-image-21", "ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"
     }
     sam3 = [item for item in manifest["artifacts"] if item["group"] == "sam3"]
     assert len(sam3) == 1
     assert sam3[0]["sha256"] == "9ba99c92703c2e8b4f47de2d34a539bb8e18923049e238b780d70dbe6368eb03"
+
+
+def test_h3_profiles_do_not_download_acc():
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
+    assert not any("-acc-" in item["file"].lower() for item in manifest["artifacts"])
+    for groups in manifest["profiles"].values():
+        assert "ref2v-turbo" not in groups
+    template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert 'name="turbo" value="10"' not in template
+
+
+def test_ref2v_defaults_and_pinned_lightx2v_downloads():
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
+    artifacts = [a for a in manifest["artifacts"] if a["group"] == "lightx2v-ref2v"]
+    assert len(artifacts) == 2
+    assert all(a["repo"] == "lightx2v/Minimax-h3-Turbo" for a in artifacts)
+    assert all(len(a["revision"]) == 40 and len(a["sha256"]) == 64 for a in artifacts)
+    assert all(a["local_dir"] == "loras" and a["size"] > 0 for a in artifacts)
+    for profile in ("ref2v-int8", "ref2v-singularity"):
+        assert "lightx2v-ref2v" in manifest["profiles"][profile]
+    template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert '<input id="turbo-enabled" type="checkbox" checked>' in template
+    assert '<input id="sparse-enabled" type="checkbox">' in template
+    assert 'id="megapixels"' in template and 'step="any" value="0.5" required' in template
+    assert 'step="0.25" value="5" required' in template
+    assert template.index('value="9:16 (Portrait Widescreen)"') < template.index(
+        'value="16:9 (Widescreen)"'
+    )
 
 
 def test_community_lora_manifest_round_trip(tmp_path):
@@ -141,3 +174,66 @@ def test_fresh_install_navigation_does_not_require_task_rows():
     assert early_navigation in console
     assert optional_queue_control in console
     assert console.index(early_navigation) < console.index(optional_queue_control)
+
+
+def test_homepage_defaults_to_generate():
+    console = (Path(__file__).parents[1] / "backend/app/static/console.js").read_text(encoding="utf-8")
+    assert "const route=location.hash||'#generator'" in console
+    assert "a.hash===(location.hash||'#generator')" in console
+    assert "location.hash||'#monitor'" not in console
+
+
+def test_one_navigation_shares_modes_destinations_and_live_counts():
+    root = Path(__file__).parents[1]
+    template = (root / "backend/app/templates/dashboard.html").read_text(encoding="utf-8")
+    assert template.count('aria-label="Main navigation"') == 1
+    assert '<aside>' not in template and 'class="mobile-nav"' not in template
+    nav = template.split('class="workspace-nav"',1)[1].split('</nav>',1)[0]
+    assert 'data-studio-mode="h3"' in nav and 'data-studio-mode="qwen"' in nav
+    assert all(f'href="#{route}"' in nav for route in ['generator','sources','outputs','tasks'])
+    assert '<a href="#tasks" id="dispatcher-nav"' in nav
+    assert 'class="dispatcher-menu"' not in template and '<details id="dispatcher-nav"' not in template
+    secondary = template.split('id="dispatcher-subnav"',1)[1].split('</nav>',1)[0]
+    assert all(f'href="#{route}"' in secondary for route in ['tasks','monitor','workers','rentals','activity','history'])
+    assert 'href="/settings"' in nav and 'aria-label="Settings"' in nav
+    assert all(marker in nav for marker in ['data-dispatch-queued','data-dispatch-running','data-dispatch-workers'])
+
+
+def test_video_modes_offer_references_frames_and_motion_control():
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
+    groups = manifest["profiles"]["flf2v-int8"]
+    files = [a for a in manifest["artifacts"] if a["group"] in groups]
+    assert any(a["file"].endswith("minimax_h3_fl2va_pruned_int8_convrot.safetensors") for a in files)
+    assert sum(a["group"] == "lightx2v-fl2v" for a in files) == 2
+    assert all(len(a["revision"]) == 40 and len(a["sha256"]) == 64 for a in files)
+    template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert 'name="h3-type"' not in template
+    assert 'name="h3-mode" value="standard"' in template
+    assert 'name="h3-mode" value="replacement"' in template
+    assert 'name="h3-mode" value="frames"' in template
+    assert 'id="motion-video"' in template and 'id="motion-image"' in template
+    assert 'name="job-type"' not in template
+
+
+def test_flf2v_cloud_routing_accepts_matching_turbo_and_rejects_ref2v_lora():
+    from backend.app.main import cloud_profile_for_graph
+
+    graph = {
+        "model": {"class_type": "UNETLoader", "inputs": {
+            "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"}},
+        "turbo": {"class_type": "LoraLoaderModelOnly", "inputs": {
+            "lora_name": "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"}},
+    }
+    assert cloud_profile_for_graph(graph) == "flf2v-int8"
+    graph["turbo"]["inputs"]["lora_name"] = "minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
+    with pytest.raises(HTTPException, match="LoRA not in the cloud model manifest"):
+        cloud_profile_for_graph(graph)
+
+
+def test_ai_features_are_visible_under_prompt_before_references():
+    template = (Path(__file__).parents[1] / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert '<section id="prompt-tools"' in template
+    assert '<details id="prompt-tools"' not in template
+    assert template.index('id="direction"') < template.index('id="ai-enhance"') < template.index('id="creative-enabled"') < template.index('id="reference-files"')
+    assert template.index('id="h3-quality"') < template.index('id="h3-advanced"')

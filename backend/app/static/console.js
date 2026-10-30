@@ -167,7 +167,7 @@
     const pixels = spec.width && spec.height ? `${spec.width} × ${spec.height} px` : null;
     const size = pixels || spec.size_note;
     const length = spec.frames === 1 ? 'Still frame' : spec.duration_seconds ? `${spec.duration_seconds}s · ${spec.frames} frames @ ${spec.fps}fps` : null;
-    for (const value of [spec.type, size, length, spec.steps != null && `${spec.steps} steps · ${spec.sampler || 'sampler ?'}${spec.cfg != null ? ` · CFG ${spec.cfg}` : ''}`, spec.megapixels && `${spec.megapixels} MP · ${spec.aspect}`, spec.seed != null && `Seed ${spec.seed}`])
+    for (const value of [spec.type, size, length, spec.steps != null && `${spec.steps} steps · ${spec.sampler || 'sampler ?'}${spec.cfg != null ? ` · CFG ${spec.cfg}` : ''}`, spec.aspect_label, spec.megapixels && `${spec.megapixels} MP`, spec.seed != null && `Seed ${spec.seed}`])
       if (value) chips.append(el('span', value));
     section.append(chips);
     const prompt = el('div', null, 'spec-prompt');
@@ -178,6 +178,10 @@
     } else if (spec.enhance === false) section.append(el('p', 'AI enhancement off · prompt used exactly as written', 'inspect-note'));
     const grid = el('dl', null, 'inspect-grid');
     grid.append(el('dt', 'Resolution'), el('dd', pixels || spec.size_note || 'Not recorded'));
+    if(spec.requested_duration_seconds != null)grid.append(el('dt','Requested duration'),el('dd',`${spec.requested_duration_seconds}s → ${spec.duration_seconds}s on H3's frame grid`));
+    if(spec.encoded_aspect)grid.append(el('dt','Aspect ratio'),el('dd',`Requested ${spec.aspect?.split(' ')[0] || 'graph dimensions'} · encoded ${spec.encoded_aspect} (aligned pixels)`));
+    if(spec.video_preparation)grid.append(el('dt','Reference preparation'),el('dd',spec.video_preparation));
+    if(spec.frame_note)grid.append(el('dt','Frame count'),el('dd',`${spec.frames ?? 'Unknown'} output frames · ${spec.frame_note}`));
     if (spec.scheduler) grid.append(el('dt', 'Scheduler'), el('dd', spec.scheduler));
     const order = ['Diffusion', 'Text encoder', 'VAE'];
     for (const model of [...spec.models].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))) grid.append(el('dt', model.role), el('dd', name(model.name)));
@@ -240,7 +244,7 @@
       const automatic=el('option','Automatic · first compatible worker');automatic.value='';worker.append(automatic);
       for(const item of state.workers){const option=el('option',`${item.name} · ${item.gpu} · ${item.status}`);option.value=item.id;option.selected=task.preferred_worker_id===item.id;worker.append(option);}
       if(task.preferred_worker_id&&!state.workers.some(item=>item.id===task.preferred_worker_id)){const offline=el('option',`${task.preferred_worker_id} · offline`);offline.value=task.preferred_worker_id;offline.selected=true;worker.append(offline);}
-      const vram=el('input');vram.type='number';vram.min='1';vram.max='192';vram.value=String(task.min_vram_gb||24);vram.setAttribute('aria-label','Minimum VRAM GB');
+      const vram=el('input');vram.type='number';vram.min='1';vram.max='192';vram.value=String(task.min_vram_gb||16);vram.setAttribute('aria-label','Minimum VRAM GB');
       const architecture=el('select');architecture.setAttribute('aria-label','GPU architecture');
       for(const value of ['any','ampere','ada','blackwell']){const option=el('option',value==='any'?'Any architecture':value[0].toUpperCase()+value.slice(1));option.value=value;option.selected=(task.architecture||'any')===value;architecture.append(option);}
       const fields=el('div',null,'route-fields');
@@ -266,7 +270,7 @@
       for (const [key,value] of [['Task',task.id],['Priority',`${task.priority??100}${task.status==='queued'&&task.rank?` · rank #${task.rank}`:''}`],['Worker',task.worker_id||'Unassigned'],['Submitted',date(task.created_at)],['Runtime',task.runtime],['Policy',task.policy],['Requirement',task.requirement],['Attempt',task.attempt],['Progress',`${task.progress}%`],['Prompt ID',task.prompt_id||'—']]) grid.append(el('dt',key),el('dd',String(value)));
       fragment.append(grid,el('div',task.message||'No worker message yet.','inspect-message'));
       const timing=task.artifact?.timings||{}, boxes=el('div',null,'timing-list');
-      for (const [label,key] of [['Queue','queue_seconds'],['Generation','generation_seconds'],['Before sampling','before_sampling_seconds'],['Sampling','sampling_seconds'],['After sampling','after_sampling_seconds']]) {const box=el('div');box.append(el('span',label),el('strong',seconds(timing[key])));boxes.append(box);}
+      for (const [label,key] of [['Queue','queue_seconds'],['Generation','generation_seconds'],['Before sampling','before_sampling_seconds'],[timing.sampling_scope==='sampler_nodes'?'Sampling':'Progress window (legacy)','sampling_seconds'],['After sampling','after_sampling_seconds']]) {const box=el('div');box.append(el('span',label),el('strong',seconds(timing[key])));boxes.append(box);}
       fragment.append(el('h3','Execution timings','inspect-title'),boxes);
       if(timing.recovery_seconds!=null){const recovery=el('div');recovery.append(el('span','Interrupted attempt / recovery'),el('strong',seconds(timing.recovery_seconds)));boxes.append(recovery);}
       const url=outputUrl(task.artifact), output=el('div',null,'inspect-artifact');
@@ -328,20 +332,33 @@
   if(selectVisibleTasks)selectVisibleTasks.onchange=event=>{for(const task of tasks().filter(routeEligible)){if(event.target.checked)checkedTasks.add(task.id);else checkedTasks.delete(task.id);}updateBulkSelection();};
   $('#bulk-clear').onclick=()=>{checkedTasks.clear();updateBulkSelection();};
   $('#bulk-remove').onclick=()=>removeQueueEntries([...checkedTasks]);
+  function bulkRoutePayload(task, options) {
+    return {pool:options.pool==='keep'?task.policy:options.pool,
+      preferred_worker_id:options.worker==='keep'?(task.preferred_worker_id||null):(options.worker||null),
+      min_vram_gb:options.vram===''?task.min_vram_gb:Number(options.vram),
+      architecture:options.architecture==='keep'?task.architecture:options.architecture,
+      requeue:['failed','cancelled','completed'].includes(task.status)};
+  }
   $('#bulk-apply').onclick=async()=>{
     const selectedTasks=[...checkedTasks].map(id=>state.tasks.find(task=>task.id===id)).filter(routeEligible);
     if(!selectedTasks.length)return;
-    const pool=$('#bulk-pool').value,label=$('#bulk-pool').selectedOptions[0].textContent;
-    if(!window.confirm(`Apply “${label}” to ${selectedTasks.length} selected task${selectedTasks.length===1?'':'s'}? Completed, failed, and cancelled tasks will be requeued.`))return;
-    const payload={pool,preferred_worker_id:$('#bulk-worker').value||null,min_vram_gb:Number($('#bulk-vram').value),architecture:$('#bulk-architecture').value};
+    if(!$('#bulk-vram').reportValidity())return;
+    if(!window.confirm(`Apply changed route settings to ${selectedTasks.length} selected task${selectedTasks.length===1?'':'s'}? Fields marked Keep current are preserved. Completed, failed, and cancelled tasks will be requeued.`))return;
+    const options={pool:$('#bulk-pool').value,worker:$('#bulk-worker').value,vram:$('#bulk-vram').value,architecture:$('#bulk-architecture').value};
+    $('#bulk-apply').disabled=true;
+    $('#bulk-route-status').textContent='Updating selected routes…';
     const results=await Promise.all(selectedTasks.map(async task=>{
-      const response=await fetch(`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/route`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,requeue:['failed','cancelled','completed'].includes(task.status)})});
+      try {
+      const response=await fetch(`/api/v1/operator/tasks/${encodeURIComponent(task.id)}/route`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(bulkRoutePayload(task,options))});
       let body={};try{body=await response.json();}catch{}
       return {task,response,body};
+      } catch(error){return {task,response:{ok:false},body:{detail:error.message}};}
     }));
     const failures=results.filter(item=>!item.response.ok);
     for(const item of results)if(item.response.ok)checkedTasks.delete(item.task.id);
+    $('#bulk-apply').disabled=false;
     await refresh();
+    $('#bulk-route-status').textContent=`${results.length-failures.length} route(s) updated.${failures.length?' '+failures.length+' failed: '+(failures[0].body.detail||'Request failed'):' Queue requirements now reflect the saved routes.'}`;
     if(failures.length)window.alert(`${failures.length} task${failures.length===1?'':'s'} could not be changed. ${failures[0].body.detail||'Sign in under Rentals and try again.'}`);
   };
   $('#worker-search').addEventListener('input',filterWorkers);
@@ -355,16 +372,37 @@
   }
   function nav() {
     if(location.hash==='#ltx')location.hash='#generator';
-    const route=location.hash||'#monitor', generating=route==='#generator', outputs=route==='#outputs';
+    const route=location.hash||'#generator', generating=['#generator','#sources'].includes(route), outputs=route==='#outputs';
     if(!outputs)closeOutputPlayer();
     document.body.classList.toggle('generator-open',generating);document.body.classList.toggle('output-open',outputs);
     $('#generator').hidden=!generating;$('#outputs').hidden=!outputs;
-    $('#workspace-title').textContent=generating?'Generator':outputs?'Output gallery':'Farm monitor';
+    $('#workspace-title').textContent=route==='#sources'?'Sources':generating?'Generate':outputs?'Outputs':'Dispatcher';
 
+    if(route==='#sources')window.tensorGenerator.showSources();
+    else if(route==='#generator')window.tensorGenerator.showGenerate();
+    const dispatching=!generating&&!outputs;
+    $('#dispatcher-nav').classList.toggle('active',dispatching);
+    $('#dispatcher-subnav').hidden=!dispatching;
+    document.querySelectorAll('#dispatcher-subnav a').forEach(link=>link.classList.toggle('active',link.hash===route));
+    syncModeNavigation();
     if(outputs)loadDurableOutputs();
-    document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#monitor')));
+    document.querySelectorAll('.workspace-tabs>a:not([data-studio-mode]):not(#dispatcher-nav)').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
   }
+  function syncModeNavigation() {
+    const mode=document.querySelector('#studio-form')?.dataset.mode || 'h3';
+    const generating=(!location.hash || location.hash==='#generator');
+    document.querySelectorAll('[data-studio-mode]').forEach(tab=>{
+      const active=generating && tab.dataset.studioMode===mode;
+      tab.classList.toggle('active',active);
+      if(active)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current');
+    });
+  }
+  document.querySelectorAll('[data-studio-mode]').forEach(tab=>tab.addEventListener('click',event=>{
+    event.preventDefault();location.hash='#generator';window.tensorGenerator.setMode(tab.dataset.studioMode);syncModeNavigation();
+  }));
+  document.addEventListener('generator-mode-change',syncModeNavigation);
+  $('#dispatcher-nav').addEventListener('click',()=>{$('#task-filter').value='all';$('#task-search').value='';taskPage=0;filterTasks();});
   function closeOutputPlayer(){
     const dialog=$('#output-player');
     if(dialog.open)dialog.close();
@@ -395,14 +433,15 @@
   const outputSpecs = new Map();
   function outputSettings(file) {
     const details = el('details', null, 'output-settings');
-    const summary = el('summary', 'Render settings');
+    const summary = el('summary', 'Settings & job details');
     const body = el('div');
-    details.append(summary, body);
+    const provenance=el('pre',JSON.stringify({job_id:file.job_id||null,task_id:file.task_id||null,prompt_id:file.prompt_id||null,recipe:file.recipe||null,timings:file.timings||null},null,2));
+    details.append(summary, provenance, body);
     let loading = false, loaded = false;
     details.ontoggle = async () => {
       if (!details.open || loading || loaded) return;
       if (!file.task_id) {
-        body.replaceChildren(el('p', 'Render settings were not recorded for this output.', 'inspect-note'));
+        body.replaceChildren(el('p', file.recipe?'Saved recipe shown above. Additional task settings are unavailable.':'Render settings were not recorded for this output.', 'inspect-note'));
         loaded = true;
         return;
       }
@@ -431,26 +470,26 @@
     if(!durableOutputs)return;const term=$('#output-search').value.trim().toLowerCase(),size=Number($('#output-page-size').value)||24;
     const matches=durableOutputs.filter(file=>[file.job_name,file.job_id,file.task_id,file.prompt_id,file.worker_id,file.recipe?.sourceDirection,file.recipe?.direction,file.recipe?.aiPrompt].join(' ').toLowerCase().includes(term));
     const pages=Math.max(1,Math.ceil(matches.length/size));outputPage=Math.min(outputPage,pages-1);const shown=matches.slice(outputPage*size,(outputPage+1)*size),grid=$('#output-grid');grid.replaceChildren();
-    shownOutputs=shown;
-    const known=new Set(durableOutputs.map(file=>file.prompt_id));for(const id of checkedOutputs)if(!known.has(id))checkedOutputs.delete(id);
+    const active=file=>["Queued","Running","Cancelling"].includes(file.status);
+    shownOutputs=shown.filter(file=>!active(file));
+    const known=new Set(durableOutputs.filter(file=>!active(file)).map(file=>file.prompt_id));for(const id of checkedOutputs)if(!known.has(id))checkedOutputs.delete(id);
     for(const file of shown){
-      const card=el('article',null,'output-card'),media=document.createElement('img'),query=new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
+      const card=el('article',null,'output-card gallery-card'),media=file.filename?document.createElement('img'):window.tensorGenerator.outputSlate(file),query=new URLSearchParams({filename:file.filename,subfolder:file.subfolder||'',type:file.type||'output'});
       if(file.task_id&&!String(file.worker_id||'').startsWith('local'))query.set('task_id',file.task_id);
-      media.src=`/api/v1/media/preview?${query}`;media.loading='lazy';media.alt='Completed render';
-      const playable=/\.(mp4|webm|mov|m4v|ogv|ogg)$/i.test(file.filename||'');
-      const title=el('h3',file.job_name||file.filename),original=file.recipe?.sourceDirection||file.recipe?.direction||'',prompt=el('p',original||'No prompt recorded'),meta=el('div',`${file.worker_id||'unknown worker'} · ${date(file.modified?file.modified*1000:null)}`,'output-meta'),actions=el('div',null,'output-actions'),open=el('a','Open');open.href=outputUrl(file);open.target='_blank';open.rel='noopener';const download=el('a','Download');download.href=outputUrl(file);download.download=file.filename;actions.append(open,download);
+      if(file.filename){media.src=`/api/v1/media/preview?${query}`;media.loading='lazy';media.alt='Completed render';}
+      const title=el('h3',file.job_name||file.filename),original=file.recipe?.sourceDirection||file.recipe?.direction||'',prompt=el('p',original||'No prompt recorded'),meta=el('div',`${file.worker_id||'unknown worker'} · ${date(file.modified?file.modified*1000:null)}`,'output-meta'),actions=window.tensorGenerator.outputActions(file,media);actions.classList.add('output-actions');
       const identity=el('div','Job: ','output-job-id');identity.append(el('code',file.job_id||file.prompt_id||'Not recorded'));
       const timing=el('div',file.timings?.generation_seconds==null?'Render time not recorded':`Render: ${seconds(file.timings.generation_seconds)}${file.timings.queue_seconds==null?'':` · Queue: ${seconds(file.timings.queue_seconds)}`}`,'output-timing');
       const enhanced=file.recipe?.aiPrompt;
-      if(playable){open.textContent='Play';open.removeAttribute('target');open.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();openOutputPlayer(file);};}
-      const selection=el('label',' Select entry'),check=document.createElement('input');check.type='checkbox';check.checked=checkedOutputs.has(file.prompt_id);check.disabled=removingOutputs;check.style.width='auto';check.onchange=()=>{if(check.checked)checkedOutputs.add(file.prompt_id);else checkedOutputs.delete(file.prompt_id);updateOutputSelection();};selection.prepend(check);
-      card.append(selection,media,title,identity,prompt);
-      if(enhanced&&enhanced!==original){const details=el('details',null,'output-ai-prompt'),summary=el('summary','AI enhanced prompt'),text=el('pre',enhanced);details.append(summary,text);card.append(details);}
-      if(file.job_id){const edit=el('button','Edit & rerun');edit.type='button';edit.onclick=()=>openGeneratorJob(file.job_id);actions.prepend(edit);}
-      const remove=el('button','Remove','danger');remove.type='button';remove.disabled=removingOutputs;remove.title='Remove from Outputs and Gallery; keep media file';remove.onclick=()=>removeOutputEntries([file.prompt_id]);actions.append(remove);
-      card.append(timing,meta,actions,outputSettings(file));grid.append(card);
+      const selection=el('label',' Select entry'),check=document.createElement('input');check.type='checkbox';check.checked=checkedOutputs.has(file.prompt_id);check.disabled=removingOutputs||active(file);check.style.width='auto';check.onchange=()=>{if(check.checked)checkedOutputs.add(file.prompt_id);else checkedOutputs.delete(file.prompt_id);updateOutputSelection();};selection.prepend(check);
+      const copy=el('div',null,'gallery-card-copy');
+      card.append(media,copy);copy.append(selection,title,identity,prompt);
+      if(enhanced&&enhanced!==original){const details=el('details',null,'output-ai-prompt'),summary=el('summary','AI enhanced prompt'),text=el('pre',enhanced);details.append(summary,text);copy.append(details);}
+      if(file.job_id&&!file.recipe){const edit=el('button','Edit & rerun');edit.type='button';edit.onclick=()=>openGeneratorJob(file.job_id);actions.prepend(edit);}
+      const remove=el('button','Remove entry','danger');remove.type='button';remove.disabled=removingOutputs||active(file);remove.title='Remove from Outputs and Gallery; keep media file';remove.onclick=()=>removeOutputEntries([file.prompt_id]);actions.append(remove);
+      copy.append(timing,meta,outputSettings(file),actions);grid.append(card);
     }
-    $('#output-status').textContent=`${matches.length} completed outputs safely stored by Tensor Master · ${durableOutputs.length} total`;
+    $('#output-status').textContent=`${matches.length} jobs · ${durableOutputs.filter(active).length} queued or rendering · ${durableOutputs.length} total`;
     $('#output-page-label').textContent=`Page ${outputPage+1} of ${pages}`;$('#output-prev').disabled=outputPage===0;$('#output-next').disabled=outputPage+1>=pages;
     updateOutputSelection();
   }
@@ -482,13 +521,18 @@
   $('#output-remove-selected').onclick=()=>removeOutputEntries([...checkedOutputs]);
   $('#output-search').addEventListener('input',()=>{outputPage=0;renderDurableOutputs();});$('#output-page-size').addEventListener('change',()=>{outputPage=0;renderDurableOutputs();});$('#output-prev').onclick=()=>{outputPage--;renderDurableOutputs();};$('#output-next').onclick=()=>{outputPage++;renderDurableOutputs();};
   function syncNavCounts(metrics) {
+    for (const [selector, key] of [['[data-dispatch-queued]', 'queued'], ['[data-dispatch-running]', 'running'], ['[data-dispatch-workers]', 'active_workers']]) {
+      document.querySelectorAll(selector).forEach(badge => { badge.textContent = String(metrics[key] ?? 0); });
+    }
+    document.querySelectorAll('[data-live-queued]').forEach(badge=>{badge.textContent=String(metrics.queued ?? 0);});
     for(const [hash,key] of [['monitor','running'],['tasks','active_tasks'],['workers','active_workers']]) {
-      document.querySelectorAll(`a[href="#${hash}"] span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
+      document.querySelectorAll(`a[href="#${hash}"]:not(#dispatcher-nav) span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
     }
   }
   function onJobSubmitted() {
     if(refreshing){refreshPending=true;return;}
     void refresh();
+    if(location.hash==='#outputs')void loadDurableOutputs();
   }
   window.addEventListener('tensor-master:job-submitted',onJobSubmitted);
   async function refresh() {
@@ -514,6 +558,8 @@
       if(rental&&current)syncLiveRegion(current,rental);
       else if(rental&&!current)$('main').append(rental);
       else if(current&&!rental)current.remove();
+      const attention=$('#rental-attention'), freshAttention=doc.querySelector('#rental-attention');
+      if(attention&&freshAttention){syncLiveRegion(attention,freshAttention);window.syncRentalAlerts?.();}
       state=next;syncNavCounts(state.metrics);if(!selected)selected=state.tasks[0]?.id;syncBulkWorkers();
       filterTasks();filterWorkers();renderLogs();renderInspector();
       if(focusedId){const replacement=[...document.querySelectorAll('#tasks [data-task-id]')].find(row=>row.dataset.taskId===focusedId&&row.tagName===focusedTag&&!row.hidden);if(replacement)focusTask(replacement);}
@@ -543,5 +589,5 @@
   }
   $('#refresh-console').onclick=refreshVisiblePage;
   syncBulkWorkers();filterTasks();filterWorkers();renderLogs();renderInspector();$('#sync-status').textContent='Live · refresh every 5s';
-  setInterval(()=>{if(!paused&&!document.hidden)refresh();},5000);
+  setInterval(()=>{if(!paused&&!document.hidden){void refresh();if(location.hash==='#outputs')void loadDurableOutputs();}},5000);
 })();
