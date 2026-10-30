@@ -742,6 +742,31 @@ async def destroy_one(rental_id: str, request: Request) -> dict:
     return {"status": "destroy_requested", "rental_id": rental_id}
 
 
+@router.post('/resume/{rental_id}', status_code=202)
+async def resume_setup(rental_id: str, request: Request) -> dict:
+    _admin(request, mutation=True)
+    path = _state_path(rental_id)
+    record = json.loads(path.read_text(encoding='utf-8'))
+    if (record.get('status') != 'needs_attention' or record.get('destroyed_at')
+            or not record.get('instance_id') or record.get('worker_ready_at')
+            or datetime.now(UTC) >= datetime.fromisoformat(record['deadline'])):
+        raise HTTPException(409, 'Only a retained setup failure before its original deadline can be retried')
+    def prepare():
+        with BUILD_LOCK:
+            build_bundle()
+            validate_startup_scripts()
+    try:
+        await asyncio.to_thread(prepare)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    manager = ROOT / 'runtime/h3/runpod_worker.py' if record.get('provider') == 'runpod' else MANAGER
+    with (ROOT / 'state/managed-process.log').open('a', encoding='utf-8') as output:
+        subprocess.Popen([sys.executable, str(manager), 'resume', '--state-file', str(path)], cwd=ROOT,
+                         stdin=subprocess.DEVNULL, stdout=output, stderr=output, close_fds=True,
+                         creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    return dict(status='resume_requested', rental_id=rental_id, instance_id=record['instance_id'], deadline=record['deadline'])
+
+
 @router.post("/destroy-all", status_code=202)
 async def destroy_all(request: Request) -> dict:
     _admin(request, mutation=True)

@@ -4,7 +4,7 @@
   <title>{{ 'Settings' if settings_mode else 'Welcome' }} · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=local-model-setup-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=compatible-llm-20261029"></script><script defer src="/static/local-models.js?v=managed-windows-runtime-20261029"></script><script defer src="/static/llm-ui.js?v=1"></script><script defer src="/static/agent-widget.js?v=compatible-llm-20261029"></script>
+  <script defer src="/static/community.js?limits=editable-20261029&v=compatible-llm-20261029"></script><script defer src="/static/local-models.js?v=managed-windows-runtime-20261029"></script><script defer src="/static/llm-ui.js?v=1"></script><script defer src="/static/agent-widget.js?v=compatible-llm-20261029"></script>
 </head><body data-settings-mode="{{ 'true' if settings_mode else 'false' }}" data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
   <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p>{% if settings_mode %}<h1>Settings</h1><p>Manage your studio whenever you need.</p>{% else %}<h1>Set up your workspace</h1><p>Connect compute, models and private access.</p>{% endif %}</div><a href="/">Back to Generate →</a></header>
   {% if settings_mode %}

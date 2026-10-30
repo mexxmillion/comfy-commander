@@ -65,7 +65,9 @@ def watchdog(pod_id, deadline):
             time.sleep(15)
 
 
-def launch(record):
+def launch(record, *, resume_existing=False):
+    if resume_existing and (record.get("status") != "needs_attention" or record.get("destroyed_at") or not record.get("instance_id") or record.get("worker_ready_at")):
+        raise RuntimeError("Only a retained setup failure can be resumed")
     provider = client()
     tunnel = None
     pod_id = None
@@ -78,52 +80,61 @@ def launch(record):
         minutes = int(record["max_minutes"])
         if not 15 <= minutes <= min(180, settings.max_instance_lifetime_hours * 60):
             raise RuntimeError("Invalid rental lifetime")
-        maximum = min(float(record["max_price_per_hour"]), settings.max_gpu_price_per_hour)
-        selected = next((item for item in provider.offers(maximum)
-                         if item["id"] == record["offer_id"]), None)
-        if not selected:
-            raise RuntimeError("Selected Secure Cloud GPU is no longer available within the price ceiling")
-        from backend.app.rental_preferences import offer_allowed, record_preferences
-        if not offer_allowed(selected, record_preferences(record)):
-            raise RuntimeError("Selected GPU exceeds confirmed class, VRAM or budget limits")
-        existing = provider.list_instances()
-        # Fail closed on unknown account costs, including stopped Pods with storage charges.
-        rates = [float(item["costPerHr"]) for item in existing]
-        if shared.vast_api_key():
-            vast_instances = shared.vast().show_instances() or []
-            rates += [float(item["dph_total"]) for item in vast_instances]
-        if len(rates) >= settings.max_active_gpus or sum(rates) + maximum > settings.max_total_price_per_hour:
-            raise RuntimeError("Fleet count or hourly budget would be exceeded")
-        name = "tensor-master-h3-" + uuid.uuid4().hex[:12]
-        shared.update(status="creating", request_name=name, error=None)
-        create_attempted = True
-        try:
-            pod = provider.create_instance(selected["id"], name=name,
-                public_key=Path(str(shared.SSH_KEY) + ".pub").read_text(encoding="utf-8"))
-        except Exception:
-            # A timed-out create may have succeeded. Never issue a second POST.
-            matches = [item for item in provider.list_instances() if item.get("name") == name]
-            if len(matches) != 1:
-                shared.update(status="creation_unknown", error="Check Runpod console for " + name + "; do not retry rental blindly")
-                raise
-            pod = matches[0]
-        pod_id = str(pod["id"])
-        started = shared.now()
-        deadline = (started + timedelta(minutes=minutes)).isoformat()
-        record = shared.update(instance_id=pod_id, provider="runpod", worker_id=f"runpod-{pod_id}",
-            status="booting", rented_at=started.isoformat(), deadline=deadline,
-            gpu=selected["gpu"], price_per_hour=maximum)
-        with shared.LOG.open("a", encoding="utf-8") as output:
-            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog",
-                              "--pod-id", pod_id, "--deadline", deadline,
-                              "--state-file", str(shared.STATE)],
-                             stdin=subprocess.DEVNULL, stdout=output, stderr=output,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        actual_price = float(pod["costPerHr"])
-        if not 0 < actual_price <= maximum:
-            raise RuntimeError("Allocated Pod price is missing or exceeds the approved ceiling")
-        record = shared.update(price_per_hour=actual_price)
-        shared.log(f"Runpod {pod_id} rented at ${actual_price:.3f}/hour; public PyTorch image")
+        if resume_existing:
+            deadline = record['deadline']
+            if shared.now() >= datetime.fromisoformat(deadline):
+                raise RuntimeError('Original rental deadline expired')
+            pod_id = str(record['instance_id'])
+            actual_price = float(record['price_per_hour'])
+            record = shared.update(status='reconnecting', error=None, recovery_message=None)
+            shared.log('Resuming the same retained Pod; original deadline unchanged; no creation request')
+        else:
+            maximum = min(float(record["max_price_per_hour"]), settings.max_gpu_price_per_hour)
+            selected = next((item for item in provider.offers(maximum)
+                             if item["id"] == record["offer_id"]), None)
+            if not selected:
+                raise RuntimeError("Selected Secure Cloud GPU is no longer available within the price ceiling")
+            from backend.app.rental_preferences import offer_allowed, record_preferences
+            if not offer_allowed(selected, record_preferences(record)):
+                raise RuntimeError("Selected GPU exceeds confirmed class, VRAM or budget limits")
+            existing = provider.list_instances()
+            # Fail closed on unknown account costs, including stopped Pods with storage charges.
+            rates = [float(item["costPerHr"]) for item in existing]
+            if shared.vast_api_key():
+                vast_instances = shared.vast().show_instances() or []
+                rates += [float(item["dph_total"]) for item in vast_instances]
+            if len(rates) >= settings.max_active_gpus or sum(rates) + maximum > settings.max_total_price_per_hour:
+                raise RuntimeError("Fleet count or hourly budget would be exceeded")
+            name = "tensor-master-h3-" + uuid.uuid4().hex[:12]
+            shared.update(status="creating", request_name=name, error=None)
+            create_attempted = True
+            try:
+                pod = provider.create_instance(selected["id"], name=name,
+                    public_key=Path(str(shared.SSH_KEY) + ".pub").read_text(encoding="utf-8"))
+            except Exception:
+                # A timed-out create may have succeeded. Never issue a second POST.
+                matches = [item for item in provider.list_instances() if item.get("name") == name]
+                if len(matches) != 1:
+                    shared.update(status="creation_unknown", error="Check Runpod console for " + name + "; do not retry rental blindly")
+                    raise
+                pod = matches[0]
+            pod_id = str(pod["id"])
+            started = shared.now()
+            deadline = (started + timedelta(minutes=minutes)).isoformat()
+            record = shared.update(instance_id=pod_id, provider="runpod", worker_id=f"runpod-{pod_id}",
+                status="booting", rented_at=started.isoformat(), deadline=deadline,
+                gpu=selected["gpu"], price_per_hour=maximum)
+            with shared.LOG.open("a", encoding="utf-8") as output:
+                subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watchdog",
+                                  "--pod-id", pod_id, "--deadline", deadline,
+                                  "--state-file", str(shared.STATE)],
+                                 stdin=subprocess.DEVNULL, stdout=output, stderr=output,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            actual_price = float(pod["costPerHr"])
+            if not 0 < actual_price <= maximum:
+                raise RuntimeError("Allocated Pod price is missing or exceeds the approved ceiling")
+            record = shared.update(price_per_hour=actual_price)
+            shared.log(f"Runpod {pod_id} rented at ${actual_price:.3f}/hour; public PyTorch image")
         while shared.now() < datetime.fromisoformat(deadline):
             pod = provider.get_instance(pod_id)
             if pod is None:
@@ -149,6 +160,10 @@ def launch(record):
         shared.transfer_secret(record, provider_secret("huggingface", get_settings().huggingface_token_file), "hf_read.txt")
         shared.run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token", timeout=60, logfile=shared.LOG)
         shared.provision_prompt_key(record)
+        if resume_existing:
+            shared.run_ssh(record, 'for phase in prepare models; do base=/workspace/commander-$phase; '
+                'if test -f "$base.exit" && test "$(cat "$base.exit")" != 0; '
+                'then rm -f "$base.exit" "$base.pid"; fi; done', timeout=20, logfile=shared.LOG)
         shared.update(status="preparing")
         shared.run_remote_phase(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
                        logfile=shared.phase_log("prepare"))
@@ -227,7 +242,7 @@ def launch(record):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["launch", "destroy", "watchdog"])
+    parser.add_argument("action", choices=["launch", "resume", "destroy", "watchdog"])
     parser.add_argument("--pod-id")
     parser.add_argument("--deadline")
     parser.add_argument("--state-file")
@@ -242,4 +257,4 @@ if __name__ == "__main__":
         from backend.process_lock import process_lock
         with process_lock(shared.STATE.with_suffix('.manager.lock')) as owned:
             if owned:
-                launch(shared.read_state())
+                launch(shared.read_state(), resume_existing=args.action == "resume")

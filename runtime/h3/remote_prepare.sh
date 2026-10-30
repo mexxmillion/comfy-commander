@@ -5,8 +5,9 @@ for script in /workspace/remote_prepare.sh /workspace/remote_sync.sh /workspace/
   bash -n "$script"
 done
 
-apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+export PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=5 PIP_RESUME_RETRIES=5
+apt-get -o Acquire::Retries=3 update -qq
+DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends \
   ffmpeg git libgl1 libglib2.0-0 python3-venv
 python -m venv --system-site-packages /opt/h3-venv
 mkdir -p /workspace/h3-cloud-unpacked /opt/h3-runtime
@@ -28,8 +29,8 @@ cd /opt/ComfyUI
 # installing it adds several minutes on otherwise healthy rental hosts without
 # affecting graph execution.
 grep -v '^comfyui-workflow-templates==' requirements.txt > /tmp/h3-comfy-requirements.txt
-/opt/h3-venv/bin/python -m pip install --no-cache-dir -c /opt/h3-runtime/local-runtime-constraints.txt -r /opt/h3-runtime/local-runtime-constraints.txt -r /tmp/h3-comfy-requirements.txt
-/opt/h3-venv/bin/python -m pip install --no-cache-dir \
+/opt/h3-venv/bin/python -m pip install -c /opt/h3-runtime/local-runtime-constraints.txt -r /opt/h3-runtime/local-runtime-constraints.txt -r /tmp/h3-comfy-requirements.txt
+/opt/h3-venv/bin/python -m pip install \
   -c /opt/h3-runtime/local-runtime-constraints.txt \
   -r custom_nodes/Veda-on-ComfyUI/requirements.txt \
   -r custom_nodes/comfyui-kjnodes/requirements.txt \
@@ -41,7 +42,7 @@ grep -v '^comfyui-workflow-templates==' requirements.txt > /tmp/h3-comfy-require
 if [[ "${H3_PROFILE:-}" == ltx-* ]]; then
   # ComfyUI-LTXVideo HDR nodes: colour-science for the ACES/BT.2020 transforms, OpenImageIO for its HDR I/O.
   # Constrained to the captured local runtime so torch/transformers stay at the verified versions.
-  /opt/h3-venv/bin/python -m pip install --no-cache-dir -c /opt/h3-runtime/local-runtime-constraints.txt \
+  /opt/h3-venv/bin/python -m pip install -c /opt/h3-runtime/local-runtime-constraints.txt \
     colour-science==0.4.6 openimageio==3.1.18.1 diffusers==0.36.0 einops==0.8.2 kornia==0.8.2 timm==1.0.26 \
     opencv-contrib-python-headless==4.11.0.86 cupy-cuda13x
   /opt/h3-venv/bin/python -c 'import colour, OpenImageIO; import cv2, cupy; print("LTX_HDR_DEPS_OK")'

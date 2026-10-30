@@ -1,4 +1,6 @@
 from functools import lru_cache
+import json
+import math
 from pathlib import Path
 from typing import Literal
 
@@ -47,4 +49,14 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    # The authenticated rental Settings form owns the per-GPU ceiling. The
+    # installation's fleet cap remains an outer bound, including after restart.
+    try:
+        saved = json.loads(settings.rental_preferences_file.read_text(encoding='utf-8'))
+        price = float(saved['max_price_per_hour'])
+        if math.isfinite(price) and 0 < price <= min(100, settings.max_total_price_per_hour):
+            settings.max_gpu_price_per_hour = price
+    except (OSError, ValueError, KeyError, TypeError):
+        pass  # Rental preference validation reports corrupt files before launch.
+    return settings

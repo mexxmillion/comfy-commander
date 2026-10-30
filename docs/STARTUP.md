@@ -125,3 +125,22 @@ the original automatic termination deadline. It remains billable during that
 repair window; terminate it yourself if you do not want to keep it. The original
 price, budget and lifetime limits are never extended by recovery. Container image
 loading is distinct from SSH readiness, runtime setup, model sync and worker readiness.
+
+
+Change **Settings → Rentals → Maximum GPU price** and click **Validate & save
+limits** to update the hourly ceiling for new Vast.ai and RunPod rentals. This
+applies immediately and persists across restart. Existing rental records keep
+their confirmed rate, total budget and original deadline. The installation's
+fleet hourly/count and lifetime safeguards remain outer limits.
+
+Both providers require CUDA 13 or newer for the bundled CUDA 13 image. RunPod
+availability and creation use the same minimum CUDA, CPU, RAM, network and disk
+requirements. An exact CUDA 13.0 match would incorrectly exclude newer compatible
+hosts and report no capacity even when the general GPU catalogue shows stock.
+
+
+Use **Retry setup · same GPU** on a retained failure after reviewing its logs.
+This uploads the current supported setup and resumes the original instance;
+it cannot create another GPU or extend the deadline. Installed packages and
+model cache are retained. Package downloads use longer timeouts/retries, and
+setup can safely reuse the already checked-out pinned ComfyUI source.

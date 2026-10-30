@@ -5,6 +5,7 @@ No automatic POST retries: an ambiguous create response may already be billed.
 from __future__ import annotations
 
 import math
+import json
 import re
 
 import httpx
@@ -16,6 +17,8 @@ from ..rental_cost import MIN_CLOUD_VRAM_GB, RUNPOD_GPU_NAMES
 REST = "https://rest.runpod.io/v1"
 GRAPHQL = "https://api.runpod.io/graphql"
 IMAGE = "pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime"
+PLACEMENT = dict(minCudaVersion='13.0', minDownload=2000, minDisk=500,
+                 minMemoryInGb=48, minVcpuCount=8, supportPublicIp=True)
 BOOT = '''set -euo pipefail
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server
@@ -59,12 +62,13 @@ class RunpodProvider:
         return response.json() if response.content else None
 
     def offers(self, maximum: float) -> list[dict]:
-        query = '''query { gpuTypes { id displayName memoryInGb secureCloud
-          lowestPrice(input: {gpuCount: 1, secureCloud: true}) {
+        query = '''query($placement: GpuLowestPriceInput!) { gpuTypes { id displayName memoryInGb secureCloud
+          lowestPrice(input: $placement) {
             stockStatus uninterruptablePrice availableGpuCounts
           } } }'''
         with httpx.Client(headers=self.headers, timeout=30, transport=self.transport) as api:
-            response = api.post(GRAPHQL, json={"query": query})
+            response = api.post(GRAPHQL, json={"query": query, 'variables': {
+                'placement': dict(gpuCount=1, secureCloud=True, **PLACEMENT)}})
         if response.is_error:
             raise RuntimeError(f"Runpod GPU catalogue returned HTTP {response.status_code}")
         body = response.json()
@@ -105,14 +109,23 @@ class RunpodProvider:
             self.request("DELETE", self.pod_path(pod_id))
 
     def create_instance(self, gpu: str, *, name: str, public_key: str):
-        return self.request("POST", "/pods", json={
-            "name": name, "imageName": IMAGE, "cloudType": "SECURE",
-            "computeType": "GPU", "gpuTypeIds": [gpu], "gpuCount": 1,
-            "interruptible": False, "allowedCudaVersions": ["13.0"],
-            "containerDiskInGb": 150, "volumeInGb": 0,
-            "minDownloadMbps": 2000, "minDiskBandwidthMBps": 500,
-            "minRAMPerGPU": 48, "minVCPUPerGPU": 8,
-            "supportPublicIp": True, "ports": ["22/tcp"],
-            "dockerEntrypoint": ["/bin/bash", "-lc"], "dockerStartCmd": [BOOT],
-            "env": {"PUBLIC_KEY": public_key.strip()},
-        })
+        # v1 REST only exposes an exact CUDA set. GraphQL supports a floor while
+        # retaining the same disk/network/CPU/RAM placement constraints.
+        query = '''mutation($input: PodFindAndDeployOnDemandInput!) {
+          podFindAndDeployOnDemand(input: $input) { id costPerHr }
+        }'''
+        payload = dict(name=name, imageName=IMAGE, cloudType='SECURE', gpuTypeId=gpu,
+                       gpuCount=1, containerDiskInGb=150, volumeInGb=0, ports='22/tcp',
+                       dockerArgs=json.dumps(dict(entrypoint=['/bin/bash', '-lc'], cmd=[BOOT])),
+                       env=[dict(key='PUBLIC_KEY', value=public_key.strip())], **PLACEMENT)
+        with httpx.Client(headers=self.headers, timeout=60, transport=self.transport) as api:
+            response = api.post(GRAPHQL, json=dict(query=query, variables=dict(input=payload)))
+        body = response.json()
+        pod = (body.get('data') or {}).get('podFindAndDeployOnDemand')
+        if pod and pod.get('id'):
+            return pod
+        detail = str(body.get('errors') or response.status_code)[:1500]
+        for secret in (self.headers['Authorization'].removeprefix('Bearer '), public_key.strip()):
+            if secret:
+                detail = detail.replace(secret, '[REDACTED]')
+        raise RuntimeError('Runpod deployment failed: ' + detail)

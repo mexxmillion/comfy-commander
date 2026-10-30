@@ -26,7 +26,7 @@ class RentalPreferences(BaseModel):
 def caps() -> dict:
     settings = get_settings()
     return {
-        "max_price_per_hour": settings.max_gpu_price_per_hour,
+        "max_price_per_hour": min(100, settings.max_total_price_per_hour),
         "max_minutes": min(180, settings.max_instance_lifetime_hours * 60),
         "max_active_gpus": settings.max_active_gpus,
         "fleet_hourly_cap": settings.max_total_price_per_hour,
@@ -169,4 +169,5 @@ def save_rental_preferences(request: Request, payload: RentalPreferences) -> dic
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+    getattr(get_settings, 'cache_clear', lambda: None)()
     return {"saved": True, "preferences": payload.model_dump()}

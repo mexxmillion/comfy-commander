@@ -52,7 +52,7 @@ def test_validation_save_reload_and_hard_caps(client, monkeypatch, tmp_path):
     before = (tmp_path / "rentals.json").read_bytes()
     for invalid in [
         {"max_minutes": 150},
-        {"max_price_per_hour": 1.8},
+        {"max_price_per_hour": 4.1},
         {"gpu_class": "unsupported"},
         {"max_budget_usd": -1},
     ]:
@@ -248,3 +248,10 @@ def test_diagnostic_logs_redact_credentials(monkeypatch, tmp_path):
     monkeypatch.setattr(credential_paths, "provider_secret", lambda *args: secret)
     text = rental_ui.redact_log(secret + " Bearer abc123 https://example.test/file?signature=private")
     assert secret not in text and "abc123" not in text and "signature=private" not in text
+
+
+def test_admin_can_raise_saved_hourly_ceiling_above_initial_default(client,monkeypatch):
+    monkeypatch.setattr(rental_ui,'require_admin',lambda *a,**kw:None)
+    payload=dict(gpu_class='5090',minimum_vram_gb=16,max_minutes=30,max_budget_usd=2,max_price_per_hour=3)
+    assert client.put('/api/v1/settings/rentals',json=payload).status_code==200
+    assert client.get('/api/v1/settings/rentals').json()['preferences']['max_price_per_hour']==3

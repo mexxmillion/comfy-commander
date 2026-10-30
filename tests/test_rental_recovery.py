@@ -66,3 +66,18 @@ def test_permission_failure_does_not_blindly_redownload(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match='exited with code 1'):
         worker.run_remote_phase(record, 'fixture', timeout=300, logfile=tmp_path/'models.log')
     assert len(starts) == 1
+
+
+def test_resume_endpoint_requires_admin_and_rejects_non_failure(monkeypatch,tmp_path):
+    import json
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.app import rental_ui
+    app=FastAPI();app.include_router(rental_ui.router)
+    with TestClient(app) as client:
+        assert client.post('/api/v1/cloud/resume/rental-fixture').status_code in {401,403}
+        path=tmp_path/'rental-fixture.json'
+        path.write_text(json.dumps(dict(status='ready',instance_id=123)),encoding='utf-8')
+        monkeypatch.setattr(rental_ui,'_admin',lambda *a,**kw:None)
+        monkeypatch.setattr(rental_ui,'_state_path',lambda rid:path)
+        assert client.post('/api/v1/cloud/resume/rental-fixture').status_code==409
