@@ -103,6 +103,11 @@ ComfyUI stays behind the worker rather than being exposed to the phone. The PC,
 Commander and Tailscale must remain running. Use the full URL shown in Settings
 rather than guessing a hostname or port. [Complete phone setup](docs/PHONE_ACCESS.md).
 
+Keys saved in Setup are stored on the computer running Commander. They are sent
+to the relevant provider for validation and API use; a configured HF token is
+also transferred over SSH to rented workers for model downloads. They are not
+stored in a Tensor Master account. [Credential details](docs/STARTUP.md#where-credentials-go).
+
 ## Generation and deployment
 
 H3 offers **References**, **Frames** and **Motion control**. Main controls are
