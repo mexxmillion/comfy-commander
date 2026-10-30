@@ -10,7 +10,7 @@ import socket
 import subprocess
 import sys
 
-REPOSITORY = 'https://github.com/mexxmillion/tensor-master-community.git'
+REPOSITORY = 'https://github.com/mexxmillion/comfy-commander.git'
 PREFIXES = ('TENSOR_', 'COMFY_', 'COMFYUI_', 'COMMANDER_', 'OPENROUTER_', 'HF_', 'HUGGINGFACE_')
 OVERRIDES = {
     'DATABASE_URL', 'TOKEN_FILE', 'CLOUD_SSH_KEY_FILE', 'CLOUD_RUNTIME_SOURCE', 'CLOUD_OUTPUT_DIR',

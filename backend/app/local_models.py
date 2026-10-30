@@ -53,7 +53,7 @@ def node_checks(root, model_set):
     for name in names:
         source = sources["custom_nodes"].get(name, {})
         rows.append({"name": name, "found": name.casefold() in installed,
-                     "url": source.get("url") or "https://github.com/mexxmillion/tensor-master-community/tree/main/runtime/h3",
+                     "url": source.get("url") or "https://github.com/mexxmillion/comfy-commander/tree/main/runtime/h3",
                      "note": "Requires Commander's runtime patches / overlays" if source.get("patch") or source.get("overlay") or not source else "Install the pinned runtime version",
                      "revision": source.get("revision") or source.get("version")})
     required = {"TextEncodeQwenImage21", "ViggleTurboLora"} if model_set == "qwen" else {

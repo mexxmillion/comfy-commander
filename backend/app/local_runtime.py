@@ -82,7 +82,7 @@ def plan(selection):
     for name in names:
         item = sources["custom_nodes"].get(name, {})
         components.append({"name": name, "revision": item.get("revision") or item.get("version") or "bundled reviewed source",
-                           "url": item.get("url") or "https://github.com/mexxmillion/tensor-master-community/tree/main/runtime/h3"})
+                           "url": item.get("url") or "https://github.com/mexxmillion/comfy-commander/tree/main/runtime/h3"})
     digest = hashlib.sha256((str(target) + selection.model_set + json.dumps(sources, sort_keys=True) + json.dumps(python, sort_keys=True)).encode()).hexdigest()
     return {"destination": str(target), "model_set": selection.model_set, "components": components,
             "packages": python["packages"], "confirmation": digest,

@@ -27,7 +27,7 @@ and installation rather than presenting an already initialized app as a first ru
 In an empty recording folder:
 
 ```powershell
-git clone --branch main --single-branch https://github.com/mexxmillion/tensor-master-community.git app
+git clone --branch main --single-branch https://github.com/mexxmillion/comfy-commander.git app
 cd app
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .

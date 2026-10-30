@@ -1,7 +1,7 @@
 # Comfy Commander by Tensor Master
 
 [![License: AGPL v3 or later](https://img.shields.io/badge/License-AGPL_v3_or_later-663399.svg)](LICENSE)
-[![Tests](https://github.com/mexxmillion/tensor-master-community/actions/workflows/ci.yml/badge.svg)](https://github.com/mexxmillion/tensor-master-community/actions/workflows/ci.yml)
+[![Tests](https://github.com/mexxmillion/comfy-commander/actions/workflows/ci.yml/badge.svg)](https://github.com/mexxmillion/comfy-commander/actions/workflows/ci.yml)
 
 **Create on your own GPU. Scale to a worker fleet. Control it from your phone.**
 
@@ -48,8 +48,8 @@ ComfyUI runtime, custom nodes and the selected profile's models.
 From PowerShell:
 
 ```powershell
-git clone https://github.com/mexxmillion/tensor-master-community.git
-cd tensor-master-community
+git clone https://github.com/mexxmillion/comfy-commander.git
+cd comfy-commander
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\python.exe -m backend.service_start
