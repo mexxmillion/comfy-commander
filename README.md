@@ -408,3 +408,13 @@ and explicit Save; browser previews use MP4 while the prepared reference retains
 PCM audio. Source crop/trim settings and continuous audio are preserved.
 The inspector separates requested duration/aspect from aligned output pixels and
 frames; SAM3 tracking progress is distinct from H3 sampling steps and timing.
+
+
+Desktop and phone share one persistent **Video / Image / Sources / Gallery /
+Dispatcher** bar with a Settings gear and live queue, running and worker counts.
+Primary desktop controls use a compact layout; secondary sampling, encoding,
+model and Creative Engine options stay in disclosures.
+Vast connection setup registers the dedicated public SSH key with the account;
+the private half stays on the controller. Rental preflight verifies registration
+before creating paid capacity. Managers and lifetime watchdogs read the same
+configured credential source used by Settings, including environment overrides.

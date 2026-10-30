@@ -265,6 +265,14 @@ def prepare_cloud_ssh() -> bool:
     return key.is_file() and public.is_file()
 
 
+def prepare_provider_ssh(service: str, api_key: str) -> bool:
+    ready = prepare_cloud_ssh()
+    if ready and service == 'vast':
+        from .cloud_ssh import register_vast_public_key
+        register_vast_public_key(api_key, get_settings().cloud_ssh_key_file)
+    return ready
+
+
 @router.post("/api/v1/setup/cloud-ssh")
 def create_cloud_ssh(payload: CreateCloudSSH, request: Request) -> dict:
     require_admin(request, mutation=True)
@@ -306,11 +314,11 @@ async def save_secret(payload: SecretSetup, request: Request) -> dict:
     ssh_ready = None
     if payload.service in {"vast", "runpod"}:
         try:
-            ssh_ready = await asyncio.to_thread(prepare_cloud_ssh)
-        except (ValueError, OSError, subprocess.SubprocessError):
+            ssh_ready = await asyncio.to_thread(prepare_provider_ssh, payload.service, key)
+        except (ValueError, OSError, RuntimeError, httpx.HTTPError, subprocess.SubprocessError):
             ssh_ready = False
         message += (" Cloud access prepared; the shared worker SSH key is ready." if ssh_ready else
-                    " Provider saved. Cloud access needs attention: check OpenSSH Client and use Prepare cloud access in Compute.")
+                    " Provider saved. Check OpenSSH Client and provider SSH-key permissions, then retry Validate & prepare cloud access in Connections.")
     return {"ok": True, "service": payload.service, "message": message, "cloud_ssh_ready": ssh_ready}
 
 
@@ -326,9 +334,9 @@ async def verify_cloud_connection(service: Literal["vast", "runpod"], payload: C
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         raise HTTPException(422, "Provider verification failed. Check the saved key in Connections.") from exc
     try:
-        ready = await asyncio.to_thread(prepare_cloud_ssh)
-    except (ValueError, OSError, subprocess.SubprocessError) as exc:
-        raise HTTPException(409, "Provider verified, but cloud access needs OpenSSH Client or file-permission repair.") from exc
+        ready = await asyncio.to_thread(prepare_provider_ssh, service, key)
+    except (ValueError, OSError, RuntimeError, httpx.HTTPError, subprocess.SubprocessError) as exc:
+        raise HTTPException(409, "Provider verified, but worker SSH setup or provider registration failed. Check SSH-key API permissions and retry Validate & prepare.") from exc
     return {"ok": True, "cloud_ssh_ready": ready, "message": message + " Cloud access prepared. No GPU rented."}
 
 

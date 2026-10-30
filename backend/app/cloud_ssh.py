@@ -58,3 +58,43 @@ def create_cloud_key(key: Path) -> None:
                 for destination in published:
                     destination.unlink()
                 raise
+
+
+def public_key_identity(public_key: str) -> tuple[str, str]:
+    parts = public_key.strip().split()
+    if len(parts) < 2 or parts[0] not in {'ssh-ed25519','ssh-rsa','ecdsa-sha2-nistp256','ecdsa-sha2-nistp384','ecdsa-sha2-nistp521'}:
+        raise ValueError('Invalid worker SSH public key')
+    return parts[0], parts[1]
+
+
+def vast_public_key_registered(provider, public_key: str) -> bool:
+    identity = public_key_identity(public_key)
+    rows = provider.show_ssh_keys()
+    if isinstance(rows, dict):
+        rows = rows.get('ssh_keys', rows.get('keys'))
+    if not isinstance(rows, list):
+        raise RuntimeError('Could not verify Vast SSH registration')
+    for row in rows:
+        if not isinstance(row,dict) or row.get('deleted_at'):
+            continue
+        value = row.get('public_key') or row.get('ssh_key') or row.get('key') or ''
+        try:
+            if public_key_identity(value) == identity:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def register_vast_public_key(api_key: str, key_file: Path) -> None:
+    """Human setup only. Register the public half; never read/send the private half."""
+    from vastai import VastAI
+    public = Path(str(key_file) + '.pub').read_text(encoding='utf-8').strip()
+    public_key_identity(public)
+    with KEY_LOCK:
+        provider = VastAI(api_key=api_key, raw=True)
+        if vast_public_key_registered(provider, public):
+            return
+        provider.create_ssh_key(ssh_key=public)
+        if not vast_public_key_registered(provider, public):
+            raise RuntimeError('Vast did not confirm worker SSH registration')

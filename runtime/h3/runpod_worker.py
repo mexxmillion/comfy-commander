@@ -89,7 +89,7 @@ def launch(record):
         existing = provider.list_instances()
         # Fail closed on unknown account costs, including stopped Pods with storage charges.
         rates = [float(item["costPerHr"]) for item in existing]
-        if shared.KEY.is_file():
+        if shared.vast_api_key():
             vast_instances = shared.vast().show_instances() or []
             rates += [float(item["dph_total"]) for item in vast_instances]
         if len(rates) >= settings.max_active_gpus or sum(rates) + maximum > settings.max_total_price_per_hour:

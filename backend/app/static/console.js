@@ -381,16 +381,29 @@
     if(route==='#sources')window.tensorGenerator.showSources();
     else if(route==='#generator')window.tensorGenerator.showGenerate();
     const dispatching=!generating&&!outputs;
-    $('#dispatcher-nav').open=dispatching;
+    $('#dispatcher-nav').open=false;
     $('#dispatcher-nav').classList.toggle('active',dispatching);
-    $('#mobile-dispatcher-nav').classList.toggle('active',dispatching);
+    syncModeNavigation();
     if(outputs)loadDurableOutputs();
-    document.querySelectorAll('.shell>aside nav a[href^="#"], .mobile-nav a[href^="#"]').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
+    document.querySelectorAll('.workspace-tabs>a:not([data-studio-mode])').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
   }
-  document.querySelectorAll('#mobile-dispatcher-nav a').forEach(link=>link.addEventListener('click',()=>{$('#mobile-dispatcher-nav').open=false;}));
-  document.addEventListener('click',event=>{if(!event.target.closest('#mobile-dispatcher-nav'))$('#mobile-dispatcher-nav').open=false;});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape')$('#mobile-dispatcher-nav').open=false;});
+  function syncModeNavigation() {
+    const mode=document.querySelector('#studio-form')?.dataset.mode || 'h3';
+    const generating=(!location.hash || location.hash==='#generator');
+    document.querySelectorAll('[data-studio-mode]').forEach(tab=>{
+      const active=generating && tab.dataset.studioMode===mode;
+      tab.classList.toggle('active',active);
+      if(active)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current');
+    });
+  }
+  document.querySelectorAll('[data-studio-mode]').forEach(tab=>tab.addEventListener('click',event=>{
+    event.preventDefault();location.hash='#generator';window.tensorGenerator.setMode(tab.dataset.studioMode);syncModeNavigation();
+  }));
+  document.addEventListener('generator-mode-change',syncModeNavigation);
+  document.querySelectorAll('#dispatcher-nav a').forEach(link=>link.addEventListener('click',()=>{$('#dispatcher-nav').open=false;}));
+  document.addEventListener('click',event=>{if(!event.target.closest('#dispatcher-nav'))$('#dispatcher-nav').open=false;});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')$('#dispatcher-nav').open=false;});
   function closeOutputPlayer(){
     const dialog=$('#output-player');
     if(dialog.open)dialog.close();
@@ -509,7 +522,7 @@
   $('#output-remove-selected').onclick=()=>removeOutputEntries([...checkedOutputs]);
   $('#output-search').addEventListener('input',()=>{outputPage=0;renderDurableOutputs();});$('#output-page-size').addEventListener('change',()=>{outputPage=0;renderDurableOutputs();});$('#output-prev').onclick=()=>{outputPage--;renderDurableOutputs();};$('#output-next').onclick=()=>{outputPage++;renderDurableOutputs();};
   function syncNavCounts(metrics) {
-    for (const [selector, key] of [['[data-dispatch-queued]', 'queued'], ['[data-dispatch-running]', 'running']]) {
+    for (const [selector, key] of [['[data-dispatch-queued]', 'queued'], ['[data-dispatch-running]', 'running'], ['[data-dispatch-workers]', 'active_workers']]) {
       document.querySelectorAll(selector).forEach(badge => { badge.textContent = String(metrics[key] ?? 0); });
     }
     document.querySelectorAll('[data-live-queued]').forEach(badge=>{badge.textContent=String(metrics.queued ?? 0);});

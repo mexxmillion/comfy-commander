@@ -5,52 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=video-preparation-layout-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=unified-navigation-compact-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
-    <script defer src="/static/generator.js?v=video-preparation-layout-20261029"></script>
-    <script defer src="/static/console.js?v=video-preparation-layout-20261029"></script>
-    <link rel="stylesheet" href="/static/generator.css?v=video-preparation-layout-20261029">
+    <script defer src="/static/generator.js?v=unified-navigation-compact-20261029"></script>
+    <script defer src="/static/console.js?v=unified-navigation-compact-20261029"></script>
+    <link rel="stylesheet" href="/static/generator.css?v=unified-navigation-compact-20261029">
   </head>
   <body>
+    <nav class="workspace-nav" aria-label="Main navigation">
+      <a class="nav-brand" href="#generator" aria-label="Comfy Commander home">CC</a>
+      <div class="workspace-tabs">
+        <a href="#generator" data-studio-mode="h3" aria-label="Video mode">Video</a>
+        <a href="#generator" data-studio-mode="qwen" aria-label="Image mode">Image</a>
+        <a href="#sources">Sources</a>
+        <a href="#outputs">Gallery</a>
+        <details id="dispatcher-nav" class="workspace-dispatcher">
+          <summary><span>Dispatcher</span><small aria-label="Live workload"><b data-dispatch-queued>{{ state.metrics.queued }}</b>Q · <b data-dispatch-running>{{ state.metrics.running }}</b>R · <b data-dispatch-workers>{{ state.metrics.active_workers }}</b>W</small></summary>
+          <div class="dispatcher-menu"><a href="#tasks">Queue <span>{{ state.metrics.active_tasks }}</span></a><a href="#monitor">Monitor <span>{{ state.metrics.running }}</span></a><a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a><a href="#rentals">Rentals</a><a href="#activity">Activity</a><a href="#history">Benchmarks</a></div>
+        </details>
+      </div>
+      <a class="settings-gear" href="/settings" aria-label="Settings" title="Settings">⚙</a>
+    </nav>
     <div class="shell">
-      <aside>
-        <div class="brand"><span class="pulse"></span> Tensor Master</div>
-        <nav aria-label="Main navigation">
-          <a class="generate-primary" href="#generator">Generate</a>
-          <a href="#sources">Sources</a>
-          <a href="#outputs">Outputs</a>
-          <details class="dispatcher-nav" id="dispatcher-nav">
-            <summary>Dispatcher <span class="dispatcher-counts"><span><b data-dispatch-queued>{{ state.metrics.queued }}</b> queued</span><span><b data-dispatch-running>{{ state.metrics.running }}</b> running</span></span></summary>
-            <a href="#tasks">Queue <span>{{ state.metrics.active_tasks }}</span></a>
-            <a href="#monitor">Monitor <span>{{ state.metrics.running }}</span></a>
-            <a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a>
-            <a href="#rentals">Rentals <span>{{ active_rentals|length }}</span></a>
-            <a href="#activity">Activity</a>
-            <a href="#history">Benchmarks</a>
-          </details>
-          <a class="setup-nav" href="/settings">⚙ Settings</a>
-        </nav>
-        <div class="provider-status">
-          <small>CONTROL PLANE</small>
-          <strong><i></i> Online</strong>
-          <span>Managed cloud fleet · up to {{ limits.gpus }} GPUs</span>
-        </div>
-        <div class="build-version" title="Tensor Master {{ app_version }} · {{ prompt_version }}">
-          <span>TM v{{ app_version }}</span><span>{{ prompt_version|replace('h3-director-', 'H3 ') }}</span>
-        </div>
-        <div class="source-notice"><a href="https://github.com/mexxmillion/tensor-master-community" target="_blank" rel="noopener">Source</a> · <a href="https://github.com/mexxmillion/tensor-master-community/blob/main/LICENSE" target="_blank" rel="noopener">AGPL-3.0-or-later</a></div>
-      </aside>
-
       <main id="monitor">
         <header>
           <div><p class="eyebrow">COMFY COMMANDER / BY TENSOR MASTER</p><h1 id="workspace-title">Farm monitor</h1></div>
-          <div class="header-actions"><button type="button" class="primary-link" id="add-gpu-header">+ Add GPU worker</button><span id="sync-status" role="status">Connecting…</span><button id="pause-live" type="button">Pause updates</button><button id="refresh-console" type="button">Refresh</button><a class="primary-link" href="#generator">Generate</a></div>
+          <div class="header-actions"><button type="button" class="primary-link" id="add-gpu-header">+ Add GPU worker</button><span id="sync-status" role="status">Connecting…</span><button id="pause-live" type="button">Pause updates</button><button id="refresh-console" type="button">Refresh</button></div>
         </header>
-        <nav class="live-status-strip" aria-label="Live dispatcher status">
-          <a href="#monitor">Running <span>{{ state.metrics.running }}</span></a>
-          <a href="#tasks">Queued <span data-live-queued>{{ state.metrics.queued }}</span></a>
-          <a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a>
-        </nav>
         <section id="generator" class="generator-workspace" hidden aria-label="AI Generator workspace">
           {% include "generator.html" %}
         </section>
@@ -265,19 +246,6 @@
       <section id="rental-picker" hidden><label>Community runtime profile<select id="rental-profile"><option value="ref2v-int8" selected>MiniMax H3 Ref2V · Community default</option><option value="ref2v-singularity">Singularity Ref2VA v1.3 INT8</option><option value="fasth3-omni">FastH3 Omni INT8 · native 8 steps</option><option value="flf2v-int8">H3 First / Last Frame · FL2VA INT8</option><option value="qwen-image-21">Qwen Image 2.1 · native + optional Viggle</option></select></label><div class="form-row"><label>Quantity<input id="rental-count" type="number" min="1" max="10" value="1"></label><label>Maximum rental time (minutes)<input id="rental-minutes" type="number" min="15" max="180" value="90"></label></div><label>Total launch budget · USD<input id="rental-budget" type="number" min="0.01" step="0.01" value="5"></label><p><a href="/settings#rentals">GPU filters &amp; rental limits →</a></p><button type="button" id="refresh-offers">Refresh offers</button><div id="rental-offers" class="rental-offers"></div><button type="button" class="primary" id="launch-rental">Rent selected GPU(s)</button></section>
       <p id="rental-message" role="status" class="muted"></p>
     </dialog>
-    <nav class="mobile-nav" aria-label="Mobile navigation">
-      <a class="generate-primary" href="#generator">Generate</a>
-      <a href="#sources">Sources</a>
-      <a href="#outputs">Outputs</a>
-      <details id="mobile-dispatcher-nav">
-        <summary>Dispatcher <span class="mobile-dispatch-counts"><b data-dispatch-queued>{{ state.metrics.queued }}</b> queued · <b data-dispatch-running>{{ state.metrics.running }}</b> running</span></summary>
-        <div class="mobile-dispatcher-menu">
-          <strong>Dispatcher</strong>
-          <a href="#tasks">Queue</a><a href="#monitor">Monitor</a><a href="#workers">Workers</a><a href="#rentals">Rentals</a><a href="#activity">Activity</a><a href="#history">Benchmarks</a>
-          <a class="setup-nav" href="/settings">⚙ Settings</a>
-        </div>
-      </details>
-    </nav>
     <script>
       document.addEventListener('click', event => {
         const button = event.target.closest('[data-ssh-command]');

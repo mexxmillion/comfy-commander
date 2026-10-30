@@ -11,7 +11,7 @@
       </div>
     </header>
 
-    <nav class="mode-switch" aria-label="Studio mode">
+    <nav class="mode-switch" aria-label="Studio mode" hidden>
       <button type="button" data-mode="h3" class="active">H3 Video</button>
       <button type="button" data-mode="qwen">Qwen Image 2.1</button>
       <button id="sources-button" type="button">Sources</button>
@@ -51,11 +51,13 @@
             <label class="field"><span>Creative brief</span><textarea id="creative-brief" rows="4" disabled placeholder="Create five distinct toothpaste commercials using my product images."></textarea></label>
             <div class="compact-grid"><label class="field"><span>Variations</span><select id="creative-count"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select></label>
         <label class="switch-row"><input id="creative-review" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Review before queuing</strong><small>On: generate ideas only. Off: generate and queue renders.</small></span></label></div>
+            <details class="creative-options"><summary>Creative options · direction, references &amp; model</summary>
             <label class="field"><span>Creative direction · what may change, what must stay fixed</span><textarea id="creative-direction" rows="2" placeholder="Keep the product identity. Explore different stories, lighting and camera motion."></textarea></label>
             <label class="field"><span>Reference notes</span><textarea id="creative-reference-notes" rows="2" placeholder="Describe your supplied images, clips, audio or frame endpoints."></textarea></label>
             <label class="field"><span>Creative model</span><select id="creative-model"><option value="google/gemini-3-flash-preview">Gemini 3 Flash</option><option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option><option value="x-ai/grok-4.3">Grok 4.3 · budget, edgier</option></select></label>
             <p class="hint">Develops distinct ideas, then sends each through the normal H3 AI enhancer using the selected Creative model and your reference media, including crop/trim settings (OpenRouter API charges apply). Reference notes define what each asset supplies. All original inputs stay attached to each render. Local targets use local workers; no automatic GPU rental.</p>
             <p class="hint">One idea call plus one enhancement call per video variation. Review shows each original idea and its editable final prompt before queuing. Still images use their dedicated image writer. Queued prompts render exactly as reviewed.</p>
+            </details>
           </div>
 
         </section>
@@ -72,8 +74,8 @@
               <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite · cheaper</option>
               <option value="x-ai/grok-4.3">Grok 4.3 · budget, edgier</option>
             </select>
-          </label></details>
-          <p class="hint">Text-to-image becomes a complete scene prompt. Image edit uses Qwen's ordered &lt;image1&gt;, &lt;image2&gt; references and preserves anything you did not ask to change. Images stay local; only your text and generation settings are sent.</p>
+          </label>
+          <p class="hint">Text-to-image becomes a complete scene prompt. Image edit uses Qwen's ordered &lt;image1&gt;, &lt;image2&gt; references and preserves anything you did not ask to change. Images stay local; only your text and generation settings are sent.</p></details>
         </div>
         <details id="creative-library" class="h3-only"><summary>Creative Engine batches</summary><div class="creative-toolbar"><select id="creative-history" aria-label="Saved creative batch"><option value="">Choose a saved batch</option></select><button id="creative-restore" type="button" class="text-button" hidden>Restore brief &amp; setup</button><button id="creative-refresh" type="button" class="text-button">Refresh batches</button><button id="creative-clear" type="button" class="text-button">Clear loaded batch</button></div><p id="creative-status" role="status"></p><div id="creative-cards"></div><button id="creative-queue" type="button" class="text-button" hidden>Queue selected concepts</button></details>
 <details id="ai-generated-panel" class="ai-generated" hidden>
@@ -239,6 +241,7 @@
         </div>
 
       </section>
+      <details id="image-advanced" class="panel qwen-only h3-advanced" hidden><summary>Advanced · model, sampling &amp; LoRAs</summary><div id="image-advanced-fields" class="compact-grid"></div></details>
       <details id="h3-advanced" class="panel h3-only h3-advanced"><summary>Advanced · model, sampling &amp; LoRAs</summary><div class="compact-grid"><label class="field"><span>Sampler</span><select id="h3-sampler"><option value="euler">Euler</option><option value="res_multistep">RES multistep</option></select></label>        <div class="segmented h3-only" role="radiogroup" aria-label="Acceleration LoRA preset">
           <label>
             <input type="radio" name="turbo" value="4" checked>

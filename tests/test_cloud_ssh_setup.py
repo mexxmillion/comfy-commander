@@ -69,6 +69,7 @@ def test_connecting_provider_automatically_prepares_shared_ssh_once(monkeypatch,
     monkeypatch.setattr(community, 'require_admin', lambda *a, **kw: None)
     monkeypatch.setattr(community, '_test_secret', lambda *a: 'Provider verified.')
     monkeypatch.setattr(community, '_secret_path', lambda service: tmp_path / (service + '-api-key'))
+    monkeypatch.setattr(cloud_ssh, 'register_vast_public_key', lambda *a: None)
     created = []
     def create(path):
         created.append(path)
@@ -104,7 +105,7 @@ def test_existing_provider_verify_requires_confirmation_and_never_returns_key(mo
     monkeypatch.setattr(community, '_secret_path', lambda service: Path('fixture-provider'))
     monkeypatch.setattr(community, 'provider_secret', lambda *a: 'isolated-provider-test-key')
     monkeypatch.setattr(community, '_test_secret', lambda *a: 'Provider verified.')
-    monkeypatch.setattr(community, 'prepare_cloud_ssh', lambda: True)
+    monkeypatch.setattr(community, 'prepare_provider_ssh', lambda *a: True)
     app = FastAPI()
     app.include_router(community.router)
     client = TestClient(app)
@@ -113,3 +114,39 @@ def test_existing_provider_verify_requires_confirmation_and_never_returns_key(mo
     assert response.status_code == 200 and response.json()['cloud_ssh_ready']
     assert 'isolated-provider-test-key' not in response.text
     assert calls[-1] == {'mutation':True}
+
+
+def test_vast_registration_sends_only_public_half_and_reuses_existing_key(monkeypatch, tmp_path):
+    import vastai
+    private = tmp_path / 'worker-key'
+    private.write_text('private fixture must never be sent')
+    public = 'ssh-ed25519 AAAATEST controller-fixture'
+    Path(str(private)+'.pub').write_text(public)
+    rows = []
+    sent = []
+    def create(*, ssh_key):
+        assert ssh_key == public
+        assert 'private fixture' not in ssh_key
+        sent.append(ssh_key)
+        rows.append({'public_key':ssh_key,'private_key':'unrelated account data'})
+    provider = SimpleNamespace(show_ssh_keys=lambda:rows,create_ssh_key=create)
+    monkeypatch.setattr(vastai,'VastAI',lambda **kw:provider)
+    cloud_ssh.register_vast_public_key('isolated-provider-test-key',private)
+    cloud_ssh.register_vast_public_key('isolated-provider-test-key',private)
+    assert sent == [public]
+    assert private.read_text() == 'private fixture must never be sent'
+    assert cloud_ssh.vast_public_key_registered(provider,public+' comment-ignored')
+
+
+def test_unregistered_vast_key_fails_preflight_before_paid_capacity(monkeypatch,tmp_path):
+    from backend.app import credential_paths
+    from runtime.h3 import managed_worker
+    public=tmp_path/'worker.pub';public.write_text('ssh-ed25519 AAAATEST controller-fixture')
+    monkeypatch.setattr(managed_worker,'settings',lambda:SimpleNamespace(vast_api_key_file=tmp_path/'vast',huggingface_token_file=tmp_path/'hf'))
+    monkeypatch.setattr(managed_worker,'validate_ssh_key_files',lambda:None)
+    monkeypatch.setattr(managed_worker,'SSH_PUBLIC_KEY',public)
+    monkeypatch.setattr(credential_paths,'provider_secret',lambda *a:'isolated-provider-test-key')
+    monkeypatch.setattr(managed_worker,'vast',lambda:SimpleNamespace(show_ssh_keys=lambda:[]))
+    import pytest
+    with pytest.raises(RuntimeError,match='not registered with Vast'):
+        managed_worker.preflight()

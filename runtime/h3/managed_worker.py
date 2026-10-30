@@ -19,7 +19,6 @@ from vastai import VastAI
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "managed-rental.json"
 LOG = ROOT / "state" / "managed-rental.log"
-KEY = ROOT / "vast.txt"
 BUNDLE = ROOT / "state" / "h3-cloud-runtime.tar.gz"
 IMAGE = "pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime"
 PROFILES = {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}
@@ -31,6 +30,7 @@ def settings():
     return get_settings()
 
 
+KEY = settings().vast_api_key_file
 SSH_KEY = settings().cloud_ssh_key_file
 SSH_PUBLIC_KEY = Path(str(SSH_KEY) + ".pub")
 
@@ -38,7 +38,7 @@ SSH_PUBLIC_KEY = Path(str(SSH_KEY) + ".pub")
 def validate_ssh_key_files() -> None:
     if not SSH_KEY.is_file() or not SSH_PUBLIC_KEY.is_file():
         raise RuntimeError(
-            "Cloud worker SSH key is not configured. Open Setup & Models → Compute → "
+            "Cloud worker SSH key is not configured. Open Setup & Models â†’ Compute â†’ "
             "Cloud SSH access and create or configure your key pair. No GPU rental was started."
         )
 
@@ -84,9 +84,13 @@ def log(message: str) -> None:
         stream.write(line)
 
 
-def vast() -> VastAI:
+def vast_api_key() -> str:
     from backend.app.credential_paths import provider_secret
-    return VastAI(api_key=provider_secret("vast", settings().vast_api_key_file), raw=True)
+    return provider_secret("vast", settings().vast_api_key_file)
+
+
+def vast() -> VastAI:
+    return VastAI(api_key=vast_api_key(), raw=True)
 
 
 MAX_DOWNLOAD_COST_PER_GB = 0.01   # default for callers without settings; see Settings.max_download_cost_per_gb
@@ -220,6 +224,9 @@ def preflight() -> None:
     if not provider_secret("huggingface", configured.huggingface_token_file):
         raise RuntimeError("Missing Hugging Face token")
     validate_ssh_key_files()
+    from backend.app.cloud_ssh import vast_public_key_registered
+    if not vast_public_key_registered(vast(), SSH_PUBLIC_KEY.read_text(encoding='utf-8')):
+        raise RuntimeError('Worker SSH key is not registered with Vast. Open Settings → Connections → Vast Validate & prepare cloud access. No GPU rental was started.')
     for path in (BUNDLE,):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
@@ -417,7 +424,7 @@ def launch(record: dict) -> None:
         settings = get_settings()
         maximum = min(float(record["max_price_per_hour"]), settings.max_gpu_price_per_hour)
         from backend.app.rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS
-        candidates = VastProvider(KEY.read_text(encoding="utf-8").strip()).search_offers(
+        candidates = VastProvider(vast_api_key()).search_offers(
             OfferSearch(VAST_GPUS, MIN_CLOUD_VRAM_GB, maximum, 0.98, 150,
                         # Vast ignores id= filters; narrow by the picking filters instead so the picked host is on the page
                         extra_query=(f"inet_down>={float(record.get('min_inet_down', 2000)):g} direct_port_count>=1 cuda_max_good>=13"
@@ -433,8 +440,8 @@ def launch(record: dict) -> None:
                                        profile=record["profile"],
                                        require_datacenter=not record.get("allow_non_datacenter", False),
                                        min_inet_down=float(record.get("min_inet_down", 2000)))
-        from backend.app.rental_preferences import offer_allowed, record_preferences
         from backend.app.rental_cost import vast_estimate
+        from backend.app.rental_preferences import offer_allowed, record_preferences
         preferences = record_preferences(record)
         choices = [offer for offer in choices if offer_allowed(
             {"gpu": offer.gpu_name, "vram_gb": offer.vram_gb, "price_per_hour": offer.price_per_hour,

@@ -183,16 +183,16 @@ def test_homepage_defaults_to_generate():
     assert "location.hash||'#monitor'" not in console
 
 
-def test_mobile_navigation_matches_desktop_destinations_and_grouping():
+def test_one_navigation_shares_modes_destinations_and_live_counts():
     root = Path(__file__).parents[1]
     template = (root / "backend/app/templates/dashboard.html").read_text(encoding="utf-8")
-    desktop = template.split('<nav aria-label="Main navigation">', 1)[1].split('</nav>', 1)[0]
-    mobile = template.split('<nav class="mobile-nav"', 1)[1].split('</nav>', 1)[0]
-    assert re.findall(r'href="([^"]+)"', mobile) == re.findall(r'href="([^"]+)"', desktop)
-    primary, dispatcher = mobile.split('<details id="mobile-dispatcher-nav">', 1)
-    assert re.findall(r'href="([^"]+)"', primary) == ['#generator', '#sources', '#outputs']
-    assert 'data-dispatch-queued' in dispatcher and 'data-dispatch-running' in dispatcher
-    assert all(f'href="#{route}"' in dispatcher for route in ['tasks', 'monitor', 'workers', 'rentals'])
+    assert template.count('aria-label="Main navigation"') == 1
+    assert '<aside>' not in template and 'class="mobile-nav"' not in template
+    nav = template.split('class="workspace-nav"',1)[1].split('</nav>',1)[0]
+    assert 'data-studio-mode="h3"' in nav and 'data-studio-mode="qwen"' in nav
+    assert all(f'href="#{route}"' in nav for route in ['generator','sources','outputs','tasks','monitor','workers','rentals'])
+    assert 'href="/settings"' in nav and 'aria-label="Settings"' in nav
+    assert all(marker in nav for marker in ['data-dispatch-queued','data-dispatch-running','data-dispatch-workers'])
 
 
 def test_video_modes_offer_references_frames_and_motion_control():

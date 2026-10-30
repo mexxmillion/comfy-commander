@@ -186,3 +186,15 @@ def test_vast_rechecks_download_budget_before_paid_create(monkeypatch, tmp_path)
             }
         )
     assert calls[-1]["status"] == "failed"
+
+
+def test_manager_uses_connected_vast_credential_instead_of_legacy_file(monkeypatch, tmp_path):
+    from backend.app import credential_paths
+    from runtime.h3 import managed_worker
+    configured = tmp_path / 'configured-vast-key'
+    monkeypatch.setattr(managed_worker, 'settings', lambda: SimpleNamespace(vast_api_key_file=configured))
+    calls = []
+    monkeypatch.setattr(credential_paths, 'provider_secret', lambda service, path: calls.append((service,path)) or 'isolated-provider-test-key')
+    assert managed_worker.vast_api_key() == 'isolated-provider-test-key'
+    assert calls == [('vast', configured)]
+    assert not configured.exists()

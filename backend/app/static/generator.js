@@ -2224,6 +2224,7 @@ function setMode(mode, h3Still = null) {
   state.mode = mode;
   const loraPanel=$('#lora-panel');
   if(mode==='h3')$('#h3-advanced').append(loraPanel);
+  else if(mode==='qwen')$('#image-advanced').append(loraPanel);
   else $('#studio-form').insertBefore(loraPanel,$('.run-panel'));
   if (mode === "h3" && h3Still !== null) $("#h3-single-frame").checked = h3Still;
   if (changed) {
@@ -2237,8 +2238,14 @@ function setMode(mode, h3Still = null) {
     renderSelectedLoras();
     renderLoraList();
   }
+  $('#single-prompt').append($('#ai-generated-panel'));
+  $('#h3-advanced>.compact-grid').append($('#h3-encoding').closest('.field'));
+  for(const id of ['qwen-negative','qwen-steps','qwen-cfg','qwen-seed','qwen-reference-resolution','qwen-cache','qwen-edit-canvas']) {
+    const field=$('#'+id)?.closest('.field');if(field)$('#image-advanced-fields').append(field);
+  }
   $("#studio-form").hidden = false;
   $("#studio-form").dataset.mode = mode;
+  document.dispatchEvent(new CustomEvent("generator-mode-change",{detail:{mode}}));
   $("#run-log-panel").hidden = false;
   $("#sources-panel").hidden = true;
   $("#gallery-panel").hidden = true;
@@ -2941,7 +2948,7 @@ $('#generator-login-form').onsubmit = async event => {
     await initialize();await window.creativeMaster?.reconnect();
   } catch(error){$('#generator-login-error').textContent=error.message;}
 };
-window.tensorGenerator = {loadJob: restoreDispatchedJob, outputActions, outputSlate, showSources, showGenerate: () => setMode(state.mode)};
+window.tensorGenerator = {setMode, loadJob: restoreDispatchedJob, outputActions, outputSlate, showSources, showGenerate: () => setMode(state.mode)};
 for (const event of ['input','change']) $('#studio-form').addEventListener(event,()=>{
   if (!draftReady) draftEarlyEdit=true;
   saveDraft();
