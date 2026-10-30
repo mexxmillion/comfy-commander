@@ -198,3 +198,53 @@ def test_manager_uses_connected_vast_credential_instead_of_legacy_file(monkeypat
     assert managed_worker.vast_api_key() == 'isolated-provider-test-key'
     assert calls == [('vast', configured)]
     assert not configured.exists()
+
+
+@pytest.mark.parametrize("reported,expected", [(23.98828125,24), (15.92,16), (23.4,23.4)])
+def test_driver_reserved_vram_compares_consistently(reported, expected):
+    assert rentals.nominal_vram_gb(reported) == expected
+
+
+def test_gpu_defaults_and_explicit_5080_preserve_cost_limits():
+    base = rentals.RentalPreferences(minimum_vram_gb=24, max_budget_usd=2, max_minutes=30)
+    assert base.gpu_class == "5090"
+    selected = rentals.selected_gpu_preferences(base, "5080")
+    assert selected.minimum_vram_gb == 16
+    assert selected.max_budget_usd == 2 and selected.max_minutes == 30
+    assert rentals.offer_allowed(dict(gpu="RTX 5080", vram_gb=15.92, price_per_hour=.5), selected)
+    assert not rentals.offer_allowed(dict(gpu="RTX 5080", vram_gb=15.92, price_per_hour=.5), base)
+
+
+@pytest.mark.parametrize("workers,fragment", [
+    ([], "disappeared"),
+    ([dict(id="vast-123", runtime="wrong", status="ready")], "incompatible"),
+    ([dict(id="vast-123", runtime="pocket-h3-cloud-ref2v-int8", status="offline")], "offline"),
+])
+def test_worker_problems_remain_visible(workers, fragment):
+    record = dict(provider="vast", instance_id=123, profile="ref2v-int8", status="ready")
+    assert fragment in rental_ui.worker_health(record, workers)["worker_warning"]
+
+
+def test_incompatible_or_unhealthy_worker_cannot_pass_readiness():
+    from runtime.h3.managed_worker import worker_ready
+    good = dict(id="vast-123", runtime="pocket-h3-cloud-ref2v-int8", status="ready")
+    assert worker_ready(good, "vast-123", "ref2v-int8")
+    assert not worker_ready(good | dict(status="unhealthy"), "vast-123", "ref2v-int8")
+    assert not worker_ready(good | dict(runtime="other"), "vast-123", "ref2v-int8")
+
+
+def test_diagnostics_require_admin(client):
+    assert client.get("/api/v1/cloud/diagnostics/rental-example").status_code == 401
+
+
+def test_diagnostic_logs_redact_credentials(monkeypatch, tmp_path):
+    from backend.app import credential_paths
+    secret = "fixture-provider-private-value"
+    keyfile = tmp_path / "key"
+    keyfile.write_text(secret, encoding="utf-8")
+    settings = SimpleNamespace(**{name: keyfile for name in
+        ("vast_api_key_file", "huggingface_token_file", "runpod_api_key_file", "token_file")})
+    monkeypatch.setattr(rental_ui, "get_settings", lambda: settings)
+    monkeypatch.setattr(credential_paths, "provider_secret", lambda *args: secret)
+    text = rental_ui.redact_log(secret + " Bearer abc123 https://example.test/file?signature=private")
+    assert secret not in text and "abc123" not in text and "signature=private" not in text

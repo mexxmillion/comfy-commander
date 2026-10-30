@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'status=$?; printf "RUNTIME_SETUP_FAILED line=%s exit=%s\n" "$LINENO" "$status" >&2; exit "$status"' ERR
+for script in /workspace/remote_prepare.sh /workspace/remote_sync.sh /workspace/remote_start.sh; do
+  bash -n "$script"
+done
 
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
@@ -40,4 +44,10 @@ if [[ "${H3_PROFILE:-}" == ltx-* ]]; then
   /opt/h3-venv/bin/python -c 'import colour, OpenImageIO; import cv2, cupy; print("LTX_HDR_DEPS_OK")'
 fi
 /opt/h3-venv/bin/python -c 'import importlib.metadata as m, json; expected=json.load(open("/opt/h3-runtime/local-runtime.json"))["packages"]; mismatch={n:(v,m.version(n)) for n,v in expected.items() if m.version(n)!=v}; assert not mismatch, mismatch; from transformers import CLIPTokenizer; print("LOCAL_RUNTIME_MATCH_OK")'
+/opt/h3-venv/bin/python - <<'PY'
+import py_compile, torch
+py_compile.compile('/opt/h3-runtime/backend/worker.py', doraise=True)
+assert torch.cuda.is_available(), 'No CUDA GPU available; model downloads have not started'
+print('CUDA_RUNTIME_READY', torch.cuda.get_device_name(0), flush=True)
+PY
 echo RUNTIME_READY

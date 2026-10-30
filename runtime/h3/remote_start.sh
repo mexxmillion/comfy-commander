@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'status=$?; printf "STARTUP_FAILED stage=%s line=%s exit=%s\n" "${stage:-preflight}" "$LINENO" "$status" >&2; exit "$status"' ERR
+stage=preflight
+: "${H3_PROFILE:?Missing runtime profile}"
+: "${TENSOR_WORKER_ID:?Missing worker identity}"
+: "${TENSOR_WORKER_PRICE_PER_HOUR:?Missing approved hourly price}"
+[[ -x /opt/h3-venv/bin/python && -f /opt/ComfyUI/main.py && -f /opt/h3-runtime/backend/worker.py ]]
+[[ -s /workspace/tensor-master-token && -s /workspace/tensor-pocket-token ]]
 umask 077
 export TENSOR_MASTER_TOKEN_FILE=/workspace/tensor-master-token
 export TENSOR_MASTER_BRIDGE_TOKEN_FILE=/workspace/tensor-pocket-token
@@ -7,6 +14,7 @@ if [[ -s /workspace/openrouter-key ]]; then
   OPENROUTER_API_KEY="$(< /workspace/openrouter-key)"
   export OPENROUTER_API_KEY
 fi
+stage=comfy_start
 cd /opt/ComfyUI
 if ! pgrep -f '[p]ython.*main.py.*--port 8188' > /dev/null; then
 nohup /opt/h3-venv/bin/python main.py \
@@ -22,6 +30,23 @@ else
 echo COMFY_ALREADY_RUNNING
 fi
 unset OPENROUTER_API_KEY
+stage=comfy_readiness
+/opt/h3-venv/bin/python - <<'PY'
+import json, time, urllib.request
+for attempt in range(30):
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=2) as response:
+            stats = json.load(response)
+        if not any(device.get('type') == 'cuda' for device in stats.get('devices', [])):
+            raise SystemExit('COMFY_READINESS_FAILED: no CUDA device; inspect h3-comfy.log')
+        print('COMFY_READY', flush=True)
+        break
+    except (OSError, ValueError):
+        time.sleep(1)
+else:
+    raise SystemExit('COMFY_READINESS_FAILED: API unavailable; inspect h3-comfy.log')
+PY
+stage=worker_start
 cd /opt/h3-runtime
 if ! pgrep -f '[p]ython.*-m backend.worker' > /dev/null; then
 nohup env PYTHONPATH=/opt/h3-runtime TOKEN_FILE=/workspace/tensor-master-token \

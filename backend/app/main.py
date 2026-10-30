@@ -666,7 +666,8 @@ async def dashboard(request: Request, store: QueueStore = STORE) -> Response:
         return RedirectResponse("/setup", status_code=307)
     settings = get_settings()
     state = store.snapshot()
-    managed_rentals = managed_rental_snapshots()
+    from .rental_ui import worker_health
+    managed_rentals = [worker_health(item, state["workers"]) for item in managed_rental_snapshots()]
     active_rentals = [item for item in managed_rentals
                       if item.get("status") not in TERMINAL_RENTAL_STATES
                       and not item.get("destroyed_at")]
@@ -678,7 +679,9 @@ async def dashboard(request: Request, store: QueueStore = STORE) -> Response:
                    for worker in state["workers"]):
             state["metrics"]["burn_rate"] += float(managed.get("price_per_hour") or 0)
     # Ended rentals fold into a collapsed history so they cannot crowd live capacity.
-    rental_history = [item for item in managed_rentals if item not in active_rentals]
+    rental_failures = [item for item in managed_rentals if item.get("failure")]
+    rental_attention = [item for item in managed_rentals if item.get("failure") or item.get("worker_warning")]
+    rental_history = [item for item in managed_rentals if item not in active_rentals and not item.get("failure")]
     for rental in managed_rentals:
         rental.setdefault("estimated_cost", 0)
         rental["ssh_command"] =(f'ssh -i "{settings.cloud_ssh_key_file}" -p {rental["ssh_port"]} '
@@ -708,6 +711,8 @@ async def dashboard(request: Request, store: QueueStore = STORE) -> Response:
             "managed_rentals": managed_rentals,
             "active_rentals": active_rentals,
             "rental_history": rental_history,
+            "rental_failures": rental_failures,
+            "rental_attention": rental_attention,
             "rental_by_worker": rental_by_worker,
             "cloud_trials": cloud_trials,
             "lifetime_spend": lifetime_spend,

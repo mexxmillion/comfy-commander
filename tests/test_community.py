@@ -190,7 +190,11 @@ def test_one_navigation_shares_modes_destinations_and_live_counts():
     assert '<aside>' not in template and 'class="mobile-nav"' not in template
     nav = template.split('class="workspace-nav"',1)[1].split('</nav>',1)[0]
     assert 'data-studio-mode="h3"' in nav and 'data-studio-mode="qwen"' in nav
-    assert all(f'href="#{route}"' in nav for route in ['generator','sources','outputs','tasks','monitor','workers','rentals'])
+    assert all(f'href="#{route}"' in nav for route in ['generator','sources','outputs','tasks'])
+    assert '<a href="#tasks" id="dispatcher-nav"' in nav
+    assert 'class="dispatcher-menu"' not in template and '<details id="dispatcher-nav"' not in template
+    secondary = template.split('id="dispatcher-subnav"',1)[1].split('</nav>',1)[0]
+    assert all(f'href="#{route}"' in secondary for route in ['tasks','monitor','workers','rentals','activity','history'])
     assert 'href="/settings"' in nav and 'aria-label="Settings"' in nav
     assert all(marker in nav for marker in ['data-dispatch-queued','data-dispatch-running','data-dispatch-workers'])
 

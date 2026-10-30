@@ -5,29 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=unified-navigation-compact-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=rental-diagnostics-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
     <script defer src="/static/generation-defaults.js?v=1"></script>
     <script defer src="/static/generator.js?v=consistent-canvas-defaults-20261029"></script>
     <script defer src="/static/llm-ui.js?v=1"></script>
-    <script defer src="/static/console.js?v=inspector-orientation-20261029"></script>
+    <script defer src="/static/console.js?v=rental-diagnostics-20261029"></script>
+    <script defer src="/static/rental-diagnostics.js?v=1"></script>
     <link rel="stylesheet" href="/static/generator.css?v=gallery-full-frame-20261029">
   </head>
   <body>
-    <nav class="workspace-nav" aria-label="Main navigation">
+    <div id="workspace-navigation-stack"><nav class="workspace-nav" aria-label="Main navigation">
       <a class="nav-brand" href="#generator" aria-label="Comfy Commander home">CC</a>
       <div class="workspace-tabs">
         <a href="#generator" data-studio-mode="h3" aria-label="Video mode">Video</a>
         <a href="#generator" data-studio-mode="qwen" aria-label="Image mode">Image</a>
         <a href="#sources">Sources</a>
         <a href="#outputs">Gallery</a>
-        <details id="dispatcher-nav" class="workspace-dispatcher">
-          <summary><span>Dispatcher</span><small aria-label="Live workload"><b data-dispatch-queued>{{ state.metrics.queued }}</b>Q · <b data-dispatch-running>{{ state.metrics.running }}</b>R · <b data-dispatch-workers>{{ state.metrics.active_workers }}</b>W</small></summary>
-          <div class="dispatcher-menu"><a href="#tasks">Queue <span>{{ state.metrics.active_tasks }}</span></a><a href="#monitor">Monitor <span>{{ state.metrics.running }}</span></a><a href="#workers">Workers <span>{{ state.metrics.active_workers }}</span></a><a href="#rentals">Rentals</a><a href="#activity">Activity</a><a href="#history">Benchmarks</a></div>
-        </details>
+        <a href="#tasks" id="dispatcher-nav" class="workspace-dispatcher"><span>Dispatcher</span><small aria-label="Live workload"><b data-dispatch-queued>{{ state.metrics.queued }}</b>Q · <b data-dispatch-running>{{ state.metrics.running }}</b>R · <b data-dispatch-workers>{{ state.metrics.active_workers }}</b>W</small></a>
       </div>
       <a class="settings-gear" href="/settings" aria-label="Settings" title="Settings">⚙</a>
-    </nav>
+    </nav><nav id="dispatcher-subnav" aria-label="Dispatcher sections" hidden><a href="#tasks">Queue</a><a href="#workers">Workers</a><a href="#rentals">Rentals</a><a href="#monitor">Monitor</a><a href="#activity">Activity</a><a href="#history">Benchmarks</a></nav></div>
+    <section id="rental-attention" role="alert" {% if not rental_attention %}hidden{% endif %}>
+      <div><strong>Rental / worker needs attention</strong><div id="rental-attention-items">{% for rental in rental_attention %}<p data-rental-alert="{{ rental.rental_id }}:{{ rental.failed_at or rental.status }}:{{ 'failure' if rental.failure else 'worker' }}"><b>{{ rental.rental_id }}</b> · {{ rental.failure_message if rental.failure else rental.worker_warning }} <button type="button" data-rental-diagnostics="{{ rental.rental_id }}">View diagnostics</button></p>{% endfor %}</div></div><button type="button" id="ack-rental-alerts">Acknowledge alerts</button>
+    </section>
     <div class="shell">
       <main id="monitor">
         <header>
@@ -81,10 +82,13 @@
         <section class="panel rental-fleet" id="rentals" aria-label="Cloud rental fleet">
           <div class="panel-head"><div><p class="eyebrow">CLOUD CAPACITY</p><h2>Rentals</h2></div><div class="cloud-actions"><span class="muted">{{ active_rentals|length }}/{{ limits.gpus }} active or starting · ${{ "%.2f"|format(state.metrics.burn_rate) }}/hr</span><button type="button" class="primary" id="add-gpu">+ Rent GPUs</button>{% if active_rentals|length %}<button type="button" class="danger" id="destroy-all-rentals">Terminate all</button>{% endif %}</div></div>
           {% macro rental_card(rental) %}<article class="rental-card" data-rental-id="{{ rental.rental_id }}">
-            <div class="panel-head"><div><strong>{{ rental.gpu or rental.offer_id }}</strong><small>{{ rental.provider|capitalize }} · {{ rental.profile }}{% if rental.instance_id %} · #{{ rental.instance_id }}{% endif %}</small></div><span class="state {{ 'failed' if rental.status in ('failed','destroy_failed','creation_unknown') else 'completed' if rental.destroyed_at else 'running' }}">{{ rental.status|replace('_',' ') }}</span></div>
+            <div class="panel-head"><div><strong>{{ rental.gpu or rental.offer_id }}</strong><small>{{ rental.rental_id }} · {{ rental.provider|capitalize }} · {{ rental.profile }}{% if rental.instance_id %} · #{{ rental.instance_id }}{% endif %}</small></div><span class="state {{ 'failed' if rental.failure else 'completed' if rental.destroyed_at else 'running' }}">{{ 'Failed · cleaned up' if rental.failure and rental.destroyed_at else rental.status|replace('_',' ') }}</span></div>
             <div class="rental-stats"><span>Rate<b>{% if rental.price_per_hour %}${{ "%.3f"|format(rental.price_per_hour) }}/hr{% else %}pending{% endif %}</b></span><span>Elapsed<b>{{ rental.elapsed_minutes|default(0) }} min</b></span><span>Est. cost<b>${{ "%.3f"|format(rental.estimated_cost|default(0)) }}</b></span><span>Ready time<b>{{ "%.1f"|format(rental.ready_seconds / 60) ~ ' min' if rental.ready_seconds is not none else '—' }}</b></span></div>
-            {% if rental.error %}<p class="danger">{{ rental.error }}</p>{% endif %}
+            {% if rental.error and not rental.failure %}<p class="danger">{{ rental.error }}</p>{% endif %}
+            {% if rental.failure %}<p class="danger"><strong>Failed stage:</strong> {{ rental.failed_stage or 'offer / startup' }} · {{ rental.cleanup_status }}</p><p class="danger">{{ rental.failure_message }}</p>{% endif %}{% if rental.cleanup_explanation %}<p>{{ rental.cleanup_explanation }}</p>{% endif %}
+            {% if rental.worker_warning %}<p class="danger">{{ rental.worker_warning }}</p>{% endif %}
             <div class="cloud-actions">
+              <button type="button" data-rental-diagnostics="{{ rental.rental_id }}">Diagnostics &amp; logs</button>
               {% if rental.ssh_host and not rental.destroyed_at %}<button type="button" data-ssh-command="{{ rental.ssh_command }}">SSH</button><button type="button" data-copy-ssh="{{ rental.ssh_command }}">Copy SSH</button>{% endif %}
               {% if rental.instance_id and not rental.destroyed_at %}<button type="button" class="danger" data-destroy-rental="{{ rental.rental_id }}">Terminate</button>{% endif %}
               <a href="/api/v1/cloud/logs/manager?rental_id={{ rental.rental_id }}" target="_blank" rel="noopener">Lifecycle</a>
@@ -95,6 +99,7 @@
           {% if active_rentals %}<div class="rental-grid">{% for rental in active_rentals %}{{ rental_card(rental) }}{% endfor %}</div>
           {% elif not rental_history %}<p class="muted">No managed rentals yet. Rent one or several GPUs; each will appear here through startup, ready, and shutdown.</p>
           {% else %}<p class="muted">No active rentals.</p>{% endif %}
+          {% if rental_failures %}<details class="rental-failures" open><summary class="danger">Failed rentals · {{ rental_failures|length }} · records and logs retained</summary><div class="rental-grid">{% for rental in rental_failures %}{{ rental_card(rental) }}{% endfor %}</div></details>{% endif %}
           {% if rental_history %}{% set uncertain = rental_history|selectattr("status", "equalto", "creation_unknown")|list %}<details class="rental-history">
             <summary>Rental history · {{ rental_history|length }} ended · ${{ "%.2f"|format(rental_history|sum(attribute="estimated_cost")) }} est. spend{% if uncertain %} · <span class="danger">{{ uncertain|length }} creation unknown, verify in the provider console</span>{% endif %}</summary>
             <div class="rental-grid">{% for rental in rental_history %}{{ rental_card(rental) }}{% endfor %}</div>
@@ -232,6 +237,7 @@
       <p>Once connected:</p><dl><dt><code>nvidia-smi</code></dt><dd>GPU usage and temperature</dd><dt><code>tail -n 80 /workspace/h3-comfy.log</code></dt><dd>Recent ComfyUI log</dd><dt><code>exit</code></dt><dd>Disconnect; the worker keeps running</dd></dl>
       <p class="muted">The browser shows connection instructions; it does not contain an interactive terminal.</p>
     </dialog>
+    <dialog id="rental-diagnostics" aria-labelledby="rental-diagnostics-title"><header><h2 id="rental-diagnostics-title">Rental diagnostics</h2><button type="button" id="close-rental-diagnostics" aria-label="Close diagnostics">×</button></header><p id="rental-diagnostics-summary" role="status"></p><label>Log stage<select id="rental-log-stage"><option value="all">All diagnostics</option><option value="manager">Lifecycle</option><option value="setup">Runtime setup</option><option value="models">Models</option><option value="worker">Worker</option><option value="comfy">ComfyUI</option></select></label><div class="cloud-actions"><button type="button" id="refresh-rental-diagnostics">Refresh log</button><button type="button" id="download-rental-diagnostics">Download diagnostics</button></div><pre id="rental-diagnostics-log"></pre></dialog>
     <dialog id="output-player" class="output-player" aria-labelledby="output-player-title">
       <header><h2 id="output-player-title">Video preview</h2><button id="output-player-close" type="button" autofocus aria-label="Close video player">×</button></header>
       <video id="output-player-video" controls playsinline preload="none"></video>
@@ -245,7 +251,7 @@
       <label>Provider<select id="rental-provider"><option value="runpod" selected>Runpod Secure Cloud · default</option><option value="vast">Vast.ai · alternative</option></select></label>
       <section id="rental-unlock"><label><span id="rental-password-label">Admin password</span><input id="rental-key" type="password" autocomplete="current-password" placeholder="Your Tensor Master password"></label><label id="rental-confirm-label" hidden>Confirm password<input id="rental-confirm" type="password" autocomplete="new-password"></label><label><input id="rental-remember" type="checkbox" checked style="width:auto"> Keep this device signed in</label><button type="button" id="rental-unlock-button">Sign in</button><a href="/settings#access">Change or recover your password</a><small id="rental-auth-help">Use the same password on your phone and MacBook over Tailscale.</small></section>
       <button type="button" id="rental-logout" hidden>Sign out on this device</button>
-      <section id="rental-picker" hidden><label>Community runtime profile<select id="rental-profile"><option value="ref2v-int8" selected>MiniMax H3 Ref2V · Community default</option><option value="ref2v-singularity">Singularity Ref2VA v1.3 INT8</option><option value="fasth3-omni">FastH3 Omni INT8 · native 8 steps</option><option value="flf2v-int8">H3 First / Last Frame · FL2VA INT8</option><option value="qwen-image-21">Qwen Image 2.1 · native + optional Viggle</option></select></label><div class="form-row"><label>Quantity<input id="rental-count" type="number" min="1" max="10" value="1"></label><label>Maximum rental time (minutes)<input id="rental-minutes" type="number" min="15" max="180" value="90"></label></div><label>Total launch budget · USD<input id="rental-budget" type="number" min="0.01" step="0.01" value="5"></label><p><a href="/settings#rentals">GPU filters &amp; rental limits →</a></p><button type="button" id="refresh-offers">Refresh offers</button><div id="rental-offers" class="rental-offers"></div><button type="button" class="primary" id="launch-rental">Rent selected GPU(s)</button></section>
+      <section id="rental-picker" hidden><label>GPU preference<select id="rental-gpu-class"><option value="5090" selected>RTX 5090 · default</option><option value="5080">RTX 5080 · 16 GB</option><option value="4090">RTX 4090 · 24 GB</option><option value="6000">RTX 6000 family</option><option value="professional">Any supported professional GPU</option><option value="consumer">Any supported consumer GPU</option><option value="any">Any supported GPU</option></select></label><label>Community runtime profile<select id="rental-profile"><option value="ref2v-int8" selected>MiniMax H3 Ref2V · Community default</option><option value="ref2v-singularity">Singularity Ref2VA v1.3 INT8</option><option value="fasth3-omni">FastH3 Omni INT8 · native 8 steps</option><option value="flf2v-int8">H3 First / Last Frame · FL2VA INT8</option><option value="qwen-image-21">Qwen Image 2.1 · native + optional Viggle</option></select></label><div class="form-row"><label>Quantity<input id="rental-count" type="number" min="1" max="10" value="1"></label><label>Maximum rental time (minutes)<input id="rental-minutes" type="number" min="15" max="180" value="90"></label></div><label>Total launch budget · USD<input id="rental-budget" type="number" min="0.01" step="0.01" value="5"></label><p><a href="/settings#rentals">GPU filters &amp; rental limits →</a></p><button type="button" id="refresh-offers">Refresh offers</button><div id="rental-offers" class="rental-offers"></div><button type="button" class="primary" id="launch-rental">Rent selected GPU(s)</button></section>
       <p id="rental-message" role="status" class="muted"></p>
     </dialog>
     <script>
@@ -326,6 +332,7 @@
         if(!rentalPreferences) {
           document.querySelector('#rental-minutes').value=preferences.max_minutes;
           document.querySelector('#rental-budget').value=preferences.max_budget_usd;
+          document.querySelector('#rental-gpu-class').value=preferences.gpu_class;
         }
         rentalPreferences=preferences;
         document.querySelector('#rental-minutes').max=preferences.max_minutes;
@@ -333,12 +340,12 @@
         const provider = document.querySelector('#rental-provider').value;
         setRentalMessage('Checking cloud GPU offers…');
         const profile = document.querySelector('#rental-profile').value;
-        const data = await cloudRequest(`offers?provider=${provider}&profile=${encodeURIComponent(profile)}`);
+        const data = await cloudRequest(`offers?provider=${provider}&profile=${encodeURIComponent(profile)}&gpu_class=${encodeURIComponent(document.querySelector('#rental-gpu-class').value)}`);
         if (provider !== document.querySelector('#rental-provider').value) return;
         data.offers.forEach((offer, index) => {
           const label = document.createElement('label');
           const radio = document.createElement('input');
-          radio.type = 'radio'; radio.name = 'offer'; radio.value = offer.id; radio.dataset.price = offer.price_per_hour; radio.dataset.syncCost = offer.sync_cost || 0; radio.checked = index === 0;
+          radio.type = 'radio'; radio.name = 'offer'; radio.value = offer.id; radio.dataset.price = offer.price_per_hour; radio.dataset.gpu = offer.gpu; radio.dataset.syncCost = offer.sync_cost || 0; radio.checked = index === 0;
           const info = document.createElement('span');
           // Every worker downloads the whole model profile first; show what that costs on this host.
           const sync = offer.sync_gb === undefined ? '' : (offer.download_cost_per_gb > 0
@@ -387,6 +394,7 @@
       });
       document.querySelector('#refresh-offers').addEventListener('click', () => loadOffers().catch(error => setRentalMessage(error.message, true)));
       document.querySelector('#rental-profile').addEventListener('change', () => loadOffers().catch(error => setRentalMessage(error.message, true)));
+      document.querySelector('#rental-gpu-class').addEventListener('change', () => loadOffers().catch(error => setRentalMessage(error.message, true)));
       document.querySelector('#launch-rental').addEventListener('click', async () => {
         const launchButton = document.querySelector('#launch-rental');
         const choice = document.querySelector('input[name="offer"]:checked');
@@ -407,7 +415,7 @@
           launchButton.disabled = true;
           launchButton.textContent = 'Starting rental…';
           setRentalMessage(`Submitting ${provider} rental request… Keep this window open.`, false);
-          await cloudRequest('launch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, offer_id:provider === 'runpod' ? choice.value : Number(choice.value), profile, count, max_minutes:minutes, max_price_per_hour:priceCeiling, max_budget_usd:budget})});
+          await cloudRequest('launch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, gpu_class:document.querySelector('#rental-gpu-class').value, gpu_name:choice.dataset.gpu, offer_id:provider === 'runpod' ? choice.value : Number(choice.value), profile, count, max_minutes:minutes, max_price_per_hour:priceCeiling, max_budget_usd:budget})});
           rentalDialog.close(); location.hash = '#rentals'; location.reload();
         } catch(error) {
           setRentalMessage(error.message, true);

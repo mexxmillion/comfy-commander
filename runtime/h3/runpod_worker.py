@@ -167,7 +167,7 @@ def launch(record):
         shared.update(status="waiting_for_worker", comfy_started_at=shared.now().isoformat())
         queue = QueueStore(settings.database_url)
         for _ in range(60):
-            if any(item["id"] == worker_id and item["status"] != "offline" for item in queue.snapshot()["workers"]):
+            if any(shared.worker_ready(item, worker_id, record["profile"]) for item in queue.snapshot()["workers"]):
                 shared.update(status="ready", worker_ready_at=shared.now().isoformat())
                 break
             if tunnel.poll() is not None:
@@ -196,6 +196,12 @@ def launch(record):
         destroy(shared.read_state(), "Maximum lifetime reached")
     except Exception as exc:
         shared.log(f"Runpod worker failed: {type(exc).__name__}: {exc}")
+        try:
+            current = shared.read_state()
+        except (OSError, ValueError):
+            current = record
+        if not current.get("destroyed_at"):
+            shared.update(error=str(exc)[:1500], failed_stage=current.get("status", "startup"), failed_at=shared.now().isoformat())
         if pod_id:
             try:
                 destroy({"instance_id": pod_id}, "Setup or connection failed")

@@ -40,6 +40,7 @@ def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkey
     monkeypatch.setattr(worker, "run_ssh", lambda *a, **k: None)
     monkeypatch.setattr(worker, "credential_files", lambda _: [])
     monkeypatch.setattr(worker, "transfer", lambda *a: None)
+    monkeypatch.setattr(worker, "capture_remote_logs", lambda *a: None)
     reads, transfers = [], []
     def secret(provider, path):
         reads.append((provider, path))
@@ -55,3 +56,49 @@ def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkey
     assert reads == [("huggingface", configured.huggingface_token_file)]
     assert transfers == [("isolated-token-fixture", "hf_read.txt")]
     assert state["status"] == "destroyed"
+
+
+def test_script_transfer_normalizes_windows_line_endings(monkeypatch, tmp_path):
+    from runtime.h3 import managed_worker as worker
+    script = tmp_path / "remote_start.sh"
+    original = b"\xef\xbb\xbf#!/usr/bin/env bash\r\nset -euo pipefail\r\n"
+    script.write_bytes(original)
+    sent = []
+    monkeypatch.setattr(worker, "_transfer_file",
+                        lambda record, path, name: sent.append((path.read_bytes(), name, path)))
+    worker.transfer({}, script, "remote_start.sh")
+    assert sent[0][:2] == (b"#!/usr/bin/env bash\nset -euo pipefail\n", "remote_start.sh")
+    assert not sent[0][2].exists()
+    assert script.read_bytes() == original
+
+
+def test_binary_transfer_is_unchanged(monkeypatch, tmp_path):
+    from runtime.h3 import managed_worker as worker
+    bundle = tmp_path / "runtime.tar.gz"
+    bundle.write_bytes(b"\x00\r\n\xff")
+    sent = []
+    monkeypatch.setattr(worker, "_transfer_file", lambda record, path, name: sent.append(path))
+    worker.transfer({}, bundle, "runtime.tar.gz")
+    assert sent == [bundle]
+
+
+def test_failed_rental_explains_commander_cleanup_and_actual_script_error(tmp_path, monkeypatch):
+    from backend.app import rental_ui
+    monkeypatch.setattr(rental_ui, "redact_log", lambda text: text)
+    path = tmp_path / "rental-example.json"
+    path.with_suffix(".log").write_text("set: pipefail\n: invalid option name\n", encoding="utf-8")
+    result = rental_ui._decorate(dict(status="destroyed", destroyed_at="2026-10-30T03:50:00+00:00",
+        destroy_reason="Setup failed: remote script failed", models_ready_at="2026-10-30T03:49:00+00:00"), path)
+    assert result["failure"]
+    assert "Commander terminated" in result["cleanup_explanation"]
+    assert "Windows line endings" in result["failure_message"]
+    assert "model download completed" in result["failed_stage"]
+
+
+def test_linux_startup_scripts_parse_before_allocation(tmp_path):
+    from runtime.h3.managed_worker import validate_startup_scripts
+    validate_startup_scripts()
+    for name in ("remote_prepare.sh", "remote_sync.sh", "remote_start.sh"):
+        (tmp_path / name).write_bytes(b"#!/usr/bin/env bash\r\nif then\r\n")
+    with pytest.raises(RuntimeError, match="syntax validation failed"):
+        validate_startup_scripts(tmp_path)

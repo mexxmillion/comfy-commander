@@ -381,11 +381,12 @@
     if(route==='#sources')window.tensorGenerator.showSources();
     else if(route==='#generator')window.tensorGenerator.showGenerate();
     const dispatching=!generating&&!outputs;
-    $('#dispatcher-nav').open=false;
     $('#dispatcher-nav').classList.toggle('active',dispatching);
+    $('#dispatcher-subnav').hidden=!dispatching;
+    document.querySelectorAll('#dispatcher-subnav a').forEach(link=>link.classList.toggle('active',link.hash===route));
     syncModeNavigation();
     if(outputs)loadDurableOutputs();
-    document.querySelectorAll('.workspace-tabs>a:not([data-studio-mode])').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
+    document.querySelectorAll('.workspace-tabs>a:not([data-studio-mode]):not(#dispatcher-nav)').forEach(a=>a.classList.toggle('active',a.hash===(location.hash||'#generator')));
     if(location.hash==='#history')$('#history')?.setAttribute('open','');
   }
   function syncModeNavigation() {
@@ -401,9 +402,7 @@
     event.preventDefault();location.hash='#generator';window.tensorGenerator.setMode(tab.dataset.studioMode);syncModeNavigation();
   }));
   document.addEventListener('generator-mode-change',syncModeNavigation);
-  document.querySelectorAll('#dispatcher-nav a').forEach(link=>link.addEventListener('click',()=>{$('#dispatcher-nav').open=false;}));
-  document.addEventListener('click',event=>{if(!event.target.closest('#dispatcher-nav'))$('#dispatcher-nav').open=false;});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape')$('#dispatcher-nav').open=false;});
+  $('#dispatcher-nav').addEventListener('click',()=>{$('#task-filter').value='all';$('#task-search').value='';taskPage=0;filterTasks();});
   function closeOutputPlayer(){
     const dialog=$('#output-player');
     if(dialog.open)dialog.close();
@@ -527,7 +526,7 @@
     }
     document.querySelectorAll('[data-live-queued]').forEach(badge=>{badge.textContent=String(metrics.queued ?? 0);});
     for(const [hash,key] of [['monitor','running'],['tasks','active_tasks'],['workers','active_workers']]) {
-      document.querySelectorAll(`a[href="#${hash}"] span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
+      document.querySelectorAll(`a[href="#${hash}"]:not(#dispatcher-nav) span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
     }
   }
   function onJobSubmitted() {
@@ -559,6 +558,8 @@
       if(rental&&current)syncLiveRegion(current,rental);
       else if(rental&&!current)$('main').append(rental);
       else if(current&&!rental)current.remove();
+      const attention=$('#rental-attention'), freshAttention=doc.querySelector('#rental-attention');
+      if(attention&&freshAttention){syncLiveRegion(attention,freshAttention);window.syncRentalAlerts?.();}
       state=next;syncNavCounts(state.metrics);if(!selected)selected=state.tasks[0]?.id;syncBulkWorkers();
       filterTasks();filterWorkers();renderLogs();renderInspector();
       if(focusedId){const replacement=[...document.querySelectorAll('#tasks [data-task-id]')].find(row=>row.dataset.taskId===focusedId&&row.tagName===focusedTag&&!row.hidden);if(replacement)focusTask(replacement);}
