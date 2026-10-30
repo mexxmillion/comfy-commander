@@ -111,9 +111,10 @@
         </div>
         <div id="reference-list" class="reference-list" aria-live="polite"></div>
         <div id="replacement-settings" class="h3-only reference-mode-only" hidden>
-          <label class="switch-row"><input id="motion-prompt-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Optional prompt</strong><small>Prefilled instructions · AI enhancement runs before every replacement</small></span></label>
+          <label class="switch-row"><input id="motion-prompt-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Optional prompt</strong><small>Prefilled instructions you can edit</small></span></label>
+          <label id="motion-enhance-row" class="switch-row"><input id="motion-enhance" type="checkbox" checked><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>AI enhance motion prompt</strong><small>On by default · turn off to run without an AI provider</small></span></label>
           <label id="motion-prompt-field" class="field" hidden><span>Motion control instructions</span><textarea id="motion-prompt" rows="4" maxlength="40000" disabled></textarea></label>
-          <p id="motion-prompt-note" class="hint">AI enhancement describes your character, location and motion references before rendering. Uses your configured AI provider; generation stops if enhancement fails.</p>
+          <p id="motion-prompt-note" class="hint">AI enhancement uses your configured provider. Turn it off to render directly from the automatic or optional instructions without an AI provider.</p>
           <select id="replacement-mode" hidden aria-label="Automatic replacement mode"><option value="person">Person</option><option value="all">Person + scene</option></select>
           <label class="field"><span>Person to replace · SAM3 tracking prompt</span><input id="replacement-target" type="text" minlength="3" maxlength="300" value="person" placeholder="The person in the red shirt"></label>
           <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength in Advanced · off by default</small></span></label>

@@ -56,14 +56,17 @@ with Creative Engine off and on.
 
 ## Automatic enhancement and optional direction
 
-Motion control now always calls the configured controller AI writer before
+Motion control defaults to AI enhancement, with an explicit **AI enhance motion
+prompt** toggle. When on, it calls the configured controller writer before
 submitting a render. Person-only uses the replacement system prompt; person plus
 location uses a separate system prompt that binds Picture 1 to identity/outfit,
 Picture 2 to the location and Video 1 only to motion/framing. The controller
 constructs canned direction rather than reading an unrelated hidden prompt.
 Enhancement failure stops submission; there is no silent unenhanced fallback.
-This experimental UI therefore requires a configured AI provider with support
-for the supplied media. Ordinary References rendering can still run without AI.
+When enhancement is on, the provider must support the supplied media. Turn it
+off to render directly with canned or optional custom instructions: no AI
+provider/key is required and no enhancement request is made. Ordinary References
+rendering can also run without AI. The choice is saved and restored per recipe.
 
 **Optional prompt** is off by default. Turning it on prefills the appropriate
 instructions for editing; the controller appends that explicit operator direction

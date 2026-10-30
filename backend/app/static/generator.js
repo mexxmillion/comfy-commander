@@ -1558,7 +1558,8 @@ function captureH3Recipe(references, seed) {
     duration: Number($("#duration").value),
     aspect: $("#aspect-ratio").value,
     seed,
-    enhancePrompt: motionModeSelected()?true:$("#ai-enhance").checked,
+    enhancePrompt: enhancementEnabled('h3'),
+    motionEnhance: motionModeSelected()?$('#motion-enhance').checked:null,
     aiModel: enhancementModel('h3'),
     jobType: h3JobType(),
     replacementMode: motionModeSelected() ? $('#replacement-mode').value : null,
@@ -1718,6 +1719,7 @@ function loadRecipe(recipe) {
   $('#replacement-mode').value=recipe.replacementMode || 'person';
   $('#motion-prompt-enabled').checked=recipe.motionPromptEnabled===true;
   $('#motion-prompt').value=recipe.motionPrompt || '';
+  $('#motion-enhance').checked=recipe.motionEnhance ?? ((recipe.replacementMode || recipe.jobType==='replacement') ? recipe.enhancePrompt ?? true : true);
   $('#replacement-target').value=recipe.replacementTarget || 'person';
   replacementDefaults.preparation=recipe.videoPreparation || replacementDefaults.preparation;
   $('#character-swap-enabled').checked=recipe.characterSwapEnabled===true;
@@ -1997,7 +1999,7 @@ async function showGallery() {
 }
 
 function enhancementEnabled(mode = state.mode) {
-  if(mode==='h3' && motionModeSelected())return true;
+  if(mode==='h3' && motionModeSelected())return $('#motion-enhance').checked;
   return mode === "h3" ? $("#ai-enhance").checked : mode === "qwen" ? $("#qwen-enhance").checked : false;
 }
 
@@ -2037,7 +2039,7 @@ async function writeAiPrompt(writer) {
   const url = writer.mode === 'qwen' ? '/api/v1/qwen/enhance' : '/api/v1/generator/h3-enhance';
   const response = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(writer.payload)});
   const body = await response.json().catch(()=>({}));
-  if (!response.ok || !body.prompt) throw new Error(body.detail || 'Prompt enhancement failed');
+  if (!response.ok || !body.prompt) throw new Error((body.detail || 'Prompt enhancement failed') + (writer.payload.motion_mode?' Turn off “AI enhance motion prompt” to use your instructions without an AI provider.':''));
   return body.prompt.trim();
 }
 
@@ -2253,7 +2255,7 @@ function setMode(mode, h3Still = null) {
   $('#h3-advanced>.compact-grid').append($('#h3-encoding').closest('.field'));
   $('#h3-advanced>.compact-grid').append($('#character-swap-strength-field'));
   $('#motion-prompt-panel .section-label').append($('#motion-prompt-enabled').closest('label'));
-  $('#motion-prompt-panel').append($('#motion-prompt-field'),$('#motion-prompt-note'));
+  $('#motion-prompt-panel').append($('#motion-prompt-field'),$('#motion-enhance-row'),$('#motion-prompt-note'));
   for(const id of ['qwen-negative','qwen-steps','qwen-cfg','qwen-seed','qwen-reference-resolution','qwen-cache','qwen-edit-canvas']) {
     const field=$('#'+id)?.closest('.field');if(field)$('#image-advanced-fields').append(field);
   }
@@ -2793,6 +2795,7 @@ $('#motion-prompt-enabled').addEventListener('change',()=>{
   syncReplacementMode();scheduleDraftSave();
 });
 $('#motion-prompt').addEventListener('input',scheduleDraftSave);
+$('#motion-enhance').addEventListener('change',()=>{scheduleDraftSave();syncPromptEnhancement();});
 $('#character-swap-enabled').addEventListener('change',()=>{syncReplacementMode();scheduleDraftSave();});
 $('#character-swap-strength').addEventListener('input',scheduleDraftSave);
 $('#use-character-swap-profile').onclick=async()=>{
