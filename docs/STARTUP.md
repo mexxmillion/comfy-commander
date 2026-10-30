@@ -104,3 +104,12 @@ weights. Startup waits for ComfyUI's loopback API to report a CUDA device before
 starting the worker, and the controller verifies the expected profile runtime.
 Setup failures retain their stage, error and logs; Commander explicitly reports
 when its cleanup terminated the instance. Price and lifetime safeguards remain active.
+
+
+During model sync the active rental shows transferred GiB, total profile size,
+files verified, the current file, measured transfer speed and a rough download
+ETA. The estimate starts after transfer samples arrive and excludes subsequent
+integrity verification and worker startup. Files count as ready only after their
+size/checksum checks pass. Cached or resumed bytes count toward completion.
+Failed-rental history starts collapsed and keeps your expansion choice during
+live refresh; new failure alerts and retained diagnostics remain available.

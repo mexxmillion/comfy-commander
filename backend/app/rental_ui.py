@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import math
 import re
 import sqlite3
 import subprocess
@@ -314,9 +315,40 @@ def require_admin(request: Request, *, mutation: bool = False) -> None:
 TERMINAL = {"destroyed", "failed", "creation_unknown"}
 
 
+def model_sync_progress(path: Path) -> dict | None:
+    logfile = path.with_name(path.stem + "-models.log")
+    if not logfile.is_file():
+        return None
+    with logfile.open('rb') as stream:
+        stream.seek(max(0, logfile.stat().st_size - 65536))
+        lines = stream.read().decode('utf-8', errors='replace').splitlines()
+    for line in reversed(lines):
+        try:
+            event = json.loads(line)
+            if event.get('event') != 'sync_progress':
+                continue
+            total, done = int(event['total_bytes']), int(event['bytes'])
+            if total <= 0 or not 0 <= done <= total:
+                continue
+            rate = float(event.get('bytes_per_second') or 0)
+            eta = event.get('eta_seconds')
+            return dict(percent=round(done / total * 100, 1),
+                        downloaded_gib=round(done / 1024**3, 2), total_gib=round(total / 1024**3, 2),
+                        speed_mbps=round(rate / 1e6, 1) if math.isfinite(rate) and rate > 0 else None,
+                        eta_minutes=math.ceil(float(eta) / 60) if eta is not None and math.isfinite(float(eta)) and float(eta) >= 0 else None,
+                        file=str(event.get('file', '')).replace('\\', '/').split('/')[-1][:160],
+                        stage=str(event.get('stage', 'downloading'))[:30],
+                        files_ready=max(0, int(event.get('files_ready', 0))),
+                        files_total=max(0, int(event.get('files_total', 0))))
+        except (ValueError, TypeError, KeyError, AttributeError):
+            continue
+    return None
+
+
 def _decorate(record: dict, path: Path) -> dict:
     record = dict(record)
     record.setdefault("rental_id", path.stem)
+    record['sync_progress'] = model_sync_progress(path) if record.get('status') == 'syncing_models' else None
     record["failure"] = bool(record.get("error") or record.get("status") in {"failed", "destroy_failed", "creation_unknown"}
                              or "failed" in str(record.get("destroy_reason", "")).lower())
     record["failure_message"] = record.get("error") or record.get("destroy_reason") or ""

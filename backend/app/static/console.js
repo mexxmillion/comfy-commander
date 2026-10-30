@@ -142,8 +142,12 @@
   function syncLiveRegion(target, fresh) {
     const markup = fresh.innerHTML;
     if (liveMarkup.get(target) === markup) return false;
+    const historyOpen = new Map([...target.querySelectorAll('details.rental-failures,details.rental-history')].map(item=>[item.className,item.open]));
     releaseMedia(target);
     target.innerHTML = markup;
+    for(const item of target.querySelectorAll('details.rental-failures,details.rental-history')) {
+      if(historyOpen.has(item.className))item.open=historyOpen.get(item.className);
+    }
     liveMarkup.set(target, markup);
     return true;
   }
