@@ -1,0 +1,13 @@
+You open ComfyUI for one quick idea. Suddenly, you're managing nodes, models, and a queue longer than your lunch break.
+
+And your phone? Mostly there to watch you wait.
+
+Meet Comfy Commander by Tensor Master. Your ComfyUI workflows, from your phone, MacBook, or PC. No local GPU required.
+
+One worker busy? The dispatcher sends compatible jobs to your other GPU workers. More shots, moving in parallel. Less staring at progress bars.
+
+Production getting bigger? Rent cloud GPUs directly through RunPod or Vast. Choose your price and capacity. Your imagination can have a growth spurt. Your budget still gets a vote.
+
+Keep everyday creation simple. Or connect Codex through MCP to prepare, queue, and monitor your production jobs.
+
+One idea. A whole shot list. Comfy Commander. Creativity first. Scalable GPU compute at your fingertips.

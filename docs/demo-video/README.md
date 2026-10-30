@@ -1,5 +1,11 @@
 # Competition demo video
 
+## Playful 60-second story
+
+`comfy-commander-story-60sec.mp4` follows a creator's "one quick idea" through setup friction, phone access, parallel GPU dispatch, direct cloud GPU rentals and agent-assisted production. It uses illustrated characters, animated diagrams, real product screenshots, concept imagery, neural narration and original music.
+
+Script: `narration-story.txt`. Renderer: `make_story.py` (imports drawing helpers from `make_dynamic.py`). Audio source: `story-soundtrack.m4a`. Generate narration with the Andrew multilingual neural voice at +12% rate and +3Hz pitch, then apply 0.92 audio tempo and a 200ms opening delay when mixing. Run `python make_story.py` to rebuild the 60-second 1080p/24fps export. Diagrams illustrate behavior; GPU counts and status labels are not a live farm recording.
+
 ## 55-second cut
 
 `comfy-commander-55sec.mp4` is the condensed dynamic explainer, with a rewritten narration (`narration-short.txt`), seven animated chapters, product screenshots, concept imagery and music. Export: 1920×1080, 24 fps, H.264/AAC, exactly 55 seconds.
