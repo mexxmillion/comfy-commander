@@ -92,7 +92,7 @@ async def convert_media(path: Path, kind: str, crop=None, trim=None, preview=Fal
                 filters.append(f'crop=trunc(iw*{w}/2)*2:trunc(ih*{h}/2)*2:iw*{x}:ih*{y}')
             if preview and target_size:
                 width, height = target_size
-                filters.append(f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=8')
+                filters.append(f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=8')
             else:
                 filters.append('scale=trunc(iw/2)*2:trunc(ih/2)*2')
             command += ['-vf', ','.join(filters), '-c:v', 'libx264', '-preset', 'fast', '-crf', '28' if preview else '23', '-c:a', 'aac']

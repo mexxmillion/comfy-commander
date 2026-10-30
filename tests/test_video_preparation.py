@@ -78,6 +78,7 @@ def test_video_stage_resizes_resamples_trims_and_caches_without_touching_origina
         check=True,
     )
     assert len(raw.stdout) // (64 * 96 * 3) == 22
+    assert video_processing.prepared_timing(tmp_path, relative) == (22, 22 / 24)
     preview = video_processing.browser_preview(tmp_path, relative)
     assert preview.endswith(".mp4") and (tmp_path / preview).is_file()
     assert source.read_bytes() == before
@@ -124,18 +125,22 @@ def test_process_api_is_guarded_and_returns_reviewable_reference(monkeypatch, tm
     monkeypatch.setattr(
         video_processing, "browser_preview", lambda *a: "h3_mobile/video-prepared/fixture.mp4"
     )
+    monkeypatch.setattr(video_processing, 'prepared_timing', lambda *a: (72, 3.0))
     result = client.post(
         "/api/v1/generator/process-video", json={"file": "h3_mobile/source.mp4"}
     ).json()
     assert result["reference"]["preparation"] == {
         "source": "h3_mobile/source.mp4",
         "preview": "h3_mobile/video-prepared/fixture.mp4",
+        "actual_frames": 72,
+        "actual_duration": 3.0,
         "width": 544,
         "height": 960,
         "frame_count": 124,
     }
     assert result["graph"]["video_prepare"]["class_type"] == "TMPrepareVideo"
     assert calls[-1] == {"mutation": True}
+    assert result['actual_frames'] == 72 and result['actual_duration'] == 3
 
 
 def test_tracking_frames_are_not_sampling_steps():
@@ -196,3 +201,59 @@ def test_inspector_orientation_uses_output_canvas_not_legacy_selector_title(tmp_
     spec = job_spec(store, job + "-t001")
     assert spec["aspect_label"] == orientation
     assert (spec["width"], spec["height"]) == (width, height)
+
+@pytest.mark.parametrize('field,value', [('trim',[3,1]),('trim',[True,3]),('trim',[0,float('inf')]),('crop',[.7,0,.5,1]),('crop',[0,0,0,1])])
+def test_video_request_rejects_invalid_windows_before_processing(field,value):
+    with pytest.raises(ValueError):
+        video_processing.VideoRequest(file='h3_mobile/source.mp4',**{field:value})
+
+
+def test_video_crop_uses_xywh_contract(tmp_path,monkeypatch):
+    module=video_processing.video_module()
+    source=tmp_path/'h3_mobile/source.mp4';source.parent.mkdir();source.write_bytes(b'fixture')
+    commands=[]
+    def run(command,**kwargs):
+        commands.append(command);__import__('pathlib').Path(command[-1]).write_bytes(b'prepared')
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(module.subprocess,'run',run)
+    # A valid offset crop rejected by the previous x1/y1/x2/y2 interpretation.
+    module.prepare_video(tmp_path,'h3_mobile/source.mp4',64,96,22,crop_json='[0.6,0.2,0.3,0.4]')
+    filters=commands[0][commands[0].index('-vf')+1]
+    assert 'crop=iw*0.3:ih*0.4:iw*0.6:ih*0.2' in filters
+
+
+def test_cancelled_request_keeps_cpu_lock_until_work_finishes(monkeypatch,tmp_path):
+    import asyncio
+    from threading import Event
+    entered,finish=Event(),Event()
+    def prepare(*args,**kwargs):
+        entered.set();assert finish.wait(5);return 'fixture.mkv'
+    monkeypatch.setattr(video_processing,'video_module',lambda:SimpleNamespace(prepare_video=prepare))
+    monkeypatch.setattr(video_processing,'browser_preview',lambda *args:'fixture.mp4')
+    monkeypatch.setattr(video_processing,'get_settings',lambda:SimpleNamespace(comfyui_input_dir=tmp_path))
+    async def scenario():
+        task=asyncio.create_task(asyncio.to_thread(video_processing.prepare_preview,{}))
+        try:
+            assert await asyncio.to_thread(entered.wait,3)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):await task
+            assert video_processing.PREVIEW_LOCK.locked()
+            with pytest.raises(__import__('fastapi').HTTPException) as error:video_processing.prepare_preview({})
+            assert error.value.status_code==409
+        finally:finish.set()
+    asyncio.run(scenario())
+    assert not video_processing.PREVIEW_LOCK.locked()
+
+@pytest.mark.parametrize('failure,status,expected',[(subprocess.TimeoutExpired('private-command',1),504,'shorter interval'),(FileNotFoundError('private-path'),503,'FFmpeg'),(ValueError('Selected window contains no video frames'),422,'Move the start earlier'),(RuntimeError('private-detail'),422,'source plays')])
+def test_video_errors_are_actionable_without_exposing_internal_details(monkeypatch,tmp_path,failure,status,expected):
+    app=FastAPI();app.include_router(video_processing.router)
+    monkeypatch.setattr(video_processing,'require_admin',lambda *a,**kw:None)
+    source=tmp_path/'source.mp4';source.touch()
+    monkeypatch.setattr(video_processing,'media_path',lambda *a:source)
+    def fail(settings):raise failure
+    monkeypatch.setattr(video_processing,'prepare_preview',fail)
+    response=TestClient(app).post('/api/v1/generator/process-video',json={'file':'h3_mobile/source.mp4'})
+    assert response.status_code==status
+    detail=response.json()['detail']
+    assert expected in detail and 'diagnostic ID' in detail and 'Original preserved' in detail
+    assert 'private-' not in detail

@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib.util
+import logging
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -9,7 +10,7 @@ from threading import Lock
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import get_settings
 from .h3_media import h3_input_paths
@@ -19,6 +20,7 @@ from .rental_ui import require_admin
 
 router = APIRouter()
 PREVIEW_LOCK = Lock()
+logger = logging.getLogger(__name__)
 
 
 @lru_cache
@@ -43,6 +45,14 @@ class VideoRequest(BaseModel):
     duration: float = Field(default=5, ge=0.25, le=60)
     crop: list[float] | None = None
     trim: list[float] | None = None
+
+    @field_validator('crop', 'trim', mode='before')
+    @classmethod
+    def validate_window(cls, value, info):
+        if value is None:
+            return value
+        from .generator_prompts.refs import validate_crop, validate_trim
+        return validate_crop(value) if info.field_name == 'crop' else validate_trim(value)
 
 
 def processing_graph(payload):
@@ -108,6 +118,34 @@ def browser_preview(root, file):
     return target.relative_to(root).as_posix()
 
 
+def prepare_preview(settings):
+    # The CPU operation owns the lock. Cancelling an HTTP request cannot release
+    # it while its worker thread/FFmpeg process is still running.
+    if not PREVIEW_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "Another video preview is processing; wait for it to finish")
+    try:
+        root = get_settings().comfyui_input_dir
+        file = video_module().prepare_video(root, **settings)
+        preview = browser_preview(root, file)
+        return file, preview
+    finally:
+        PREVIEW_LOCK.release()
+
+
+def prepared_timing(root, file):
+    """Count stored video packets without decoding or depending on ffprobe."""
+    result = subprocess.run(
+        [ffmpeg_executable(), '-v', 'error', '-nostdin', '-i', str(Path(root) / file),
+         '-map', '0:v:0', '-c:v', 'copy', '-progress', 'pipe:1', '-nostats', '-f', 'null', '-'],
+        capture_output=True, text=True, timeout=120,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+    )
+    counts = [int(line.split('=', 1)[1]) for line in result.stdout.splitlines() if line.startswith('frame=')]
+    if result.returncode or not counts or counts[-1] <= 0:
+        raise ValueError('Selected window contains no video frames')
+    return counts[-1], counts[-1] / 24
+
+
 @router.post("/api/v1/generator/process-video")
 async def process_video(payload: VideoRequest, request: Request):
     require_admin(request, mutation=True)
@@ -119,21 +157,22 @@ async def process_video(payload: VideoRequest, request: Request):
             raise ValueError("Choose a managed video reference")
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    if not PREVIEW_LOCK.acquire(blocking=False):
-        raise HTTPException(409, "Another video preview is processing; wait for it to finish")
     try:
         settings = graph["video_prepare"]["inputs"]
-        file = await asyncio.to_thread(
-            video_module().prepare_video, get_settings().comfyui_input_dir, **settings
-        )
-        preview = await asyncio.to_thread(browser_preview, get_settings().comfyui_input_dir, file)
+        file, preview = await asyncio.to_thread(prepare_preview, settings)
+        actual_frames, actual_duration = await asyncio.to_thread(prepared_timing, get_settings().comfyui_input_dir, file)
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
-        raise HTTPException(
-            422,
-            "Video preparation failed; check the source and processing window. Original preserved.",
-        ) from exc
-    finally:
-        PREVIEW_LOCK.release()
+        diagnostic_id = uuid4().hex[:12]
+        logger.exception('Video preparation failed; diagnostic ID %s', diagnostic_id)
+        if isinstance(exc, subprocess.TimeoutExpired):
+            status, message = 504, 'Video processing timed out. Select a shorter interval or lower the resolution.'
+        elif isinstance(exc, FileNotFoundError):
+            status, message = 503, 'Video processing dependencies or source are unavailable. Check FFmpeg installation and that the source still exists.'
+        elif str(exc) == 'Selected window contains no video frames':
+            status, message = 422, 'The selected interval contains no video frames. Move the start earlier or choose another source.'
+        else:
+            status, message = 422, 'Video preparation failed. Check that the source plays and that the selected interval is valid.'
+        raise HTTPException(status, f'{message} Original preserved. Controller log diagnostic ID: {diagnostic_id}.') from exc
     return {
         "reference": {
             "kind": "video",
@@ -142,6 +181,8 @@ async def process_video(payload: VideoRequest, request: Request):
             "preparation": {
                 "source": payload.file,
                 "preview": preview,
+                "actual_frames": actual_frames,
+                "actual_duration": actual_duration,
                 **({"source_trim": payload.trim} if payload.trim else {}),
                 **({"source_crop": payload.crop} if payload.crop else {}),
                 **{k: settings[k] for k in ("width", "height", "frame_count")},
@@ -152,4 +193,6 @@ async def process_video(payload: VideoRequest, request: Request):
         "fps": 24,
         "requested_duration": payload.duration,
         "maximum_frames": settings["frame_count"],
+        "actual_frames": actual_frames,
+        "actual_duration": actual_duration,
     }

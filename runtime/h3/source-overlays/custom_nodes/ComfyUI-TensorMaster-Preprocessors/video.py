@@ -32,17 +32,17 @@ def prepare_video(
         if (
             not isinstance(crop, list)
             or len(crop) != 4
-            or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in crop)
-            or not 0 <= crop[0] < crop[2] <= 1
-            or not 0 <= crop[1] < crop[3] <= 1
+            or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in crop)
+            or not (0 <= crop[0] and 0 < crop[2] and crop[0] + crop[2] <= 1 + 1e-9)
+            or not (0 <= crop[1] and 0 < crop[3] and crop[1] + crop[3] <= 1 + 1e-9)
         ):
             raise ValueError("Invalid normalized crop")
-        left, top, right, bottom = crop
-        filters.append(f"crop=iw*{right - left}:ih*{bottom - top}:iw*{left}:ih*{top}")
+        left, top, crop_width, crop_height = crop
+        filters.append(f"crop=iw*{crop_width}:ih*{crop_height}:iw*{left}:ih*{top}")
     if trim is not None and (
         not isinstance(trim, list)
         or len(trim) != 2
-        or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in trim)
+        or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in trim)
         or not 0 <= trim[0] < trim[1]
     ):
         raise ValueError("Invalid exclusive trim interval")
@@ -59,7 +59,7 @@ def prepare_video(
     with source.open("rb") as stream:
         source_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     digest = hashlib.sha256(
-        json.dumps([2, source_hash, width, height, frame_count, crop, trim]).encode()
+        json.dumps([3, source_hash, width, height, frame_count, crop, trim]).encode()
     ).hexdigest()
     relative = f"h3_mobile/video-prepared/{digest}.mkv"
     target = root / relative

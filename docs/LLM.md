@@ -76,3 +76,9 @@ Drag the two handles on the video timeline to select the start and end. **Previe
 selected range** plays only that interval immediately; **Process & preview**
 creates the resized clip for review before **Save reference**. Exact time fields
 and playhead buttons remain available for precise adjustments.
+
+Video preparation reports the actual encoded frame count and duration after
+processing. The nominal generation duration is rounded onto H3's 17k+5 frame
+grid at 24 fps; a shorter source or selected interval can contain fewer frames.
+Immediate range playback and the export label use that same upper bound. Crops
+use normalized `[x, y, width, height]`, consistently with reference media.

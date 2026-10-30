@@ -32,9 +32,14 @@ def test_compressed_preview_uses_requested_dimensions_duration_and_keeps_source(
     data,mime=asyncio.run(prompts.convert_media(source,'video',trim=[2,3.5],preview=True,target_size=(256,448)))
     output=tmp_path/'preview.mp4'
     output.write_bytes(data)
-    reader=imageio_ffmpeg.read_frames(str(output));meta=next(reader);reader.close()
+    reader=imageio_ffmpeg.read_frames(str(output));meta=next(reader);frame=next(reader);reader.close()
     assert meta['size']==(256,448)
     assert abs(meta['duration']-1.5)<.15
     assert meta['fps']==8
+    # Portrait AI previews must preserve the wide source, matching video prep:
+    # black padding at the top rather than silently cropping the performer.
+    assert max(frame[:3]) < 10
+    center = (224 * 256 + 128) * 3
+    assert frame[center+2] > 200
     assert len(data)<8*1024**2 and mime=='video/mp4'
     assert hashlib.sha256(source.read_bytes()).hexdigest()==before
