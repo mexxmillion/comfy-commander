@@ -553,12 +553,14 @@ async function openVideoProcessing(index) {
     $('#video-processing-plan').textContent=`${$('#aspect-ratio').value} · ${$('#megapixels').value} MP · ${$('#duration').value}s requested · 24 fps`;
     $('#video-processing-status').textContent='Click Process & preview, review the result, then save.';
     $('#video-processing-save').disabled=true;$('#video-processing-result').hidden=true;
+    $('#video-processing-preview').disabled=false;
     $('#video-processing').showModal();
   }catch(error){toast(error.message);}finally{setSubmitting(false);}
 }
 $('#video-processing-preview').onclick=async()=>{
   const editor=videoEditor;if(!editor)return;const revision=editor.revision || 0;
   const button=$('#video-processing-preview');button.disabled=true;$('#video-processing-save').disabled=true;
+  $('#video-trim-source').pause();editor.playingSelection=false;
   $('#video-processing-status').textContent='Processing on controller CPU · resizing / 24 fps / trimming. Original kept.';
   try {
     const start=Number($('#video-trim-start').value),end=Number($('#video-trim-end').value),source=$('#video-trim-source');
@@ -570,10 +572,15 @@ $('#video-processing-preview').onclick=async()=>{
     const result=await response.json();if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Video processing failed.');
     if(editor!==videoEditor)return;
     if(revision!==(editor.revision || 0)){$('#video-processing-status').textContent='Selection changed. Process & preview again before saving.';return;}
-    editor.result=result.reference;const video=$('#video-processing-result');video.src=referenceFileUrl(result.preview_file || result.reference.file);video.hidden=false;
-    $('#video-processing-save').disabled=false;$('#video-processing-status').textContent=`Preview ready · ${result.reference.preparation.width} × ${result.reference.preparation.height} · 24 fps · up to ${result.maximum_frames} frames. Review, then Save reference.`;
-  }catch(error){$('#video-processing-status').textContent=error.message;}finally{button.disabled=false;}
+    editor.result=result.reference;const video=$('#video-processing-result');video.addEventListener('loadedmetadata',()=>{if(editor===videoEditor)video.scrollIntoView({block:'nearest'});},{once:true});video.src=referenceFileUrl(result.preview_file || result.reference.file);video.hidden=false;
+    const timing=Number.isFinite(result.actual_duration)&&Number.isInteger(result.actual_frames)?`${result.actual_frames} frames at 24 fps · ${result.actual_duration.toFixed(2)}s`:'Review timing in the video player (restart the controller to enable frame counts)';
+    $('#video-processing-save').disabled=false;$('#video-processing-status').textContent=`Preview ready · ${result.reference.preparation.width} × ${result.reference.preparation.height} · ${timing}. Review, then Save reference.`;
+  }catch(error){if(editor===videoEditor)$('#video-processing-status').textContent=error.message;}finally{if(editor===videoEditor)button.disabled=false;}
 };
+function videoTrimExportEnd(){
+  const base=Math.max(5,Math.round(Number($('#duration').value)*24));
+  return Math.min(Number($('#video-trim-end').value),Number($('#video-trim-start').value)+(base+(5-base%17+17)%17)/24);
+}
 function invalidateVideoTrim(){if(videoEditor){videoEditor.result=null;videoEditor.revision=(videoEditor.revision || 0)+1;}$('#video-processing-save').disabled=true;$('#video-processing-result').pause();$('#video-processing-result').hidden=true;}
 function syncVideoTrim(){
   const source=$('#video-trim-source'),duration=Number.isFinite(source.duration)?source.duration:1;
@@ -582,7 +589,8 @@ function syncVideoTrim(){
     const handle=$('#video-trim-'+name+'-handle');handle.max=duration;handle.value=value;
     $('#video-trim-timeline').style.setProperty('--trim-'+name,`${100*value/duration}%`);
   }
-  $('#video-trim-selection-label').textContent=`${start.toFixed(2)}s → ${end.toFixed(2)}s · ${Math.max(0,end-start).toFixed(2)}s selected`;
+  const exportEnd=videoTrimExportEnd();
+  $('#video-trim-selection-label').textContent=end>start?`${start.toFixed(2)}s → ${end.toFixed(2)}s selected · preview/export ${Math.max(0,exportEnd-start).toFixed(2)}s${exportEnd<end?' (limited by generation duration)':''}`:'End must be after start.';
   source.pause();if(videoEditor)videoEditor.playingSelection=false;
 }
 for(const id of ['video-trim-start','video-trim-end'])$('#'+id).addEventListener('input',()=>{invalidateVideoTrim();syncVideoTrim();});
@@ -600,19 +608,20 @@ $('#video-trim-play').onclick=async()=>{
 };
 $('#video-trim-source').addEventListener('timeupdate',()=>{
   const source=$('#video-trim-source');
-  if(videoEditor?.playingSelection && source.currentTime>=Number($('#video-trim-end').value)){source.pause();videoEditor.playingSelection=false;}
+  if(videoEditor?.playingSelection && source.currentTime>=videoTrimExportEnd()){source.pause();videoEditor.playingSelection=false;}
 });
 $('#video-trim-source').addEventListener('loadedmetadata',()=>{
   const source=$('#video-trim-source');if(!Number.isFinite(source.duration))return;
   $('#video-trim-start').max=source.duration;$('#video-trim-end').max=source.duration;
   $('#video-trim-end').value=Math.min(Number($('#video-trim-end').value),source.duration);
+  $('#video-trim-start').value=Math.max(0,Math.min(Number($('#video-trim-start').value),Number($('#video-trim-end').value)-.01));
   source.currentTime=Math.min(Number($('#video-trim-start').value),source.duration);
   syncVideoTrim();
-  $('#video-trim-info').textContent=`Source ${source.duration.toFixed(2)}s. Export uses up to ${$('#duration').value}s from your selected start, at the target size. Original kept.`;
+  $('#video-trim-info').textContent=`Source ${source.duration.toFixed(2)}s. Preview/export stops at the selected end or the H3 frame-grid duration limit, whichever comes first. Original kept.`;
 });
 $('#video-trim-set-start').onclick=()=>{$('#video-trim-start').value=$('#video-trim-source').currentTime.toFixed(2);invalidateVideoTrim();syncVideoTrim();};
 $('#video-trim-set-end').onclick=()=>{$('#video-trim-end').value=$('#video-trim-source').currentTime.toFixed(2);invalidateVideoTrim();syncVideoTrim();};
-$('#video-processing').addEventListener('close',()=>{$('#video-trim-source').pause();$('#video-processing-result').pause();});
+$('#video-processing').addEventListener('close',()=>{videoEditor=null;$('#video-trim-source').pause();$('#video-processing-result').pause();});
 $('#video-processing-save').onclick=()=>{
   const editor=videoEditor,position=state.savedReferences.indexOf(editor?.target);
   if(!editor?.result || position<0)return toast('Reference changed. Reopen Process.');

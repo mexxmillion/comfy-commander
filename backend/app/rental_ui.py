@@ -513,13 +513,13 @@ async def logs(kind: str, request: Request, rental_id: str | None = None) -> Pla
     _admin(request)
     names = {"manager": "managed-rental.log", "setup": "managed-prepare.log",
              "models": "managed-models.log", "worker": "managed-worker.log",
-             "comfy": "managed-comfy.log"}
+             "comfy": "managed-comfy.log", "tunnel": "managed-tunnel.log"}
     if kind not in names:
         raise HTTPException(status_code=404)
     if rental_id:
         state_path = _state_path(rental_id)
         suffix = {"manager": "", "setup": "-prepare", "models": "-models",
-                  "worker": "-worker", "comfy": "-comfy"}[kind]
+                  "worker": "-worker", "comfy": "-comfy", "tunnel": "-tunnel"}[kind]
         path = state_path.with_name(state_path.stem + suffix + ".log")
     else:
         path = ROOT / "state" / names[kind]
@@ -554,7 +554,7 @@ async def diagnostics(rental_id: str, request: Request) -> dict:
     record = _decorate(json.loads(path.read_text(encoding="utf-8")), path)
     result = {key: record.get(key) for key in ("rental_id", "provider", "profile", "status", "instance_id", "failure_message", "failed_stage", "cleanup_status", "requested_at", "failed_at", "destroyed_at")}
     logs = []
-    for label, suffix in (("Lifecycle", ""), ("Runtime setup", "-prepare"), ("Models", "-models"), ("Worker", "-worker"), ("ComfyUI", "-comfy")):
+    for label, suffix in (("Lifecycle", ""), ("Runtime setup", "-prepare"), ("Models", "-models"), ("SSH tunnel", "-tunnel"), ("Worker", "-worker"), ("ComfyUI", "-comfy")):
         logfile = path.with_name(path.stem + suffix + ".log")
         if logfile.is_file():
             lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]
@@ -692,11 +692,18 @@ async def launch(payload: Launch, request: Request) -> dict:
                     subprocess.Popen([sys.executable, str(manager), "launch", "--state-file", str(state_path)], cwd=ROOT,
                                      stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                      creationflags=flags, close_fds=True)
-                except OSError as exc:
+                except OSError:
                     record["status"] = "failed"
                     record["error"] = "Could not start the rental manager"
                     state_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-                    raise HTTPException(status_code=500, detail=record["error"]) from exc
+                    if requests:
+                        return {"status": "partial", "offer_id": payload.offer_id, "rentals": requests,
+                                "failed_rentals": [rental_id],
+                                "warning": f"{len(requests)} of {payload.count} rental managers started. A later manager could not start; remaining requests were not submitted. Existing managers may allocate billable GPUs. Do not repeat the full launch."}
+                    return JSONResponse(status_code=503, content={
+                        "detail": "Could not start the rental manager. No GPU request was submitted; check the controller process log.",
+                        "allocation_started": False, "rentals": [], "failed_rentals": [rental_id],
+                    })
                 requests.append(rental_id)
         finally:
             log.close()

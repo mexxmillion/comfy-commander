@@ -9,11 +9,12 @@
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
     <script defer src="/static/generation-defaults.js?v=1"></script>
     <script defer src="/static/replacement-modes.js?v=swap-strength-4"></script>
-    <script defer src="/static/generator.js?v=reference-fit-12"></script>
+    <script defer src="/static/generator.js?v=qol-audit-15"></script>
     <script defer src="/static/llm-ui.js?v=1"></script>
     <script defer src="/static/console.js?v=rental-progress-recovery-20261029"></script>
     <script defer src="/static/rental-diagnostics.js?v=2"></script>
-    <link rel="stylesheet" href="/static/generator.css?v=reference-fit-12">
+    <script src="/static/cloud-request.js?v=1"></script>
+    <link rel="stylesheet" href="/static/generator.css?v=qol-audit-15">
   </head>
   <body>
     <div id="workspace-navigation-stack"><nav class="workspace-nav" aria-label="Main navigation">
@@ -239,7 +240,7 @@
       <p>Once connected:</p><dl><dt><code>nvidia-smi</code></dt><dd>GPU usage and temperature</dd><dt><code>tail -n 80 /workspace/h3-comfy.log</code></dt><dd>Recent ComfyUI log</dd><dt><code>exit</code></dt><dd>Disconnect; the worker keeps running</dd></dl>
       <p class="muted">The browser shows connection instructions; it does not contain an interactive terminal.</p>
     </dialog>
-    <dialog id="rental-diagnostics" aria-labelledby="rental-diagnostics-title"><header><h2 id="rental-diagnostics-title">Rental diagnostics</h2><button type="button" id="close-rental-diagnostics" aria-label="Close diagnostics">×</button></header><p id="rental-diagnostics-summary" role="status"></p><label>Log stage<select id="rental-log-stage"><option value="all">All diagnostics</option><option value="manager">Lifecycle</option><option value="setup">Runtime setup</option><option value="models">Models</option><option value="worker">Worker</option><option value="comfy">ComfyUI</option></select></label><div class="cloud-actions"><button type="button" id="refresh-rental-diagnostics">Refresh log</button><button type="button" id="download-rental-diagnostics">Download diagnostics</button></div><pre id="rental-diagnostics-log"></pre></dialog>
+    <dialog id="rental-diagnostics" aria-labelledby="rental-diagnostics-title"><header><h2 id="rental-diagnostics-title">Rental diagnostics</h2><button type="button" id="close-rental-diagnostics" aria-label="Close diagnostics">×</button></header><p id="rental-diagnostics-summary" role="status"></p><label>Log stage<select id="rental-log-stage"><option value="all">All diagnostics</option><option value="manager">Lifecycle</option><option value="setup">Runtime setup</option><option value="models">Models</option><option value="tunnel">SSH tunnel</option><option value="worker">Worker</option><option value="comfy">ComfyUI</option></select></label><div class="cloud-actions"><button type="button" id="refresh-rental-diagnostics">Refresh log</button><button type="button" id="download-rental-diagnostics">Download diagnostics</button></div><pre id="rental-diagnostics-log"></pre></dialog>
     <dialog id="output-player" class="output-player" aria-labelledby="output-player-title">
       <header><h2 id="output-player-title">Video preview</h2><button id="output-player-close" type="button" autofocus aria-label="Close video player">×</button></header>
       <video id="output-player-video" controls playsinline preload="none"></video>
@@ -288,6 +289,7 @@
       };
       let passwordSetup = false;
       let rentalPreferences = null;
+      let rentalLaunchNeedsReview = false;
       async function showSignIn() {
         const auth = await cloudRequest('auth-status');
         passwordSetup = !auth.configured;
@@ -304,14 +306,7 @@
           : 'Use the same password on your phone and MacBook over Tailscale.';
       }
       async function cloudRequest(path, options = {}) {
-        const response = await fetch(`/api/v1/cloud/${path}`, {credentials: 'same-origin', ...options});
-        const data = await response.json();
-        if (!response.ok) {
-          const error = new Error(data.detail || 'Cloud request failed');
-          error.status = response.status;
-          throw error;
-        }
-        return data;
+        return window.CommanderCloudRequest.request(path, options);
       }
       async function loadImportedRentalProfiles() {
         const response = await fetch('/api/v1/setup/profiles', {credentials:'same-origin'});
@@ -325,6 +320,7 @@
         }
       }
       async function loadOffers() {
+        if(rentalLaunchNeedsReview)return setRentalMessage('A rental request needs review. Close this window and check Dispatcher → Rentals and the provider console before another launch.',true);
         const list = document.querySelector('#rental-offers');
         list.replaceChildren();
         document.querySelector('#launch-rental').disabled = true;
@@ -398,6 +394,7 @@
       document.querySelector('#rental-profile').addEventListener('change', () => loadOffers().catch(error => setRentalMessage(error.message, true)));
       document.querySelector('#rental-gpu-class').addEventListener('change', () => loadOffers().catch(error => setRentalMessage(error.message, true)));
       document.querySelector('#launch-rental').addEventListener('click', async () => {
+        if(rentalLaunchNeedsReview)return;
         const launchButton = document.querySelector('#launch-rental');
         const choice = document.querySelector('input[name="offer"]:checked');
         if (!choice) return setRentalMessage('Choose an available offer first.', true);
@@ -417,12 +414,14 @@
           launchButton.disabled = true;
           launchButton.textContent = 'Starting rental…';
           setRentalMessage(`Submitting ${provider} rental request… Keep this window open.`, false);
-          await cloudRequest('launch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, gpu_class:document.querySelector('#rental-gpu-class').value, gpu_name:choice.dataset.gpu, offer_id:provider === 'runpod' ? choice.value : Number(choice.value), profile, count, max_minutes:minutes, max_price_per_hour:priceCeiling, max_budget_usd:budget})});
+          const result=await cloudRequest('launch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, gpu_class:document.querySelector('#rental-gpu-class').value, gpu_name:choice.dataset.gpu, offer_id:provider === 'runpod' ? choice.value : Number(choice.value), profile, count, max_minutes:minutes, max_price_per_hour:priceCeiling, max_budget_usd:budget})});
+          if(result.warning){rentalLaunchNeedsReview=true;setRentalMessage(result.warning+` Accepted rental IDs: ${result.rentals.join(', ')}. Close this window and check Rentals before another launch.`,true);launchButton.textContent='Check Rentals before another launch';return;}
           rentalDialog.close(); location.hash = '#rentals'; location.reload();
         } catch(error) {
+          rentalLaunchNeedsReview=Boolean(error.uncertain);
           setRentalMessage(error.message, true);
-          launchButton.disabled = false;
-          launchButton.textContent = 'Rent selected GPU(s)';
+          launchButton.disabled = Boolean(error.uncertain);
+          launchButton.textContent = error.uncertain?'Check Rentals before another launch':'Rent selected GPU(s)';
         }
       });
       syncRentalProvider();

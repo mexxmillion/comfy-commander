@@ -402,7 +402,7 @@
       <p class="hint">Your original stays unchanged. With both options enabled, depth is estimated first, then the subject mask is applied. Saved processing results are available in Sources.</p>
     </dialog>
     <dialog id="video-processing" aria-label="Video processing">
-      <form method="dialog"><h2>Process video reference</h2><button type="submit">Close</button></form>
+      <form method="dialog" class="video-processing-heading"><h2>Process video reference</h2><button type="submit">Close</button></form>
       <video id="video-trim-source" controls playsinline preload="metadata" style="width:100%;max-height:30vh"></video>
       <div class="video-trim-timeline" id="video-trim-timeline">
         <div class="video-trim-selection"></div>
@@ -413,7 +413,7 @@
       <div class="compact-grid"><label class="field"><span>Start · seconds</span><input id="video-trim-start" type="number" min="0" step="0.01" value="0"></label><label class="field"><span>End · seconds</span><input id="video-trim-end" type="number" min="0.01" step="0.01" value="3"></label></div>
       <div class="launch-actions"><button id="video-trim-set-start" class="text-button" type="button">Set start at playhead</button><button id="video-trim-set-end" class="text-button" type="button">Set end at playhead</button></div>
       <p id="video-trim-info" class="hint"></p>
-      <p id="video-processing-plan"></p><p class="hint">Resize, preserve framing, resample to 24 fps and limit to the requested output window. Runs on this controller’s CPU. The same stage is included in replacement API graphs.</p>
+      <p id="video-processing-plan"></p><details><summary>Processing details</summary><p class="hint">Resize, preserve framing, resample to 24 fps and limit to the requested output window. Runs on this controller’s CPU. The same stage is included in replacement API graphs.</p></details>
       <div class="launch-actions"><button type="button" id="video-processing-preview">Process &amp; preview</button><button type="button" id="video-processing-save" disabled>Save reference</button></div>
       <p id="video-processing-status" role="status"></p><video id="video-processing-result" controls playsinline hidden style="width:100%;max-height:45vh"></video>
     </dialog>

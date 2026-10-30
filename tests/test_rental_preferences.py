@@ -255,3 +255,55 @@ def test_admin_can_raise_saved_hourly_ceiling_above_initial_default(client,monke
     payload=dict(gpu_class='5090',minimum_vram_gb=16,max_minutes=30,max_budget_usd=2,max_price_per_hour=3)
     assert client.put('/api/v1/settings/rentals',json=payload).status_code==200
     assert client.get('/api/v1/settings/rentals').json()['preferences']['max_price_per_hour']==3
+
+@pytest.mark.parametrize('fail_on',[1,2])
+def test_partial_quantity_launch_preserves_receipts_and_stops_remaining(monkeypatch,tmp_path,fail_on):
+    from runtime.h3 import runpod_worker
+    from types import SimpleNamespace
+    import json
+    app=FastAPI();app.include_router(rental_ui.router)
+    monkeypatch.setattr(rental_ui,'_admin',lambda *a,**kw:None)
+    monkeypatch.setattr(rental_ui,'get_settings',lambda:SimpleNamespace(max_gpu_price_per_hour=2,max_instance_lifetime_hours=2,max_active_gpus=10,max_total_price_per_hour=10))
+    monkeypatch.setattr(rental_ui,'read_rental_preferences',lambda:rentals.RentalPreferences(max_minutes=30,max_price_per_hour=1,max_budget_usd=10))
+    for name in ['build_bundle','validate_startup_scripts']:
+        monkeypatch.setattr(rental_ui,name,lambda:None)
+    monkeypatch.setattr(runpod_worker,'preflight',lambda:None)
+    monkeypatch.setattr(rental_ui,'active_rentals',lambda:[])
+    monkeypatch.setattr(rental_ui,'ROOT',tmp_path)
+    monkeypatch.setattr(rental_ui,'RENTALS',tmp_path/'state/rentals')
+    calls=[]
+    def spawn(*args,**kwargs):
+        calls.append(args)
+        if len(calls)==fail_on:raise OSError('fixture manager failure')
+        return SimpleNamespace(pid=123)
+    monkeypatch.setattr(rental_ui.subprocess,'Popen',spawn)
+    response=TestClient(app).post('/api/v1/cloud/launch',json=dict(provider='runpod',offer_id='fixture-gpu',profile='ref2v-int8',count=3,max_minutes=30,max_price_per_hour=.1,max_budget_usd=10))
+    assert len(calls)==fail_on
+    records={p.stem:json.loads(p.read_text()) for p in (tmp_path/'state/rentals').glob('*.json')}
+    assert len(records)==fail_on
+    assert sum(r['status']=='failed' for r in records.values())==1
+    if fail_on==1:
+        assert response.status_code==503 and 'No GPU request was submitted' in response.json()['detail']
+        assert response.json()['allocation_started'] is False
+    else:
+        assert response.status_code==202
+        data=response.json()
+        assert data['status']=='partial' and len(data['rentals'])==1
+        assert records[data['rentals'][0]]['status']=='requested'
+        assert records[data['failed_rentals'][0]]['status']=='failed'
+        assert 'Do not repeat the full launch' in data['warning']
+
+
+def test_tunnel_log_is_available_in_diagnostics_and_stage(client,monkeypatch,tmp_path):
+    import json
+    path=tmp_path/'rental-fixture.json';path.write_text(json.dumps(dict(rental_id='rental-fixture',status='ready',provider='runpod',profile='ref2v-int8')))
+    path.with_name('rental-fixture-tunnel.log').write_text('remote port forwarding failed private-fixture')
+    monkeypatch.setattr(rental_ui,'_admin',lambda *a,**kw:None)
+    monkeypatch.setattr(rental_ui,'_state_path',lambda rid:path)
+    monkeypatch.setattr(rental_ui,'_decorate',lambda record,path:record)
+    monkeypatch.setattr(rental_ui,'redact_log',lambda text:text.replace('private-fixture','[REDACTED]'))
+    stage=client.get('/api/v1/cloud/logs/tunnel?rental_id=rental-fixture')
+    assert stage.status_code==200 and '[REDACTED]' in stage.text
+    report=client.get('/api/v1/cloud/diagnostics/rental-fixture')
+    assert report.status_code==200 and 'SSH tunnel' in report.json()['log']
+    assert 'private-fixture' not in report.text
