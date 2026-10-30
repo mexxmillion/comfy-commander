@@ -161,11 +161,13 @@ def download_missing(selection, rows):
 def saved_setup(request: Request):
     require_admin(request)
     settings = get_settings()
-    saved = json.loads(config_path().read_text(encoding="utf-8")) if config_path().is_file() else {}
+    with LOCK:
+        saved = json.loads(config_path().read_text(encoding="utf-8")) if config_path().is_file() else {}
+        download = dict(STATE)
     return {"root": saved.get("root", str(settings.comfyui_root or "")),
             "model_set": saved.get("model_set", "h3"),
             "sets": [{"id": key, "label": value[0]} for key, value in SETS.items()],
-            "download": dict(STATE)}
+            "download": download}
 
 
 @router.post("/check")
@@ -173,9 +175,10 @@ def check(selection: Selection, request: Request):
     require_admin(request, mutation=True)
     try:
         data = inventory(selection)
-        path = config_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"root": data["root"], "model_set": selection.model_set}), encoding="utf-8")
+        with LOCK:
+            path = config_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"root": data["root"], "model_set": selection.model_set}), encoding="utf-8")
         return data
     except (ValueError, OSError):
         raise HTTPException(400, "Check the selected ComfyUI folder and model set. Use the folder containing main.py and custom_nodes; portable parents are accepted.") from None

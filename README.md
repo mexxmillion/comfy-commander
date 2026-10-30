@@ -41,6 +41,12 @@ cd tensor-master-community
 powershell -ExecutionPolicy Bypass -File .\tools\first_run.ps1
 ```
 
+After a reboot, double-click **Start Commander.cmd** in the project folder.
+It reuses the existing environment, settings and credentials, checks whether
+the server is already running, and opens Generate. No dependency reinstall,
+rental or render is started. ComfyUI and workers start separately. For a status
+check, run `"Start Commander.cmd" --status`.
+
 Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
 seven screens:
 
