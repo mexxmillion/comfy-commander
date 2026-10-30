@@ -16,6 +16,28 @@ not an official Comfy.org product. Tensor Master remains the execution-engine na
 
 ![Desktop video workspace](docs/images/generate-desktop.png)
 
+## Everyday creation. Agent-driven production.
+
+Use the interface for day-to-day work: generate an image from your laptop,
+queue a video from your phone, review outputs and refine the next version.
+
+For larger productions, connect an agent such as Codex through MCP or the
+controller API. Give it a shot list, reference images and supported workflows;
+have it prepare jobs, submit approved generations and track their progress across
+your registered GPU workers. The dispatcher handles queueing and routing while
+you direct the creative work.
+
+For example: rent five compatible cloud GPUs in Commander, then ask your agent,
+“Prepare these shots from my script and reference images, queue the approved
+workflows across my workers, and report their progress.” An agent can help turn
+the script into a shot plan; you review that plan and the returned outputs.
+
+The current MCP tools support inspection, workflow analysis, preparation and
+opt-in, confirmation-gated job submission. GPU rentals are confirmed in the web
+interface; the embedded setup assistant reviews workflow imports. Fully
+autonomous script-to-film production and GPU rental through MCP are not included
+in the current release.
+
 ## What it does
 
 | Feature | What you get |
