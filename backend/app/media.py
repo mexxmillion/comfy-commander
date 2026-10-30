@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -77,6 +78,24 @@ def ffmpeg_executable() -> str:
         return executable
     from imageio_ffmpeg import get_ffmpeg_exe
     return get_ffmpeg_exe()
+
+
+def ffmpeg_metadata(header: str) -> dict:
+    """Read input stream metadata when the packaged runtime has no ffprobe."""
+    input_header = header.split('Output #', 1)[0]
+    video = next((line for line in input_header.splitlines() if 'Stream #' in line and 'Video:' in line), '')
+    audio = any('Stream #' in line and 'Audio:' in line for line in input_header.splitlines())
+    dimensions = re.search(r'\b(\d{2,6})x(\d{2,6})\b', video)
+    fps = re.search(r'\b(\d+(?:\.\d+)?) fps\b', video)
+    duration = re.search(r'Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)', input_header)
+    if not video and not audio:
+        raise ValueError('No decodable media streams')
+    return {'kind': 'video' if video else 'audio',
+            'width': int(dimensions[1]) if dimensions else None,
+            'height': int(dimensions[2]) if dimensions else None,
+            'fps': float(fps[1]) if fps else None,
+            'duration': sum(float(value) * scale for value, scale in zip(duration.groups(), (3600, 60, 1), strict=True)) if duration else 0,
+            'has_audio': audio}
 
 
 def media_path(filename: str, subfolder: str = '', type: str = 'output', task_id: str = '') -> Path:

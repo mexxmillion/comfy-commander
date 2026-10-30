@@ -14,7 +14,8 @@
       "face-refine",
       "reference-isolate",
       "veda-r2va",
-      "lightx2v-ref2v"
+      "lightx2v-ref2v",
+      "character-swap-v15"
     ],
     "ref2v-singularity": [
       "common",
@@ -338,6 +339,15 @@
       "local_dir": "loras",
       "size": 1956193000,
       "sha256": "08cfe946033af7d27719b964b6e0a0e50c32138daabbd6ce4137e23df6bf9980"
+    },
+    {
+      "group": "character-swap-v15",
+      "repo": "akatz-ai/MiniMax-H3-Character-Swap-LoRA",
+      "revision": "96ea3407b230b6f7df71c58c70e31df96bd7e533",
+      "file": "h3_character_swap_v1.5.safetensors",
+      "local_dir": "loras",
+      "size": 155110792,
+      "sha256": "8f2c3c3eba161df8d0c6099598b4730f641f5ce01e04cd16d2427cff8a35218f"
     }
   ]
 }

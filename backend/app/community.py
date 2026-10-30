@@ -30,7 +30,7 @@ from .config import get_settings
 from .credential_paths import openrouter_secret_file, provider_secret, provider_secret_source
 from .identity import authority
 from .providers.runpod import RunpodProvider
-from .rental_ui import require_admin
+from .rental_ui import _local_setup, require_admin
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
@@ -243,8 +243,27 @@ def cloud_ssh_status(request: Request) -> dict:
     key = get_settings().cloud_ssh_key_file
     # Paths and public readiness only. Private key contents never leave the host.
     command = "ssh-keygen -t ed25519 -f '" + str(key).replace("'", "''") + "' -C comfy-commander"
-    return {"ready": key.is_file() and Path(str(key) + ".pub").is_file(),
-            "command": command, "directory": str(key.parent)}
+    public = Path(str(key) + ".pub")
+    return {"ready": key.is_file() and public.is_file(), "command": command,
+            "directory": str(key.parent),
+            "can_create": _local_setup(request) and not key.exists() and not public.exists()}
+
+
+class CreateCloudSSH(BaseModel):
+    confirm: Literal[True]
+
+
+@router.post("/api/v1/setup/cloud-ssh")
+def create_cloud_ssh(payload: CreateCloudSSH, request: Request) -> dict:
+    require_admin(request, mutation=True)
+    if not _local_setup(request):
+        raise HTTPException(403, "Create the cloud SSH key on the host PC at http://127.0.0.1:8000/settings")
+    from .cloud_ssh import create_cloud_key
+    try:
+        create_cloud_key(get_settings().cloud_ssh_key_file)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(409, "Cloud SSH key could not be created safely. Check OpenSSH and file permissions; existing keys are never replaced.") from exc
+    return cloud_ssh_status(request)
 
 
 @router.post("/api/v1/setup/phone-access")
@@ -394,6 +413,12 @@ def character_replacement_recipe() -> dict:
 @router.get("/api/v1/community/workflows/character-replacement")
 async def replacement_workflow() -> dict:
     return character_replacement_recipe()
+
+
+@router.get("/api/v1/community/workflows/character-swap-v15")
+async def character_swap_workflow() -> dict:
+    from .character_replacement import character_swap_profile
+    return character_swap_profile()
 
 
 @router.post("/api/v1/community/character-replacement/prepare")

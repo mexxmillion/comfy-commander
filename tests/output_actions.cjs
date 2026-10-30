@@ -282,6 +282,14 @@ console.log('Replacement media requirements and audio-lock default passed');
     }
   }
   get('#h3-encoding').value='standard';assert.equal(simpleContext.buildH3Workflow([],42)['155'].inputs.crf,23);
+  simpleContext.CHARACTER_SWAP_LORA='h3_character_swap_v1.5.safetensors';
+  simpleContext.h3JobType=()=> 'replacement';get('#character-swap-enabled').checked=true;
+  simpleContext.applyQualityPreset('normal');
+  const adapterGraph=simpleContext.buildH3Workflow([{kind:'image',file:'h3_mobile/person.png'},{kind:'video',file:'h3_mobile/source.mp4'}],42);
+  assert.equal(adapterGraph['189'].inputs.lora_name,simpleContext.CHARACTER_SWAP_LORA);
+  assert.equal(adapterGraph['189'].inputs.strength_model,1);assert.equal(adapterGraph['145'].inputs.model[0],'189');
+  get('#character-swap-enabled').checked=false;assert.equal(Boolean(simpleContext.buildH3Workflow([],42)['189']),false);
+  simpleContext.h3JobType=()=> 'standard';
   simpleContext.state.h3Type='frames';get('#frame-h3-model').value=simpleContext.FRAME_H3_MODEL;get('#frame-turbo-strength').value=.5;
   for(const [preset,steps,turboEnabled,sampler] of [['preview',5,true,'euler'],['normal',8,true,'euler'],['hq',20,false,'res_multistep']]) {
     simpleContext.applyQualityPreset(preset);simpleContext.syncQualityPreset();assert.equal(get('#h3-quality').value,preset);

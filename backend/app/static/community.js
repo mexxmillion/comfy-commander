@@ -301,6 +301,7 @@ async function loadCloudSsh(){
     const data=await jsonRequest('/api/v1/setup/cloud-ssh');
     document.querySelector('#cloud-ssh-status').textContent=data.ready?'SSH key pair found. Cloud SSH access is configured.':'SSH key pair missing. Complete this one-time host setup before renting.';
     document.querySelector('#cloud-ssh-command').textContent=data.ready?'':data.command;
+    document.querySelector('#create-cloud-ssh').hidden=!data.can_create;
   } catch {document.querySelector('#cloud-ssh-status').textContent='Sign in to view SSH setup instructions.';}
 }
 document.querySelector('#refresh-cloud-ssh').addEventListener('click',loadCloudSsh);
@@ -365,3 +366,11 @@ for(const [id,endpoint,credential] of [['change-password-form','password-change'
     finally{button.disabled=false;}
   });
 }
+
+document.querySelector('#create-cloud-ssh')?.addEventListener('click',async event=>{
+  if(!confirm('Create a dedicated SSH key on this PC? Its private file stays here and is restricted to your local account. Commander uses it to connect to cloud workers. This does not rent a GPU or replace existing keys.'))return;
+  const button=event.currentTarget;button.disabled=true;
+  try{await jsonRequest('/api/v1/setup/cloud-ssh',{method:'POST',body:JSON.stringify({confirm:true})});await loadCloudSsh();}
+  catch(error){document.querySelector('#cloud-ssh-status').textContent=error.message;}
+  finally{button.disabled=false;}
+});

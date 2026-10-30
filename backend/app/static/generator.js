@@ -172,6 +172,7 @@ const FRAME_TURBO_LORAS = {
   8: "minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
 };
 const FRAME_H3_MODEL = "minimax_h3_fl2va_pruned_int8_convrot.safetensors";
+const CHARACTER_SWAP_LORA = "h3_character_swap_v1.5.safetensors";
 const LEGACY_H3_MODEL = "minimax_h3_ref2va_pruned_int8_convrot.safetensors";
 const PRESET_STEPS = { 4: 4, 8: 8 };
 const VSA_LORA = "fasth3_vsa_gate.safetensors";
@@ -1004,6 +1005,11 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
   }
 
   let previous = "127";
+  if($('#character-swap-enabled')?.checked) {
+    if(frameMode || h3JobType()!=='replacement' || $('#h3-model').value!=='minimax_h3_ref2va_pruned_int8_convrot.safetensors')throw new Error('Character Swap v1.5 requires Motion control with the Ref2V Community model.');
+    workflow['189']={class_type:'LoraLoaderModelOnly',inputs:{model:[previous,0],lora_name:CHARACTER_SWAP_LORA,strength_model:1}};
+    previous='189';
+  }
   if (turboEnabled) {
     workflow["145"] = { inputs: { lora_name: (frameMode ? FRAME_TURBO_LORAS : TURBO_LORAS)[turboSteps], strength_model: frameMode ? Number($("#frame-turbo-strength").value) : 1, model: [previous, 0] }, class_type: "LoraLoaderModelOnly" };
     previous = "145";
@@ -1331,6 +1337,7 @@ function recipeFromHistoryEntry(entry) {
     aiModel: frameMode ? prompt["185"]?.inputs.openrouter_model : prompt["181"].inputs.openrouter_model,
     jobType: frameMode ? "standard" : prompt["181"].inputs.job_type,
     replacementTarget: prompt.replacement_4?.inputs?.text || 'person',
+    characterSwapEnabled: Object.values(prompt).some(node=>node.class_type==='LoraLoaderModelOnly' && node.inputs?.lora_name===CHARACTER_SWAP_LORA),
     sampler: prompt['142']?.inputs?.sampler_name || 'euler',
     videoEncoding: Number(prompt['155']?.inputs?.crf)>=23?'standard':'high',
     loras,
@@ -1513,6 +1520,7 @@ function captureH3Recipe(references, seed) {
     aiModel: $("#ai-model").value,
     jobType: h3JobType(),
     replacementTarget: $('#replacement-target').value.trim(),
+    characterSwapEnabled: $('#character-swap-enabled').checked,
     qualityPreset: $('#h3-quality').value,
     videoEncoding: $('#h3-encoding').value,
     sampler: $('#h3-sampler').value,
@@ -1661,6 +1669,7 @@ function loadRecipe(recipe) {
   const jobType = studioRoot.querySelector(`input[name="h3-mode"][value="${recipe.h3Type === "frames" ? "frames" : recipe.jobType === "replacement" ? "replacement" : "standard"}"]`);
   if (jobType) jobType.checked = true;
   $('#replacement-target').value=recipe.replacementTarget || 'person';
+  $('#character-swap-enabled').checked=recipe.characterSwapEnabled===true;
   $('#h3-encoding').value=recipe.videoEncoding || 'high';
   $('#h3-sampler').value=recipe.sampler==='res_multistep'?'res_multistep':'euler';
   syncReplacementMode();
@@ -2666,6 +2675,8 @@ function syncReplacementMode(enableAudioDefault=false) {
   const replacement=state.mode==='h3' && state.h3Type!=='frames' && h3JobType()==='replacement';
   $('#replacement-settings').hidden=!replacement;
   $('#replacement-target').required=replacement;
+  $('#character-swap-enabled').disabled=!replacement;
+  if(!replacement)$('#character-swap-enabled').checked=false;
   if(replacement && enableAudioDefault)$('#h3-audio-lock').checked=true;
   if(state.mode==='h3') {
     $('#reference-section-title').textContent=replacement?'One video + one image':'References · optional';
@@ -2676,6 +2687,22 @@ function syncReplacementMode(enableAudioDefault=false) {
   }
 }
 studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>input.addEventListener('change',()=>{const preset=$('#h3-quality').value;setH3Type(input.value==='frames'?'frames':'reference');applyQualityPreset(preset);syncReplacementMode(true);markAiPromptStale();}));
+async function characterSwapProfile() {
+  const response=await fetch('/api/v1/community/workflows/character-swap-v15');
+  if(!response.ok)throw new Error('Could not load the Character Swap profile.');
+  return response.json();
+}
+$('#use-character-swap-profile').onclick=async()=>{
+  try {
+    const profile=await characterSwapProfile();
+    applyQualityPreset(profile.qualityPreset);$('#character-swap-enabled').checked=true;$('#h3-audio-lock').checked=true;
+    $('#duration').value=profile.duration;$('#megapixels').value=profile.megapixels;$('#aspect-ratio').value=profile.aspect;
+    markAiPromptStale();scheduleDraftSave();toast('v1.5 starter settings applied. Your prompt and references are kept. Nothing queued.');
+  }catch(error){toast(error.message);}
+};
+$('#copy-character-swap-profile').onclick=async()=>{
+  try{await navigator.clipboard.writeText(JSON.stringify(await characterSwapProfile(),null,2));toast('Character Swap profile JSON copied.');}catch(error){toast(error.message);}
+};
 $("#toggle-loras").addEventListener("click", () => {
   const picker = $("#lora-picker");
   picker.hidden = !picker.hidden;

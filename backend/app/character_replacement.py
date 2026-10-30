@@ -14,6 +14,22 @@ from pydantic import BaseModel, Field, field_validator
 from .h3_media import h3_input_paths
 
 SAM3_CHECKPOINT = "sam3.1_multiplex_fp16.safetensors"
+CHARACTER_SWAP_LORA = "h3_character_swap_v1.5.safetensors"
+
+
+def character_swap_profile() -> dict:
+    """Copyable starter recipe; enabling it is an explicit UI choice."""
+    return {"id": "h3-character-swap-v15", "name": "Motion control · Character Swap v1.5",
+            "base_profile": "ref2v-int8", "mode": "h3", "h3Type": "reference",
+            "jobType": "replacement", "qualityPreset": "normal", "turbo": 8,
+            "turboEnabled": True, "steps": 8, "sampler": "euler", "audioLock": True,
+            "characterSwapEnabled": True, "characterSwapStrength": 1.0,
+            "megapixels": 0.5, "duration": 5, "aspect": "9:16 (Portrait Widescreen)",
+            "lora": CHARACTER_SWAP_LORA,
+            "source": "https://huggingface.co/akatz-ai/MiniMax-H3-Character-Swap-LoRA",
+            "note": "Optional identity adapter. Review motion and identity; longer shots can still drift."}
+
+
 RUNTIME = "pocket-h3-local"
 ALLOWED_NODES = {
     "VHS_LoadVideo",
