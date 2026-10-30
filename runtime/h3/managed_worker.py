@@ -269,7 +269,8 @@ def ssh_bootstrap_command() -> str:
 def ssh_arguments(record: dict) -> list[str]:
     return ["-i", str(SSH_KEY), "-p", str(record["ssh_port"]),
             "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "ServerAliveInterval=30", f"root@{record['ssh_host']}"]
+            "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+            "-o", "ConnectTimeout=15", f"root@{record['ssh_host']}"]
 
 
 class SSHTransportError(RuntimeError):
@@ -449,6 +450,7 @@ def reconnect_tunnel(record: dict) -> subprocess.Popen:
     log("Reverse SSH tunnel disconnected; reconnecting without stopping ComfyUI")
     give_up = now() + timedelta(minutes=get_settings().unresponsive_destroy_minutes)
     attempt = 0
+    forwarding_failure = False
     while True:
         if read_state().get("destroyed_at") or now() >= datetime.fromisoformat(record["deadline"]):
             raise RuntimeError("Rental ended during tunnel recovery")
@@ -456,12 +458,24 @@ def reconnect_tunnel(record: dict) -> subprocess.Popen:
         if problem:
             raise RuntimeError(problem)
         if now() >= give_up:
-            raise TimeoutError(f"Tunnel could not reconnect for {get_settings().unresponsive_destroy_minutes} minutes")
+            detail = (' Remote SSH forwarding port 8000 remained occupied after the disconnect; '
+                      'the SSH session did not release its listener. ComfyUI may still be running.'
+                      if forwarding_failure else '')
+            raise TimeoutError(f"Tunnel could not reconnect for {get_settings().unresponsive_destroy_minutes} minutes.{detail}")
+        path = phase_log('tunnel')
+        offset = path.stat().st_size if path.exists() else 0
         tunnel = start_tunnel(record)
         time.sleep(5)
         if tunnel.poll() is None:
             log(f"Reverse SSH tunnel restored on attempt {attempt + 1}")
             return tunnel
+        evidence = path.read_bytes()[offset:].decode('utf-8', errors='replace') if path.exists() else ''
+        if 'remote port forwarding failed' in evidence:
+            if not forwarding_failure:
+                log('Tunnel reconnect blocked: remote port 8000 is still occupied. '
+                    'Waiting for the stale SSH session to release it; ComfyUI is not being restarted. '
+                    'The configured connection timeout and original rental deadline still apply.')
+            forwarding_failure = True
         time.sleep(5)
         attempt += 1
 

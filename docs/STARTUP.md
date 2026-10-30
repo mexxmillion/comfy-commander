@@ -204,3 +204,15 @@ access, the configured HF token is also transferred over SSH to the rented
 worker; public, ungated downloads can run without it. Use a token scoped to
 the required repositories and operations. Do not describe credentials as
 "never sent anywhere" or assume that connection success proves write access.
+
+## Rental tunnel recovery
+
+RunPod workers reach Commander through a private reverse SSH tunnel. New Pods
+use SSH keepalives on both ends so a disconnected session releases its remote
+forwarding port instead of blocking reconnection. Recovery retries on the same
+Pod without restarting ComfyUI. A port-8000 forwarding conflict is recorded in
+the rental lifecycle log, and termination records include the failure reason.
+The configured unresponsive timeout and original lifetime limit still apply;
+these changes do not extend billing limits. Existing Pods need a new SSH-server
+configuration to receive the server-side keepalive change; updating Commander
+alone does not retrofit their running SSH daemon.

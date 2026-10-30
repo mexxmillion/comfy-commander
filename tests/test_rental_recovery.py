@@ -81,3 +81,35 @@ def test_resume_endpoint_requires_admin_and_rejects_non_failure(monkeypatch,tmp_
         monkeypatch.setattr(rental_ui,'_admin',lambda *a,**kw:None)
         monkeypatch.setattr(rental_ui,'_state_path',lambda rid:path)
         assert client.post('/api/v1/cloud/resume/rental-fixture').status_code==409
+
+
+def test_runpod_releases_dead_forwarding_sessions():
+    from backend.app.providers.runpod import BOOT
+    assert '-o ClientAliveInterval=15' in BOOT
+    assert '-o ClientAliveCountMax=3' in BOOT
+    assert '-o PasswordAuthentication=no' in BOOT
+    args = worker.ssh_arguments(dict(ssh_port=22, ssh_host='fixture'))
+    assert 'ServerAliveCountMax=3' in args
+    assert 'ConnectTimeout=15' in args
+
+
+def test_tunnel_retries_occupied_port_then_recovers(monkeypatch, tmp_path):
+    record = dict(instance_id='fixture', deadline=(worker.now()+timedelta(minutes=20)).isoformat())
+    messages, attempts = [], []
+    path = tmp_path/'tunnel.log'
+    monkeypatch.setattr(worker, 'read_state', lambda: record)
+    monkeypatch.setattr(worker, 'instance_problem', lambda instance: None)
+    monkeypatch.setattr(worker, 'phase_log', lambda name: path)
+    monkeypatch.setattr(worker, 'log', messages.append)
+    monkeypatch.setattr(worker.time, 'sleep', lambda seconds: None)
+    def start(_):
+        attempts.append(1)
+        if len(attempts) == 1:
+            path.write_text('Error: remote port forwarding failed for listen port 8000\n')
+            return SimpleNamespace(poll=lambda: 255)
+        return SimpleNamespace(poll=lambda: None)
+    monkeypatch.setattr(worker, 'start_tunnel', start)
+    tunnel = worker.reconnect_tunnel(record)
+    assert tunnel.poll() is None and len(attempts) == 2
+    assert any('remote port 8000 is still occupied' in line for line in messages)
+    assert any('restored on attempt 2' in line for line in messages)
