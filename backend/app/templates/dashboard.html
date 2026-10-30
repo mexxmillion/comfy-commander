@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=motion-v15-smoke-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=cloud-onboarding-auto-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
-    <script defer src="/static/generator.js?v=motion-v15-smoke-20261029"></script>
-    <script defer src="/static/console.js?v=motion-v15-smoke-20261029"></script>
-    <link rel="stylesheet" href="/static/generator.css?v=motion-v15-smoke-20261029">
+    <script defer src="/static/generator.js?v=cloud-onboarding-auto-20261029"></script>
+    <script defer src="/static/console.js?v=cloud-onboarding-auto-20261029"></script>
+    <link rel="stylesheet" href="/static/generator.css?v=cloud-onboarding-auto-20261029">
   </head>
   <body>
     <div class="shell">
@@ -262,7 +262,7 @@
       <label>Provider<select id="rental-provider"><option value="runpod" selected>Runpod Secure Cloud · default</option><option value="vast">Vast.ai · alternative</option></select></label>
       <section id="rental-unlock"><label><span id="rental-password-label">Admin password</span><input id="rental-key" type="password" autocomplete="current-password" placeholder="Your Tensor Master password"></label><label id="rental-confirm-label" hidden>Confirm password<input id="rental-confirm" type="password" autocomplete="new-password"></label><label><input id="rental-remember" type="checkbox" checked style="width:auto"> Keep this device signed in</label><button type="button" id="rental-unlock-button">Sign in</button><a href="/settings#access">Change or recover your password</a><small id="rental-auth-help">Use the same password on your phone and MacBook over Tailscale.</small></section>
       <button type="button" id="rental-logout" hidden>Sign out on this device</button>
-      <section id="rental-picker" hidden><label>Community runtime profile<select id="rental-profile"><option value="ref2v-int8" selected>MiniMax H3 Ref2V · Community default</option><option value="ref2v-singularity">Singularity Ref2VA v1.3 INT8</option><option value="fasth3-omni">FastH3 Omni INT8 · native 8 steps</option><option value="flf2v-int8">H3 First / Last Frame · FL2VA INT8</option><option value="qwen-image-21">Qwen Image 2.1 · native + optional Viggle</option></select></label><div class="form-row"><label>Quantity<input id="rental-count" type="number" min="1" max="10" value="1"></label><label>Maximum rental time (minutes)<input id="rental-minutes" type="number" min="15" max="180" value="90"></label></div><button type="button" id="refresh-offers">Refresh offers</button><div id="rental-offers" class="rental-offers"></div><button type="button" class="primary" id="launch-rental">Rent selected GPU(s)</button></section>
+      <section id="rental-picker" hidden><label>Community runtime profile<select id="rental-profile"><option value="ref2v-int8" selected>MiniMax H3 Ref2V · Community default</option><option value="ref2v-singularity">Singularity Ref2VA v1.3 INT8</option><option value="fasth3-omni">FastH3 Omni INT8 · native 8 steps</option><option value="flf2v-int8">H3 First / Last Frame · FL2VA INT8</option><option value="qwen-image-21">Qwen Image 2.1 · native + optional Viggle</option></select></label><div class="form-row"><label>Quantity<input id="rental-count" type="number" min="1" max="10" value="1"></label><label>Maximum rental time (minutes)<input id="rental-minutes" type="number" min="15" max="180" value="90"></label></div><label>Total launch budget · USD<input id="rental-budget" type="number" min="0.01" step="0.01" value="5"></label><p><a href="/settings#rentals">GPU filters &amp; rental limits →</a></p><button type="button" id="refresh-offers">Refresh offers</button><div id="rental-offers" class="rental-offers"></div><button type="button" class="primary" id="launch-rental">Rent selected GPU(s)</button></section>
       <p id="rental-message" role="status" class="muted"></p>
     </dialog>
     <nav class="mobile-nav" aria-label="Mobile navigation">
@@ -309,6 +309,7 @@
         count.title = vast ? 'Vast marketplace offers are rented one at a time.' : 'Rent up to ten matching Runpod workers.';
       };
       let passwordSetup = false;
+      let rentalPreferences = null;
       async function showSignIn() {
         const auth = await cloudRequest('auth-status');
         passwordSetup = !auth.configured;
@@ -349,6 +350,16 @@
         const list = document.querySelector('#rental-offers');
         list.replaceChildren();
         document.querySelector('#launch-rental').disabled = true;
+        const preferencesResponse = await fetch('/api/v1/settings/rentals', {credentials:'same-origin'});
+        if(!preferencesResponse.ok) throw new Error('Sign in to load rental limits.');
+        const {preferences} = await preferencesResponse.json();
+        if(!rentalPreferences) {
+          document.querySelector('#rental-minutes').value=preferences.max_minutes;
+          document.querySelector('#rental-budget').value=preferences.max_budget_usd;
+        }
+        rentalPreferences=preferences;
+        document.querySelector('#rental-minutes').max=preferences.max_minutes;
+        document.querySelector('#rental-budget').max=preferences.max_budget_usd;
         const provider = document.querySelector('#rental-provider').value;
         setRentalMessage('Checking cloud GPU offers…');
         const profile = document.querySelector('#rental-profile').value;
@@ -357,7 +368,7 @@
         data.offers.forEach((offer, index) => {
           const label = document.createElement('label');
           const radio = document.createElement('input');
-          radio.type = 'radio'; radio.name = 'offer'; radio.value = offer.id; radio.dataset.price = offer.price_per_hour; radio.checked = index === 0;
+          radio.type = 'radio'; radio.name = 'offer'; radio.value = offer.id; radio.dataset.price = offer.price_per_hour; radio.dataset.syncCost = offer.sync_cost || 0; radio.checked = index === 0;
           const info = document.createElement('span');
           // Every worker downloads the whole model profile first; show what that costs on this host.
           const sync = offer.sync_gb === undefined ? '' : (offer.download_cost_per_gb > 0
@@ -414,16 +425,19 @@
         const count = Number(document.querySelector('#rental-count').value);
         const profile = document.querySelector('#rental-profile').value;
         const provider = document.querySelector('#rental-provider').value;
-        const priceCeiling = Math.min(Number(choice.dataset.price) + 0.01, Number('{{ limits.per_gpu }}'));
-        if (!Number.isInteger(minutes) || minutes < 15 || minutes > 180) return rentalMessage.textContent = 'Choose 15–180 minutes.';
+        const priceCeiling = Math.min(Number(choice.dataset.price) + 0.01, Number('{{ limits.per_gpu }}'), rentalPreferences.max_price_per_hour);
+        const budget = Number(document.querySelector('#rental-budget').value);
+        const estimate = (Number(choice.dataset.syncCost) + priceCeiling * minutes / 60) * count;
+        if(!Number.isFinite(budget) || budget <= 0 || budget > rentalPreferences.max_budget_usd || estimate > budget) return setRentalMessage('Estimated GPU time and model downloads exceed the launch budget. Reduce duration/quantity or choose another offer.', true);
+        if (!Number.isInteger(minutes) || minutes < 15 || minutes > rentalPreferences.max_minutes) return rentalMessage.textContent = `Choose 15–${rentalPreferences.max_minutes} minutes.`;
         if (!Number.isInteger(count) || count < 1 || count > 10) return rentalMessage.textContent = 'Choose 1–10 GPUs.';
         if (provider === 'vast' && count !== 1) return setRentalMessage('Vast marketplace offers must be rented one at a time.', true);
-        if (!confirm(`Rent ${count} ${provider} GPU${count === 1 ? '' : 's'} (${choice.value}) for up to ${minutes} minutes with ${profile}? Fleet rate ceiling $${(priceCeiling * count).toFixed(3)}/hr; estimated maximum $${(priceCeiling * count * minutes / 60).toFixed(2)} before provider adjustments. Billing starts immediately and includes setup time.`)) return;
+        if (!confirm(`Rent ${count} ${provider} GPU${count === 1 ? '' : 's'} (${choice.value}) for up to ${minutes} minutes with ${profile}? Fleet rate ceiling $${(priceCeiling * count).toFixed(3)}/hr; estimated maximum $${estimate.toFixed(2)} including model download, before provider adjustments. Launch budget $${budget.toFixed(2)}. Billing starts immediately and includes setup time.`)) return;
         try {
           launchButton.disabled = true;
           launchButton.textContent = 'Starting rental…';
           setRentalMessage(`Submitting ${provider} rental request… Keep this window open.`, false);
-          await cloudRequest('launch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, offer_id:provider === 'runpod' ? choice.value : Number(choice.value), profile, count, max_minutes:minutes, max_price_per_hour:priceCeiling})});
+          await cloudRequest('launch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({provider, offer_id:provider === 'runpod' ? choice.value : Number(choice.value), profile, count, max_minutes:minutes, max_price_per_hour:priceCeiling, max_budget_usd:budget})});
           rentalDialog.close(); location.hash = '#rentals'; location.reload();
         } catch(error) {
           setRentalMessage(error.message, true);

@@ -385,4 +385,14 @@ The main controls are duration, aspect ratio, megapixels, quality and adaptive b
 
 Motion control includes **Character Swap v1.5 LoRA**, off by default. Enabling it adds the pinned public Akatz adapter at strength 1.0 to the Ref2V model chain, while retaining SAM3 tracking and source-audio lock. **Use v1.5 starter profile** applies a short 0.5 MP / 5-second Normal recipe without submitting a job; **Copy profile JSON** copies the settings recipe. This adapter is optional and does not guarantee identity retention on long shots. Its upstream model license applies separately.
 
-The Ref2V cloud profile downloads the pinned adapter for future use; weights are not committed to Git. Fresh controllers can inspect reference audio/video using the packaged FFmpeg binary when system ffprobe is absent. In **Settings → Compute**, a signed-in human on the host PC can create a dedicated SSH key with the confirmation button. The private key stays on that PC, protected for its local user, and existing keys are never overwritten. This does not launch paid capacity.
+The Ref2V cloud profile downloads the pinned adapter for future use; weights are not committed to Git. Fresh controllers can inspect reference audio/video using the packaged FFmpeg binary when system ffprobe is absent. Adding a validated Vast.ai or RunPod key in onboarding automatically prepares the shared worker SSH key. The second provider reuses it. **Settings → Compute → Prepare cloud access** is available for retrying an older or incomplete setup. The private key stays on that PC, protected for its local user, and existing keys are never overwritten. This does not launch paid capacity.
+
+
+Rental defaults live in **Settings → Rentals**: supported GPU class, minimum
+VRAM, maximum duration, hourly price, and total launch budget. Use **Validate**
+to check values without saving, or **Validate & save limits** for future rentals.
+Offer lists and both provider managers enforce these limits; existing rentals
+keep their confirmed settings. Budget estimates include GPU time and model-sync
+charges across the selected quantity. Provider adjustments and storage can add
+charges; installation fleet, hourly-price and lifetime caps remain authoritative.
+Onboarding and Settings share a compact desktop/phone layout.

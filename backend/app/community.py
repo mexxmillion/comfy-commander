@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import shutil
@@ -253,6 +254,17 @@ class CreateCloudSSH(BaseModel):
     confirm: Literal[True]
 
 
+def prepare_cloud_ssh() -> bool:
+    """Called only by a human-confirmed credential/setup action."""
+    from .cloud_ssh import create_cloud_key
+    key = get_settings().cloud_ssh_key_file
+    public = Path(str(key) + '.pub')
+    if key.is_file() and public.is_file():
+        return True
+    create_cloud_key(key)
+    return key.is_file() and public.is_file()
+
+
 @router.post("/api/v1/setup/cloud-ssh")
 def create_cloud_ssh(payload: CreateCloudSSH, request: Request) -> dict:
     require_admin(request, mutation=True)
@@ -291,7 +303,33 @@ async def save_secret(payload: SecretSetup, request: Request) -> dict:
         # of overwriting an existing Windows DPAPI credential managed by ComfyUI.
         path = get_settings().token_file.parent / "openrouter_api_key"
     _write_secret(path, key)
-    return {"ok": True, "service": payload.service, "message": message}
+    ssh_ready = None
+    if payload.service in {"vast", "runpod"}:
+        try:
+            ssh_ready = await asyncio.to_thread(prepare_cloud_ssh)
+        except (ValueError, OSError, subprocess.SubprocessError):
+            ssh_ready = False
+        message += (" Cloud access prepared; the shared worker SSH key is ready." if ssh_ready else
+                    " Provider saved. Cloud access needs attention: check OpenSSH Client and use Prepare cloud access in Compute.")
+    return {"ok": True, "service": payload.service, "message": message, "cloud_ssh_ready": ssh_ready}
+
+
+@router.post("/api/v1/setup/secret/{service}/verify")
+async def verify_cloud_connection(service: Literal["vast", "runpod"], payload: CreateCloudSSH, request: Request) -> dict:
+    """Human retry for connections saved before automatic worker-key setup."""
+    require_admin(request, mutation=True)
+    key = provider_secret(service, _secret_path(service))
+    if not key:
+        raise HTTPException(409, "Add this provider key first")
+    try:
+        message = await asyncio.to_thread(_test_secret, service, key)
+    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+        raise HTTPException(422, "Provider verification failed. Check the saved key in Connections.") from exc
+    try:
+        ready = await asyncio.to_thread(prepare_cloud_ssh)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(409, "Provider verified, but cloud access needs OpenSSH Client or file-permission repair.") from exc
+    return {"ok": True, "cloud_ssh_ready": ready, "message": message + " Cloud access prepared. No GPU rented."}
 
 
 @router.delete("/api/v1/setup/secret/{service}")

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     huggingface_token_file: Path = Field(default_factory=lambda: provider_secret_file("huggingface"))
     community_lora_manifest: Path = Path(__file__).resolve().parents[2] / "state" / "community-loras.json"
     preferences_file: Path = Path(__file__).resolve().parents[2] / "state" / "preferences.json"
+    rental_preferences_file: Path = Path(__file__).resolve().parents[2] / "state" / "rental-preferences.json"
 
     max_active_gpus: int = Field(default=10, ge=1, le=64)
     max_gpu_price_per_hour: float = Field(default=1.70, gt=0)

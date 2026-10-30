@@ -30,6 +30,7 @@ from .providers import runpod
 from .providers.base import OfferSearch
 from .providers.vast import VastProvider
 from .rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS, estimate, vast_estimate
+from .rental_preferences import filter_offers, read_rental_preferences
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "managed-rental.json"
@@ -231,6 +232,7 @@ class Launch(BaseModel):
     max_minutes: int = Field(default=90, ge=15, le=180)
     max_price_per_hour: float = Field(gt=0)
     count: int = Field(default=1, ge=1, le=10)
+    max_budget_usd: float | None = Field(default=None, gt=0, le=10000, allow_inf_nan=False)
 
 
 def _origin_ok(request: Request) -> bool:
@@ -471,6 +473,7 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
     from .profile_import import rental_base
     profile = rental_base(profile)
     settings = get_settings()
+    preferences = read_rental_preferences()
     if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     if provider == "runpod":
@@ -478,9 +481,10 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
             return {"offers": [], "configured": False,
                     "message": "Connect RunPod in Setup first. No Pod is rented when you connect."}
         try:
-            available = runpod.client().offers(settings.max_gpu_price_per_hour)
+            available = runpod.client().offers(preferences.max_price_per_hour)
             for item in available:   # Runpod does not bill data transfer: the model sync is free
                 item.update(estimate(float(item["price_per_hour"]), 0.0, profile))
+            available = filter_offers(available, preferences)
             return {"offers": available, "configured": True,
                     "message": None if available else
                     f"No supported Runpod Secure Cloud GPU is in stock under the ${settings.max_gpu_price_per_hour:.2f}/hr safety cap. Refresh later or choose Vast.ai."}
@@ -489,7 +493,7 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
     from .credential_paths import provider_secret
     key = provider_secret("vast", settings.vast_api_key_file)
     results = VastProvider(key).search_offers(OfferSearch(
-        VAST_GPUS, MIN_CLOUD_VRAM_GB, settings.max_gpu_price_per_hour, 0.98, 150,
+        VAST_GPUS, max(MIN_CLOUD_VRAM_GB, preferences.minimum_vram_gb), preferences.max_price_per_hour, 0.98, 150,
         extra_query=f"inet_down>={VAST_MIN_INET_DOWN} direct_port_count>=1 cuda_max_good>=13"))
     # Datacenter and verified non-datacenter hosts alike, as long as the download is fast enough for the model sync
     available = [offer for offer in results if eligible_offer(
@@ -505,6 +509,7 @@ async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod
                     "datacenter": item.raw.get("datacenter") is True,
                     "location": item.raw.get("geolocation") or "", **vast_estimate(item.raw, profile)} for item in available),
                   key=lambda row: row["first_hour_cost"])
+    rows = filter_offers(rows, preferences)
     return {"offers": rows[:20],
             "message": None if rows else
             f"No Vast offer meets the safety filters (>= {VAST_MIN_INET_DOWN} Mbps download, model download <= ${settings.max_download_cost_per_gb:g}/GB). Refresh later or choose Runpod.",
@@ -522,6 +527,12 @@ async def launch(payload: Launch, request: Request) -> dict:
     if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     settings = get_settings()
+    preferences = read_rental_preferences()
+    if payload.max_minutes > preferences.max_minutes or payload.max_price_per_hour > preferences.max_price_per_hour:
+        raise HTTPException(422, "Requested rental exceeds saved duration or hourly price limits; update Settings first")
+    budget = min(preferences.max_budget_usd, payload.max_budget_usd or preferences.max_budget_usd)
+    if payload.count * payload.max_price_per_hour * payload.max_minutes / 60 > budget:
+        raise HTTPException(422, "Requested GPU time exceeds the total launch budget")
     if payload.max_price_per_hour > settings.max_gpu_price_per_hour:
         raise HTTPException(status_code=422, detail="Price ceiling exceeds the configured GPU limit")
     if payload.provider == "vast" and (not isinstance(payload.offer_id, int) or payload.offer_id <= 0):
@@ -567,6 +578,9 @@ async def launch(payload: Launch, request: Request) -> dict:
                           "provider": payload.provider, "profile": payload.profile,
                           "max_minutes": payload.max_minutes,
                           "max_price_per_hour": payload.max_price_per_hour,
+                          "max_budget_usd": budget / payload.count,
+                          "gpu_class": preferences.gpu_class,
+                          "minimum_vram_gb": preferences.minimum_vram_gb,
                           "requested_at": datetime.now(UTC).isoformat()}
                 if imported_profile:
                     record["imported_profile"] = imported_profile

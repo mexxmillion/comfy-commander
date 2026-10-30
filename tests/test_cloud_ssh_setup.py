@@ -61,3 +61,55 @@ def test_cloud_key_creation_requires_host_origin_admin_and_confirmation(monkeypa
     assert not calls
     assert client.post('/api/v1/setup/cloud-ssh', json={'confirm': True}).status_code == 200
     assert calls == [key] and {'mutation': True} in checks
+
+@pytest.mark.parametrize('first', ['vast', 'runpod'])
+def test_connecting_provider_automatically_prepares_shared_ssh_once(monkeypatch, tmp_path, first):
+    key = tmp_path / 'worker-key'
+    monkeypatch.setattr(community, 'get_settings', lambda: SimpleNamespace(cloud_ssh_key_file=key))
+    monkeypatch.setattr(community, 'require_admin', lambda *a, **kw: None)
+    monkeypatch.setattr(community, '_test_secret', lambda *a: 'Provider verified.')
+    monkeypatch.setattr(community, '_secret_path', lambda service: tmp_path / (service + '-api-key'))
+    created = []
+    def create(path):
+        created.append(path)
+        path.write_text('isolated test key material')
+        Path(str(path) + '.pub').write_text('isolated test public key')
+    monkeypatch.setattr(cloud_ssh, 'create_cloud_key', create)
+    app = FastAPI(); app.include_router(community.router)
+    client = TestClient(app)
+    for provider in [first, 'runpod' if first == 'vast' else 'vast']:
+        result = client.post('/api/v1/setup/secret', json={'service': provider, 'key': 'isolated-provider-test-key'})
+        assert result.status_code == 200 and result.json()['cloud_ssh_ready']
+        assert 'shared worker SSH key is ready' in result.json()['message']
+    assert created == [key]
+
+
+def test_provider_key_is_saved_with_actionable_warning_if_ssh_preparation_fails(monkeypatch, tmp_path):
+    monkeypatch.setattr(community, 'require_admin', lambda *a, **kw: None)
+    monkeypatch.setattr(community, '_test_secret', lambda *a: 'Provider verified.')
+    monkeypatch.setattr(community, '_secret_path', lambda service: tmp_path / 'provider-key')
+    def fail():
+        raise ValueError('OpenSSH unavailable')
+    monkeypatch.setattr(community, 'prepare_cloud_ssh', fail)
+    app = FastAPI(); app.include_router(community.router)
+    result = TestClient(app).post('/api/v1/setup/secret', json={'service': 'vast', 'key': 'isolated-provider-test-key'})
+    assert result.status_code == 200 and result.json()['cloud_ssh_ready'] is False
+    assert (tmp_path / 'provider-key').is_file()
+    assert 'OpenSSH Client' in result.json()['message']
+
+
+def test_existing_provider_verify_requires_confirmation_and_never_returns_key(monkeypatch):
+    calls = []
+    monkeypatch.setattr(community, 'require_admin', lambda *a, **kw: calls.append(kw))
+    monkeypatch.setattr(community, '_secret_path', lambda service: Path('fixture-provider'))
+    monkeypatch.setattr(community, 'provider_secret', lambda *a: 'isolated-provider-test-key')
+    monkeypatch.setattr(community, '_test_secret', lambda *a: 'Provider verified.')
+    monkeypatch.setattr(community, 'prepare_cloud_ssh', lambda: True)
+    app = FastAPI()
+    app.include_router(community.router)
+    client = TestClient(app)
+    assert client.post('/api/v1/setup/secret/vast/verify', json={'confirm':False}).status_code == 422
+    response = client.post('/api/v1/setup/secret/vast/verify', json={'confirm':True})
+    assert response.status_code == 200 and response.json()['cloud_ssh_ready']
+    assert 'isolated-provider-test-key' not in response.text
+    assert calls[-1] == {'mutation':True}

@@ -83,6 +83,9 @@ def launch(record):
                          if item["id"] == record["offer_id"]), None)
         if not selected:
             raise RuntimeError("Selected Secure Cloud GPU is no longer available within the price ceiling")
+        from backend.app.rental_preferences import offer_allowed, record_preferences
+        if not offer_allowed(selected, record_preferences(record)):
+            raise RuntimeError("Selected GPU exceeds confirmed class, VRAM or budget limits")
         existing = provider.list_instances()
         # Fail closed on unknown account costs, including stopped Pods with storage charges.
         rates = [float(item["costPerHr"]) for item in existing]

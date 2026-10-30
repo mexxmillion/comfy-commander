@@ -433,6 +433,12 @@ def launch(record: dict) -> None:
                                        profile=record["profile"],
                                        require_datacenter=not record.get("allow_non_datacenter", False),
                                        min_inet_down=float(record.get("min_inet_down", 2000)))
+        from backend.app.rental_preferences import offer_allowed, record_preferences
+        from backend.app.rental_cost import vast_estimate
+        preferences = record_preferences(record)
+        choices = [offer for offer in choices if offer_allowed(
+            {"gpu": offer.gpu_name, "vram_gb": offer.vram_gb, "price_per_hour": offer.price_per_hour,
+             **vast_estimate(offer.raw, record["profile"])}, preferences)]
         if record.get("exact_offer"):               # operator picked this host (e.g. for its bandwidth): no substitutes
             choices = [offer for offer in choices if offer.id == requested_offer_id]
         if not choices:

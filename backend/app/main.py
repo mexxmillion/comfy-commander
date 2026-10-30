@@ -44,6 +44,7 @@ from .prompt_secret import configured as prompt_secret_configured
 from .providers.base import OfferSearch
 from .providers.vast import VastProvider
 from .recipes import normalize_recipe
+from .rental_preferences import router as rental_preferences_router
 from .rental_ui import (
     TERMINAL as TERMINAL_RENTAL_STATES,
 )
@@ -82,6 +83,7 @@ app.include_router(community_router)
 app.include_router(studio_agent_router)
 app.include_router(profile_import_router)
 app.include_router(preferences_router)
+app.include_router(rental_preferences_router)
 app.add_middleware(GalleryCompression, minimum_size=1000)
 
 
@@ -671,7 +673,7 @@ async def dashboard(request: Request, store: QueueStore = STORE) -> Response:
     rental_history = [item for item in managed_rentals if item not in active_rentals]
     for rental in managed_rentals:
         rental.setdefault("estimated_cost", 0)
-        rental["ssh_command"] =(f'ssh -i "{TRIAL_DIR / "h3-vast-smoke"}" -p {rental["ssh_port"]} '
+        rental["ssh_command"] =(f'ssh -i "{settings.cloud_ssh_key_file}" -p {rental["ssh_port"]} '
                                  f'root@{rental["ssh_host"]}' if rental.get("ssh_host") else None)
     cloud_trials = cloud_trial_history()
     # Lifetime estimate: every managed rental plus the earlier benchmark trials.

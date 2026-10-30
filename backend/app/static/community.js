@@ -17,6 +17,7 @@ const selectedProfiles = name => [...document.querySelectorAll(`input[name="${na
 const wizardPanels = [...document.querySelectorAll('[data-wizard-step]')];
 const railButtons = [...document.querySelectorAll('.wizard-rail [data-step-target]')];
 const settingsMode = document.body.dataset.settingsMode === 'true';
+const settingsSections={defaults:7,compute:1,connections:2,phone:4,profiles:5,models:8,rentals:9,access:0};
 let currentStep = 0;
 let computeMode = localStorage.getItem('commander-compute-mode') || '';
 let diagnostics = {};
@@ -31,6 +32,7 @@ const showStep = index => {
   currentStep = Math.max(0, Math.min(index, wizardPanels.length - 1));
   wizardPanels.forEach((panel, i) => panel.classList.toggle('active', i === currentStep));
   railButtons.forEach((button, i) => { button.classList.toggle('active', Number(button.dataset.stepTarget) === currentStep); button.classList.toggle('complete', !settingsMode && i < currentStep); });
+  if (currentStep === 9) void loadRentalPreferences();
   if (currentStep === 6) renderReadiness();
   if (currentStep === 5) void loadImportedProfiles();
   if (currentStep === 4) void loadPhoneAccess();
@@ -85,7 +87,7 @@ document.querySelector('#manage-models')?.addEventListener('click', () => {
   document.querySelector('#lora-management').hidden = false;
   document.querySelector('#lora-management').scrollIntoView({behavior: 'smooth'});
 });
-showStep(settingsMode && location.hash !== '#access' ? 7 : 0);
+showStep(settingsMode ? (settingsSections[location.hash.slice(1)] ?? 7) : 0);
 
 document.querySelectorAll('.service-card').forEach(card => {
   card.querySelector('form').addEventListener('submit', async event => {
@@ -99,11 +101,13 @@ document.querySelectorAll('.service-card').forEach(card => {
     try {
       const data = await jsonRequest('/api/v1/setup/secret', {method: 'POST', body: JSON.stringify({service: card.dataset.service, key: input.value})});
       input.value = '';
-      status.textContent = `${data.message} ✓`;
+      status.textContent = `${data.message}${data.cloud_ssh_ready===false?'':' ✓'}`;
       card.querySelector('.status').textContent = 'Connected';
       card.querySelector('.status').classList.add('connected');
       card.querySelector('.remove-secret').hidden = false;
+      const verify=card.querySelector('.verify-cloud-connection');if(verify)verify.hidden=false;
       if (card.dataset.service === 'huggingface') await loadLoras();
+      if(['vast','runpod'].includes(card.dataset.service)){await loadCloudSsh();status.classList.toggle('error',data.cloud_ssh_ready===false);}
     } catch (error) {
       status.textContent = error.message;
       status.classList.add('error');
@@ -299,7 +303,7 @@ document.querySelector('#import-open-models').addEventListener('click',()=>{if(s
 async function loadCloudSsh(){
   try {
     const data=await jsonRequest('/api/v1/setup/cloud-ssh');
-    document.querySelector('#cloud-ssh-status').textContent=data.ready?'SSH key pair found. Cloud SSH access is configured.':'SSH key pair missing. Complete this one-time host setup before renting.';
+    document.querySelector('#cloud-ssh-status').textContent=data.ready?'Cloud access ready. Your shared worker SSH key is prepared.':'Connect Vast.ai or RunPod to prepare cloud access automatically.';
     document.querySelector('#cloud-ssh-command').textContent=data.ready?'':data.command;
     document.querySelector('#create-cloud-ssh').hidden=!data.can_create;
   } catch {document.querySelector('#cloud-ssh-status').textContent='Sign in to view SSH setup instructions.';}
@@ -368,9 +372,46 @@ for(const [id,endpoint,credential] of [['change-password-form','password-change'
 }
 
 document.querySelector('#create-cloud-ssh')?.addEventListener('click',async event=>{
-  if(!confirm('Create a dedicated SSH key on this PC? Its private file stays here and is restricted to your local account. Commander uses it to connect to cloud workers. This does not rent a GPU or replace existing keys.'))return;
+  if(!confirm('Prepare cloud access on this computer? Commander creates one private worker SSH key for Vast.ai and RunPod, restricted to this local account. No GPU is rented and existing keys are never replaced.'))return;
   const button=event.currentTarget;button.disabled=true;
   try{await jsonRequest('/api/v1/setup/cloud-ssh',{method:'POST',body:JSON.stringify({confirm:true})});await loadCloudSsh();}
   catch(error){document.querySelector('#cloud-ssh-status').textContent=error.message;}
   finally{button.disabled=false;}
 });
+
+document.querySelectorAll('.verify-cloud-connection').forEach(button=>button.addEventListener('click',async()=>{
+  const card=button.closest('.service-card'),status=card.querySelector('small[role="status"]');
+  button.disabled=true;status.textContent='Validating provider and preparing cloud access…';
+  try {
+    const data=await jsonRequest('/api/v1/setup/secret/'+card.dataset.service+'/verify',{method:'POST',body:JSON.stringify({confirm:true})});
+    status.textContent=data.message;status.classList.remove('error');await loadCloudSsh();
+  }catch(error){status.textContent=error.message;status.classList.add('error');}
+  finally{button.disabled=false;}
+}));
+
+
+async function loadRentalPreferences() {
+  const form=document.querySelector('#rental-preferences-form');
+  if(!form) return;
+  const status=document.querySelector('#rental-preferences-status');
+  try {
+    const {preferences,caps}=await jsonRequest('/api/v1/settings/rentals');
+    for(const [key,value] of Object.entries(preferences)) if(form.elements[key]) form.elements[key].value=value;
+    form.elements.max_minutes.max=caps.max_minutes;
+    form.elements.max_price_per_hour.max=caps.max_price_per_hour;
+    document.querySelector('#rental-hard-caps').textContent=`Installation caps: $${caps.max_price_per_hour}/GPU-hour · ${caps.max_minutes} minutes · ${caps.max_active_gpus} GPUs · $${caps.fleet_hourly_cap}/fleet-hour.`;
+    status.textContent='Saved rental limits loaded.';
+  } catch(error) {status.textContent=error.message;}
+}
+async function submitRentalPreferences(save) {
+  const form=document.querySelector('#rental-preferences-form'),status=document.querySelector('#rental-preferences-status');
+  if(!form.reportValidity()) return;
+  const payload=Object.fromEntries([...new FormData(form)].map(([key,value])=>[key,key==='gpu_class'?value:Number(value)]));
+  try {
+    await jsonRequest('/api/v1/settings/rentals'+(save?'':'/validate'),{method:save?'PUT':'POST',body:JSON.stringify(payload)});
+    status.textContent=save?'Rental limits saved for new rentals.':'Valid. No changes saved.';
+  } catch(error) {status.textContent=error.message;}
+}
+document.querySelector('#rental-preferences-form')?.addEventListener('submit',event=>{event.preventDefault();void submitRentalPreferences(true);});
+document.querySelector('#validate-rental-preferences')?.addEventListener('click',()=>void submitRentalPreferences(false));
+document.querySelector('#reload-rental-preferences')?.addEventListener('click',()=>void loadRentalPreferences());
