@@ -32,6 +32,7 @@ let replacementDefaults = {quality:'normal', preparation:'target',prompt:REPLACE
 
 const DRAFT_KEY = 'tensor-master.generator-draft.v1';
 let draftReady = false, draftEarlyEdit = false, draftQueuedFiles = null, draftDatabase, draftLastSnapshot;
+let canvasDefaults = {...CommanderGenerationDefaults.builtin};
 
 function draftControls() {
   return [...$('#studio-form').querySelectorAll('input,select,textarea')].filter(control =>
@@ -129,7 +130,7 @@ async function restoreDraft() {
       if(saved.name==='job-type'){saved.name='h3-mode';if(saved.value==='auto')saved.value='standard';}
       const control=controls.find(item=>saved.id?item.id===saved.id:item.type==='radio'&&item.name===saved.name&&item.value===saved.value);
       if (!control || control.type!==saved.type) continue;
-      if (control.tagName!=='SELECT'||[...control.options].some(option=>option.value===saved.value)) control.value=saved.value;
+      if (control.tagName!=='SELECT'||[...control.options].some(option=>option.value===saved.value)) control.value=CommanderGenerationDefaults.restoreValue(control.id,control.value,saved.value);
       if (['radio','checkbox'].includes(control.type)) control.checked=Boolean(saved.checked);
       if (saved.nativeSteps!==undefined) control.dataset.nativeSteps=saved.nativeSteps;
       if (saved.turboActive!==undefined) control.dataset.turboActive=saved.turboActive;
@@ -156,7 +157,7 @@ async function restoreDraft() {
     window.creativeMaster?.sync();
     notice.textContent=draft.pendingNames?.length&&!restoredFiles
       ? `Draft restored. Reselect files that could not be saved: ${draft.pendingNames.join(', ')}`
-      : 'Last draft restored · nothing has been submitted';
+      : 'Draft prompt and references restored · current canvas defaults applied · nothing submitted';
     if (draft.pendingNames?.length&&!restoredFiles) return;
   } catch {
     notice.textContent='The saved draft could not be restored. Your current form has been kept.';
@@ -1558,7 +1559,7 @@ function captureH3Recipe(references, seed) {
     aspect: $("#aspect-ratio").value,
     seed,
     enhancePrompt: $("#ai-enhance").checked,
-    aiModel: $("#ai-model").value,
+    aiModel: enhancementModel('h3'),
     jobType: h3JobType(),
     replacementTarget: $('#replacement-target').value.trim(),
     videoPreparation: replacementDefaults.preparation,
@@ -1574,7 +1575,7 @@ function captureQwenRecipe(references, seed) {
   return {
     mode: "qwen", direction: $("#direction").value.trim(), aiPrompt: $("#ai-generated-prompt").value.trim(), negative: $("#qwen-negative").value.trim(), references,
     sourceDirection: $("#direction").value.trim(),
-    enhancePrompt: $("#qwen-enhance").checked, aiModel: $("#qwen-ai-model").value,
+    enhancePrompt: $("#qwen-enhance").checked, aiModel: enhancementModel('qwen'),
     turbo: $("#qwen-turbo").checked, steps: Number($("#qwen-steps").value), cfg: Number($("#qwen-cfg").value), seed,
     megapixels: Number($("#megapixels").value), aspect: $("#aspect-ratio").value,
     referenceResolution: Number($("#qwen-reference-resolution").value), cache: $("#qwen-cache").value,
@@ -1992,7 +1993,7 @@ function enhancementEnabled(mode = state.mode) {
 }
 
 function enhancementModel(mode = state.mode) {
-  return mode === "h3" ? $("#ai-model").value : $("#qwen-ai-model").value;
+  return window.tensorLLMModel || (mode === "h3" ? $("#ai-model").value : $("#qwen-ai-model").value);
 }
 
 // Stands in for the AI prompt while a run's graph is snapshotted before enhancement finishes.
@@ -2048,7 +2049,7 @@ async function generateAiPrompt(references) {
   const seed = Number.isSafeInteger(seedValue) && seedValue >= 0 ? seedValue : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
   setStatus("Enhancing prompt", mode === "h3" ? "Running the H3 prompt writer" : "Writing a Qwen production prompt", 8);
   $("#ai-generated-status").textContent = "Generating from your original prompt…";
-  addLog(`Generating a separate ${mode === "h3" ? "H3" : "Qwen"} AI prompt with ${(mode === "h3" ? $("#ai-model") : $("#qwen-ai-model")).selectedOptions[0].textContent}.`);
+  addLog(`Generating a separate ${mode === "h3" ? "H3" : "Qwen"} AI prompt with ${enhancementModel(mode)}.`);
   const generated = await writeAiPrompt(prepareWriter(mode, references, seed));
   showAiPrompt(mode, original, generated);
   addLog("AI prompt generated separately. Original prompt preserved.", "success");
@@ -2283,7 +2284,6 @@ function setMode(mode, h3Still = null) {
   syncPromptOnly();
   if (mode === "h3") syncTurboStack();
   if (mode === "qwen") {
-    if (changed) { $("#megapixels").value = 1; $("#aspect-ratio").value = "1:1 (Square)"; }
     syncQwenTurbo();
     syncQwenEditCanvas();
   }
@@ -2296,6 +2296,7 @@ function setMode(mode, h3Still = null) {
   syncAiPromptPanel();
   clearError();
   window.creativeMaster?.sync();
+  if(changed && ['h3','qwen'].includes(mode))CommanderGenerationDefaults.apply($,canvasDefaults);
 }
 
 function syncH3OutputMode() {
@@ -2892,6 +2893,7 @@ async function restoreInitialView() {
   await restoreDispatchedJob();
 }
 function applyGenerationDefaults(preferences) {
+  canvasDefaults={aspect_ratio:preferences.aspect_ratio,megapixels:preferences.megapixels,duration:preferences.duration};
   replacementDefaults={quality:preferences.replacement_quality || 'normal',preparation:preferences.replacement_video_preparation || 'target',prompt:preferences.replacement_prompt || REPLACEMENT_PROMPT};
   setH3Type(preferences.h3_type);
   $('#h3-model').value = {'ref2v-int8':'minimax_h3_ref2va_pruned_int8_convrot.safetensors','ref2v-singularity':SINGULARITY_MODEL,'fasth3-omni':OMNI_MODEL}[preferences.h3_model];
@@ -2915,7 +2917,6 @@ function applyGenerationDefaults(preferences) {
 }
 async function loadGenerationDefaults() {
   try {
-    if(new URLSearchParams(location.search).get('defaults')!=='1' && localStorage.getItem(DRAFT_KEY))return;
     const response=await fetch('/api/v1/settings/preferences');
     if(!response.ok)return;
     const preferences=await response.json();
@@ -3132,7 +3133,7 @@ initialize().then(restoreInitialView);
     const review=$('#creative-review').checked;
     ++loadVersion;
     const snapshot={brief,count:Number($('#creative-count').value),direction:$('#creative-direction').value,
-      reference_notes:$('#creative-reference-notes').value,model:$('#creative-model').value,
+      reference_notes:$('#creative-reference-notes').value,model:window.tensorLLMModel||$('#creative-model').value,
       policy:$('#render-target').value==='tensor-master-any'?'any':$('#render-target').value==='tensor-master-cloud'?'standard':'local',parent};
     lock(true);clearError();setStatus('Developing and enhancing','Creating ideas, then enhancing each with the H3 writer',null);$('#creative-library').open=true;message('Developing distinct ideas, then enhancing each prompt with your references… No renders queued yet.');
     try {

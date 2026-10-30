@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .community import COMMUNITY_PROFILES, setup_status
 from .prompt_secret import read_key
+from . import llm
 from .rental_ui import require_admin
 
 router = APIRouter(prefix="/api/v1/agent", tags=["studio-agent"])
@@ -44,10 +45,7 @@ class ChatMessage(BaseModel):
 
 class AgentChat(BaseModel):
     context: Literal["profile_import"]
-    model: Literal[
-        "google/gemini-3.8-flash",
-        "deepseek/deepseek-v4.1-flash-1017",
-    ]
+    model: str = Field(min_length=1, max_length=200)
     messages: list[ChatMessage] = Field(min_length=1, max_length=20)
     base_profile: Literal["ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8"] = "ref2v-int8"
     workflow: dict[str, Any] | None = None
@@ -141,9 +139,7 @@ async def agent_chat(payload: AgentChat, request: Request) -> dict:
         report = inspect_profile(ProfileImport(name="Assistant review", base_profile=payload.base_profile, workflow=payload.workflow))
         if not report["valid"]:
             raise HTTPException(422, "Validate and fix the workflow in Profile import before asking the assistant.")
-    key = read_key()
-    if not key:
-        raise HTTPException(409, "Connect OpenRouter in Setup & Models first")
+    provider = llm.connection(read_key)
     analysis = analyze_workflow(payload.workflow)
     context = {
         "community_profiles": list(COMMUNITY_PROFILES),
@@ -157,17 +153,17 @@ async def agent_chat(payload: AgentChat, request: Request) -> dict:
     try:
         with httpx.Client(timeout=90) as client:
             response = client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": payload.model, "messages": messages, "response_format": RESPONSE_SCHEMA,
-                      "temperature": 0.2, "max_tokens": 1200},
+                provider.url,
+                headers={**provider.headers, "Content-Type": "application/json"},
+                json=provider.body({"model": payload.model, "messages": messages, "response_format": RESPONSE_SCHEMA,
+                      "temperature": 0.2, "max_tokens": 1200}),
             )
         if response.is_error:
-            raise RuntimeError(f"OpenRouter returned HTTP {response.status_code}")
+            raise RuntimeError(f"LLM provider returned HTTP {response.status_code}")
         content = response.json()["choices"][0]["message"]["content"]
         reply = json.loads(content)
     except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError, RuntimeError) as exc:
-        raise HTTPException(502, "The selected OpenRouter model could not complete this request") from exc
+        raise HTTPException(502, "The selected LLM could not complete this request. Check its JSON support, context window and endpoint configuration.") from exc
     return {"message": str(reply.get("message") or "I could not form a response."),
-            "model": payload.model, "workflow_analysis": analysis,
+            "model": provider.settings.model if provider.settings.provider == 'compatible' else payload.model, "workflow_analysis": analysis,
             "action": _proposal(reply, payload.workflow) if reply.get("action") == "open_setup" else None}

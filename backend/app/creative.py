@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .prompt_secret import read_key
+from . import llm
 from .config import get_settings
 from .store import DEFAULT_MIN_VRAM_GB, Base, JobRecipeRow, JobRow, TaskRow, now
 from .creative_prompts import PROMPT_VERSION, generation_mode, system_prompt
@@ -42,11 +43,7 @@ class Brief(BaseModel):
     count: int = Field(default=5, ge=2, le=8)
     direction: str = Field(default="", max_length=6000)
     reference_notes: str = Field(default="", max_length=6000)
-    model: Literal[
-        "google/gemini-3-flash-preview",
-        "google/gemini-2.5-flash-lite",
-        "x-ai/grok-4.3",
-    ] = "google/gemini-3-flash-preview"
+    model: str = Field(default="google/gemini-3-flash-preview", min_length=1, max_length=200)
     recipe: dict
     graph: dict
     policy: Literal["local", "standard", "any"] = "local"
@@ -139,12 +136,7 @@ def _parse_concepts(content, count: int) -> list[dict]:
 
 
 async def _develop_ideas(payload: Brief) -> list[dict]:
-    try:
-        key = read_key()
-    except RuntimeError as exc:
-        raise HTTPException(503, "Saved OpenRouter credential cannot be loaded. Run Restart All AI Services.bat on the host PC.") from exc
-    if not key:
-        raise HTTPException(409, "Creative Engine needs the controller OpenRouter credential")
+    provider = llm.connection(read_key)
     references = payload.recipe.get("references", [])
     counts = {}
     roles = []
@@ -174,12 +166,13 @@ async def _develop_ideas(payload: Brief) -> list[dict]:
                     "items": {"type": "object", "additionalProperties": False, "required": ["title", "prompt"],
                               "properties": {"title": {"type": "string"}, "prompt": {"type": "string"}}}}}}}}}
     last_error = None
+    request_json = provider.body(request_json)
     timeout = httpx.Timeout(150, connect=20)
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(2):
             try:
-                response = await client.post("https://openrouter.ai/api/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}"}, json=request_json)
+                response = await client.post(provider.url,
+                    headers=provider.headers, json=provider.body(request_json))
                 if response.status_code == 400 and attempt == 0 and any(
                         marker in response.text.lower() for marker in ('json_schema', 'response_format', 'structured output')):
                     request_json['response_format'] = {'type': 'json_object'}

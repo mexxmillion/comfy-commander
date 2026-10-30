@@ -6,11 +6,12 @@
   panel.className = 'tm-agent';
   panel.hidden = false;
   panel.innerHTML = `
-    <header><div><strong>H3 Profile assistant</strong><small>Optional OpenRouter · runs only in this import step</small></div></header>
+    <header><div><strong>H3 Profile review</strong><small>Optional configured LLM · runs only in this import step</small></div></header>
     <div class="tm-agent-controls"><select aria-label="Agent model"><option value="deepseek/deepseek-v4.1-flash-1017">DeepSeek V4.1 Flash</option><option value="google/gemini-3.8-flash">Gemini 3.8 Flash</option></select><label>Attach workflow JSON<input type="file" accept="application/json,.json"></label></div>
     <div class="tm-agent-messages" aria-live="polite"><div class="tm-agent-message">Tell me what you want to run, attach a ComfyUI workflow, or ask me to help configure a cloud profile.</div></div>
     <form class="tm-agent-compose"><textarea aria-label="Message" placeholder="e.g. inspect this workflow and prepare it for a cloud worker" required></textarea><button type="submit">Send</button></form>`;
   host.append(panel);
+  window.dispatchEvent(new Event('commander-llm-ui-ready'));
   const messages = panel.querySelector('.tm-agent-messages');
   const textarea = panel.querySelector('textarea');
   const send = panel.querySelector('.tm-agent-compose button');
@@ -83,7 +84,7 @@
       addMessage(data.message, 'assistant', detail);
       addAction(data.action);
     } catch (error) {
-      addMessage(error.message, 'assistant', 'Sign in and connect OpenRouter in Setup & Models if needed.');
+      addMessage(error.message, 'assistant', 'Sign in and configure optional AI in Settings > Connections if needed.');
     } finally {
       send.disabled = false;
       textarea.focus();
