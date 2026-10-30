@@ -522,3 +522,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
 .video-trim-timeline input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;pointer-events:auto;width:22px;height:36px;border:2px solid #f1ff68;border-radius:5px;background:#555b26;cursor:ew-resize}
 .video-trim-timeline input[type=range]::-moz-range-thumb{pointer-events:auto;width:18px;height:32px;border:2px solid #f1ff68;border-radius:5px;background:#555b26;cursor:ew-resize}
 .video-trim-timeline input[type=range]:focus-visible{outline:2px solid #f1ff68;outline-offset:3px}
+/* Reference removal must remain obvious and easy to tap over any thumbnail. */
+#reference-list .reference button.remove-reference{width:auto;min-width:88px;min-height:44px;height:44px;padding:0 10px;border:1px solid #f1a1ac;border-radius:8px;background:#55232b;color:#fff;font-size:13px;font-weight:700;line-height:1;z-index:2}
+#reference-list .reference button.remove-reference:hover{background:#79303c}
+#reference-list .reference button.remove-reference:focus-visible{outline:3px solid #f1ff68;outline-offset:2px}
