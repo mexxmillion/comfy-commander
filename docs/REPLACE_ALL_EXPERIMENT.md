@@ -36,7 +36,7 @@ changed, but sampled output favored the original source performer rather than
 the supplied character and gestures drifted. This demonstrates a scene-change
 capability, not reliable combined identity/motion control. The final UI does
 not expose this prompt-only experiment: it requires image inputs instead.
-The final automatic-instruction UI has not had a separate end-to-end render.
+The later automatic-enhancement UI test is described below.
 
 Creative Engine previously disabled all mode buttons. Frames and Motion control
 now remain selectable and turn Creative Engine off automatically, preserving
@@ -53,6 +53,38 @@ The main prompt stays in place and supplies the Creative brief. Extra controls
 expand below the toggle; saved batches are visible only while Creative Engine
 is enabled. Browser measurements confirmed identical prompt/toggle positions
 with Creative Engine off and on.
+
+## Automatic enhancement and optional direction
+
+Motion control now always calls the configured controller AI writer before
+submitting a render. Person-only uses the replacement system prompt; person plus
+location uses a separate system prompt that binds Picture 1 to identity/outfit,
+Picture 2 to the location and Video 1 only to motion/framing. The controller
+constructs canned direction rather than reading an unrelated hidden prompt.
+Enhancement failure stops submission; there is no silent unenhanced fallback.
+This experimental UI therefore requires a configured AI provider with support
+for the supplied media. Ordinary References rendering can still run without AI.
+
+**Optional prompt** is off by default. Turning it on prefills the appropriate
+instructions for editing; the controller appends that explicit operator direction
+to its canonical motion contract before enhancement. Turning it off uses the
+canonical instructions. The final enhanced prompt is retained in the recipe
+and reaches the reference pack; the worker does not call the AI provider again.
+
+An actual UI run using the operator's character, city location and mocap video
+completed at three seconds/four steps/0.5 MP, with Character Swap enabled at 1.0.
+No generation prompt was typed. The saved recipe confirmed enhancement enabled,
+and the reference-pack direction matched the AI output. Local generation took
+about 86 seconds; the output was 544 × 960, 24 fps, approximately 3.04 seconds,
+with AAC audio and successful full decoding. Sampled frames showed the intended
+woman/outfit, city setting and pointing gesture. This is not proof of exact
+identity, all-frame motion fidelity, soundtrack acceptance or multi-person QC.
+Both enhancement and the identity LoRA were enabled, so this is not a controlled
+comparison attributing quality gains to either one alone.
+
+Rental failures and ended rentals are now shown together in one collapsed
+**Rental history & logs** section. Status labels, diagnostics and uncertain-
+creation warnings are retained; history is not automatically expanded.
 
 The branch also adds a 12 px safe-area-aware inset to the Generate header and
 draft-status text. Computed browser styles confirmed both left/right insets.

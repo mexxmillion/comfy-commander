@@ -947,7 +947,7 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
   const duration = singleFrame ? 5 / 24 : Number($("#duration").value);
   const aspect = $("#aspect-ratio").value;
   const enhancePrompt = motionModeSelected() ? false : options.enhanceOverride ?? (state.runPrompt ? false : (creative ? false : $("#ai-enhance").checked));
-  const promptText = motionModeSelected() ? replacementInstructions() : options.promptOverride ?? state.runPrompt ?? $("#direction").value.trim();
+  const promptText = options.promptOverride ?? state.runPrompt ?? (motionModeSelected() ? replacementInstructions() : $("#direction").value.trim());
   const workflow = {
     "119": { inputs: { vae_name: "minimax_h3_video_vae_int8_convrot.safetensors" }, class_type: "VAELoader" },
     "120": { inputs: { vae_name: "minimax_h3_audio_vae_fp32.safetensors" }, class_type: "VAELoader" },
@@ -1558,10 +1558,12 @@ function captureH3Recipe(references, seed) {
     duration: Number($("#duration").value),
     aspect: $("#aspect-ratio").value,
     seed,
-    enhancePrompt: motionModeSelected()?false:$("#ai-enhance").checked,
+    enhancePrompt: motionModeSelected()?true:$("#ai-enhance").checked,
     aiModel: enhancementModel('h3'),
     jobType: h3JobType(),
     replacementMode: motionModeSelected() ? $('#replacement-mode').value : null,
+    motionPromptEnabled: $('#motion-prompt-enabled').checked,
+    motionPrompt: $('#motion-prompt').value,
     replacementTarget: $('#replacement-target').value.trim(),
     videoPreparation: replacementDefaults.preparation,
     characterSwapEnabled: $('#character-swap-enabled').checked,
@@ -1714,6 +1716,8 @@ function loadRecipe(recipe) {
   const jobType = studioRoot.querySelector(`input[name="h3-mode"][value="${recipe.h3Type === "frames" ? "frames" : recipe.replacementMode || recipe.jobType === "replacement" ? "replacement" : "standard"}"]`);
   if (jobType) jobType.checked = true;
   $('#replacement-mode').value=recipe.replacementMode || 'person';
+  $('#motion-prompt-enabled').checked=recipe.motionPromptEnabled===true;
+  $('#motion-prompt').value=recipe.motionPrompt || '';
   $('#replacement-target').value=recipe.replacementTarget || 'person';
   replacementDefaults.preparation=recipe.videoPreparation || replacementDefaults.preparation;
   $('#character-swap-enabled').checked=recipe.characterSwapEnabled===true;
@@ -1993,7 +1997,7 @@ async function showGallery() {
 }
 
 function enhancementEnabled(mode = state.mode) {
-  if(mode==='h3' && motionModeSelected())return false;
+  if(mode==='h3' && motionModeSelected())return true;
   return mode === "h3" ? $("#ai-enhance").checked : mode === "qwen" ? $("#qwen-enhance").checked : false;
 }
 
@@ -2011,8 +2015,9 @@ function withPrompt(graph, text) {
 
 // Captures everything the writer needs from the form now, so it can run in the background.
 function prepareWriter(mode, references, seed) {
-  if (mode === 'h3') return {mode, payload:{prompt:$('#direction').value.trim(),references,
+  if (mode === 'h3') return {mode, payload:{prompt:motionModeSelected()?replacementInstructions():$('#direction').value.trim(),references,
     frame_mode:state.h3Type === 'frames', job_type:h3JobType(),
+    ...(motionModeSelected()?{motion_mode:$('#replacement-mode').value==='all'?'person_scene':'person',custom_motion_prompt:$('#motion-prompt-enabled').checked,target_description:$('#replacement-target').value.trim()||'person'}:{}),
     aspect_ratio:$('#aspect-ratio').value, megapixels:Number($('#megapixels').value),
     duration:Number($('#duration').value), model:enhancementModel(mode)}};
   return {
@@ -2098,7 +2103,7 @@ async function run(event) {
   if (!direction && (enhancementEnabled() || !$("#ai-generated-prompt").value.trim())) return toast("Enter a user prompt to enhance, or turn enhancement off to reuse the saved AI prompt.");
   const jobMode = state.mode;
   const enhance = enhancementEnabled(jobMode);
-  const promptOnly = enhance && $("#ai-prompt-only").checked;
+  const promptOnly = enhance && !motionModeSelected() && $("#ai-prompt-only").checked;
   const runLabel = `Run ${++state.runCounter}`;
   setSubmitting(true);
   clearError();
@@ -2160,7 +2165,7 @@ async function run(event) {
       addLog(`${runLabel}: AI prompt ready. Original prompt preserved.`, "success");
     }
     const workflow = writer ? withPrompt(graph, finalPrompt) : graph;
-    if (recipe) recipe.aiPrompt = motionModeSelected()?direction:enhance ? finalPrompt : existing;
+    if (recipe) recipe.aiPrompt = enhance ? finalPrompt : existing;
 
     if (["h3", "qwen", "faces", "krea", "ltx", "voice"].includes(jobMode)) {
       const forceLocal = (localQwenLoras || localFaceModel) && target === "tensor-master-any";
@@ -2247,6 +2252,8 @@ function setMode(mode, h3Still = null) {
   $('#prompt-tools').append($('#ai-generated-panel'));
   $('#h3-advanced>.compact-grid').append($('#h3-encoding').closest('.field'));
   $('#h3-advanced>.compact-grid').append($('#character-swap-strength-field'));
+  $('#motion-prompt-panel .section-label').append($('#motion-prompt-enabled').closest('label'));
+  $('#motion-prompt-panel').append($('#motion-prompt-field'),$('#motion-prompt-note'));
   for(const id of ['qwen-negative','qwen-steps','qwen-cfg','qwen-seed','qwen-reference-resolution','qwen-cache','qwen-edit-canvas']) {
     const field=$('#'+id)?.closest('.field');if(field)$('#image-advanced-fields').append(field);
   }
@@ -2710,14 +2717,16 @@ for (const id of ["duration", "aspect-ratio", "megapixels", "ai-model", "qwen-ai
   $(`#${id}`).addEventListener("change", markAiPromptStale);
 }
 function motionModeSelected() { return state.mode==='h3' && state.h3Type!=='frames' && studioRoot.querySelector('input[name="h3-mode"]:checked')?.value==='replacement'; }
-function replacementInstructions(){return $('#replacement-mode').value==='all'?CommanderReplacementModes.prompts.all:replacementDefaults.prompt;}
+function replacementInstructions(){return $('#motion-prompt-enabled').checked && $('#motion-prompt').value.trim()?$('#motion-prompt').value.trim():$('#replacement-mode').value==='all'?CommanderReplacementModes.prompts.all:replacementDefaults.prompt;}
 function h3JobType() {
   return motionModeSelected()?CommanderReplacementModes.jobType($('#replacement-mode').value):'standard';
 }
 function renderMotionSlots() {
   const references=[...(state.savedReferences||[]),...(state.files||[]).map(file=>({kind:file.type.startsWith('video/')?'video':isAudioFile(file)?'audio':'image',name:file.name}))];
   const images=references.filter(ref=>ref.kind==='image');
+  const previousDefault=$('#replacement-mode').value==='all'?CommanderReplacementModes.prompts.all:replacementDefaults.prompt;
   $('#replacement-mode').value=CommanderReplacementModes.mode(references);
+  if($('#motion-prompt').value===previousDefault)$('#motion-prompt').value=$('#replacement-mode').value==='all'?CommanderReplacementModes.prompts.all:replacementDefaults.prompt;
   $('#motion-location-label').textContent=images[1]?.name||images[1]?.file?.split('/').pop()||'Keep original location';
   for(const kind of ['video','image']) {
     const matches=references.filter(ref=>ref.kind===kind);
@@ -2744,7 +2753,10 @@ function syncReplacementMode(enableAudioDefault=false) {
   const replacement=state.mode==='h3' && state.h3Type!=='frames' && motionModeSelected();
   const scope=$('#replacement-mode').value,person=scope==='person';
   studioRoot.classList.toggle('motion-input-only',replacement);
+  $('#motion-prompt-panel').hidden=!replacement;
   $('#direction').required=!replacement;
+  $('#motion-prompt-field').hidden=!$('#motion-prompt-enabled').checked;
+  $('#motion-prompt').disabled=!replacement || !$('#motion-prompt-enabled').checked;
   $('#replacement-settings').hidden=!replacement;
   $('#replacement-target').required=replacement && person;
   $('#replacement-target').closest('label').hidden=!person;
@@ -2776,6 +2788,11 @@ async function characterSwapProfile() {
   if(!response.ok)throw new Error('Could not load the Character Swap profile.');
   return response.json();
 }
+$('#motion-prompt-enabled').addEventListener('change',()=>{
+  if($('#motion-prompt-enabled').checked && (!$('#motion-prompt').value.trim() || [replacementDefaults.prompt,CommanderReplacementModes.prompts.all].includes($('#motion-prompt').value)))$('#motion-prompt').value=$('#replacement-mode').value==='all'?CommanderReplacementModes.prompts.all:replacementDefaults.prompt;
+  syncReplacementMode();scheduleDraftSave();
+});
+$('#motion-prompt').addEventListener('input',scheduleDraftSave);
 $('#character-swap-enabled').addEventListener('change',()=>{syncReplacementMode();scheduleDraftSave();});
 $('#character-swap-strength').addEventListener('input',scheduleDraftSave);
 $('#use-character-swap-profile').onclick=async()=>{

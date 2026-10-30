@@ -495,7 +495,8 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
 @scope (#generator) { :scope{min-height:0} }
 @scope (#generator) {
  .topbar,#draft-status{padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right))}
- :scope.motion-input-only .hero-panel{display:none}
+ :scope.motion-input-only .hero-panel{display:block}
+ :scope.motion-input-only #single-prompt,:scope.motion-input-only #prompt-tools{display:none}
 }
 @scope (#generator) {
  @media(min-width:1000px){
@@ -512,4 +513,6 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
  .prompt-tools .ai-model-settings{margin-top:6px}
  #creative-controls{margin-top:10px}
  #creative-library[hidden]{display:none!important}
+ #motion-prompt-panel .section-label .switch-row{margin:0;gap:8px;min-height:28px}
+ #motion-prompt-panel .section-label .switch-row small{display:none}
 }
