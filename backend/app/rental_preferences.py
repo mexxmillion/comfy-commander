@@ -11,12 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from .config import get_settings
 
 router = APIRouter()
+GPUClass = Literal["any", "consumer", "professional", "4090", "5080", "5090", "6000"]
 
 
 class RentalPreferences(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    gpu_class: Literal["any", "consumer", "professional", "4090", "5090", "6000"] = "any"
-    minimum_vram_gb: int = Field(default=24, ge=16, le=192)
+    gpu_class: GPUClass = "5090"
+    minimum_vram_gb: int = Field(default=16, ge=16, le=192)
     max_minutes: int = Field(default=90, ge=15, le=180)
     max_price_per_hour: float = Field(default=1.7, ge=0.01, le=100)
     max_budget_usd: float = Field(default=5, ge=0.01, le=10000)
@@ -74,10 +75,10 @@ def offer_allowed(offer: dict, preferences: RentalPreferences) -> bool:
     matches = (
         gpu == "any"
         or gpu == "consumer"
-        and any(item in name for item in ("4090", "5090"))
+        and any(item in name for item in ("4090", "5080", "5090"))
         or gpu == "professional"
         and "6000" in name
-        or gpu in {"4090", "5090", "6000"}
+        or gpu in {"4090", "5080", "5090", "6000"}
         and gpu in name
     )
     price = float(offer.get("price_per_hour") or 0)
@@ -88,9 +89,27 @@ def offer_allowed(offer: dict, preferences: RentalPreferences) -> bool:
         and all(math.isfinite(value) for value in (price, sync, vram))
         and 0 < price <= preferences.max_price_per_hour
         and sync >= 0
-        and vram >= preferences.minimum_vram_gb
+        and nominal_vram_gb(vram) >= preferences.minimum_vram_gb
         and sync + price * preferences.max_minutes / 60 <= preferences.max_budget_usd + 1e-9
     )
+
+
+def nominal_vram_gb(reported: float) -> float:
+    """Account for <=128 MiB reserved by the driver, consistently in picker/manager.
+
+    A 24 GB 4090 commonly reports 23.988 GiB; a 16 GB 5080 reports about
+    15.92 GiB. Never round a substantially smaller GPU up to the next class.
+    """
+    if math.isfinite(reported) and 0 <= round(reported) - reported <= 0.125:
+        return float(round(reported))
+    return reported
+
+
+def selected_gpu_preferences(preferences, gpu_class):
+    if gpu_class is None:
+        return preferences
+    return preferences.model_copy(update={"gpu_class": gpu_class,
+        "minimum_vram_gb": 16 if gpu_class == "5080" else preferences.minimum_vram_gb})
 
 
 def filter_offers(offers: list[dict], preferences: RentalPreferences) -> list[dict]:

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -21,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from runtime.h3.managed_worker import eligible_offer, preflight
+from runtime.h3.managed_worker import eligible_offer, preflight, validate_startup_scripts
 
 from .auth import MIN_PASSWORD_LENGTH, ensure_token, password_record, session_signature
 from .config import get_settings
@@ -30,7 +31,7 @@ from .providers import runpod
 from .providers.base import OfferSearch
 from .providers.vast import VastProvider
 from .rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS, estimate, vast_estimate
-from .rental_preferences import filter_offers, read_rental_preferences
+from .rental_preferences import GPUClass, filter_offers, read_rental_preferences, selected_gpu_preferences
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "managed-rental.json"
@@ -233,6 +234,8 @@ class Launch(BaseModel):
     max_price_per_hour: float = Field(gt=0)
     count: int = Field(default=1, ge=1, le=10)
     max_budget_usd: float | None = Field(default=None, gt=0, le=10000, allow_inf_nan=False)
+    gpu_class: GPUClass | None = None
+    gpu_name: str | None = Field(default=None, max_length=100)
 
 
 def _origin_ok(request: Request) -> bool:
@@ -314,6 +317,23 @@ TERMINAL = {"destroyed", "failed", "creation_unknown"}
 def _decorate(record: dict, path: Path) -> dict:
     record = dict(record)
     record.setdefault("rental_id", path.stem)
+    record["failure"] = bool(record.get("error") or record.get("status") in {"failed", "destroy_failed", "creation_unknown"}
+                             or "failed" in str(record.get("destroy_reason", "")).lower())
+    record["failure_message"] = record.get("error") or record.get("destroy_reason") or ""
+    record["failure_message"] = redact_log(record["failure_message"])
+    if record.get("destroyed_at") and record.get("destroy_reason"):
+        record["cleanup_explanation"] = "Commander terminated this instance: " + redact_log(str(record["destroy_reason"]))
+    else:
+        record["cleanup_explanation"] = ""
+    lifecycle = path.with_suffix(".log")
+    if record["failure"] and lifecycle.is_file():
+        tail = lifecycle.read_text(encoding="utf-8", errors="replace")[-8000:]
+        if "pipefail" in tail and "invalid option name" in tail:
+            record["failure_message"] = "Commander deployment bug: the startup script had Windows line endings; Linux rejected pipefail."
+            record["failed_stage"] = "worker startup (model download completed)" if record.get("models_ready_at") else "startup"
+    if record.get("error"):
+        record["error"] = redact_log(record["error"])
+    record["cleanup_status"] = ("Instance terminated" if record.get("destroyed_at") else "No GPU allocated" if not record.get("instance_id") and record.get("status") != "creation_unknown" else "Check provider; instance may still be billable")
     try:
         if "rented_at" in record:
             from datetime import UTC, datetime
@@ -368,6 +388,22 @@ def current() -> dict | None:
 def active_rentals() -> list[dict]:
     return [item for item in all_current()
             if item.get("status") not in TERMINAL and not item.get("destroyed_at")]
+
+
+def worker_health(record: dict, workers: list[dict]) -> dict:
+    record = dict(record, worker_warning="")
+    if record.get("destroyed_at") or record.get("status") in TERMINAL or not record.get("instance_id"):
+        return record
+    worker_id = record.get("worker_id") or f"{record.get('provider', 'vast')}-{record['instance_id']}"
+    worker = next((item for item in workers if item["id"] == worker_id), None)
+    if worker and worker.get("runtime") != f"pocket-h3-cloud-{record['profile']}":
+        record["worker_warning"] = f"Worker {worker_id} registered an incompatible runtime. Expected pocket-h3-cloud-{record['profile']}. It cannot serve this profile."
+    elif worker and worker.get("status") in {"offline", "unhealthy"}:
+        age = round(float(worker.get("heartbeat_age_seconds") or 0))
+        record["worker_warning"] = f"Worker {worker_id} is {worker['status']} (last heartbeat {age}s ago). Check Worker and ComfyUI logs; the instance may still be billable."
+    elif worker is None and (record.get("worker_ready_at") or record.get("status") == "ready"):
+        record["worker_warning"] = f"Worker {worker_id} disappeared after becoming ready. Check logs and provider state; the instance may still be billable."
+    return record
 
 
 def _state_path(rental_id: str) -> Path:
@@ -458,22 +494,51 @@ async def logs(kind: str, request: Request, rental_id: str | None = None) -> Pla
     if not path.is_file():
         raise HTTPException(status_code=404)
     content = path.read_text(encoding="utf-8", errors="replace")[-250_000:]
+    return PlainTextResponse(redact_log(content))
+
+
+def redact_log(content: str) -> str:
+    from .credential_paths import provider_secret
+    for provider in ("vast", "runpod", "huggingface"):
+        secret = provider_secret(provider)
+        if secret:
+            content = content.replace(secret, "[REDACTED]")
     for secret_path in (get_settings().vast_api_key_file, get_settings().huggingface_token_file,
                         get_settings().runpod_api_key_file, get_settings().token_file):
         if secret_path.is_file():
             secret = secret_path.read_text(encoding="utf-8").strip()
             if secret:
                 content = content.replace(secret, "[REDACTED]")
-    return PlainTextResponse(content)
+    content = re.sub(r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----", "[REDACTED PRIVATE KEY]", content, flags=re.S)
+    content = re.sub(r"\b(?:hf_|sk-|ghp_|github_pat_)[A-Za-z0-9_-]{16,}", "[REDACTED]", content)
+    content = re.sub(r"(?i)(Bearer\s+)[A-Za-z0-9._~-]+", r"\1[REDACTED]", content)
+    return re.sub(r"(https?://[^\s?]+)\?[^\s]+", r"\1?[REDACTED QUERY]", content)
+
+
+@router.get("/diagnostics/{rental_id}")
+async def diagnostics(rental_id: str, request: Request) -> dict:
+    _admin(request)
+    path = _state_path(rental_id)
+    record = _decorate(json.loads(path.read_text(encoding="utf-8")), path)
+    result = {key: record.get(key) for key in ("rental_id", "provider", "profile", "status", "instance_id", "failure_message", "failed_stage", "cleanup_status", "requested_at", "failed_at", "destroyed_at")}
+    logs = []
+    for label, suffix in (("Lifecycle", ""), ("Runtime setup", "-prepare"), ("Models", "-models"), ("Worker", "-worker"), ("ComfyUI", "-comfy")):
+        logfile = path.with_name(path.stem + suffix + ".log")
+        if logfile.is_file():
+            lines = logfile.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]
+            logs.append(f"=== {label} ===\n" + "\n".join(lines)[-30000:])
+    result["log"] = redact_log("\n\n".join(logs)) or "No log output yet. The rental record is retained."
+    result["failure_message"] = redact_log(str(result.get("failure_message") or ""))
+    return result
 
 
 @router.get("/offers")
-async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod", profile: str = "ref2v-int8") -> dict:
+async def offers(request: Request, provider: Literal["vast", "runpod"] = "runpod", profile: str = "ref2v-int8", gpu_class: GPUClass | None = None) -> dict:
     _admin(request)
     from .profile_import import rental_base
     profile = rental_base(profile)
     settings = get_settings()
-    preferences = read_rental_preferences()
+    preferences = selected_gpu_preferences(read_rental_preferences(), gpu_class)
     if profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     if provider == "runpod":
@@ -527,7 +592,7 @@ async def launch(payload: Launch, request: Request) -> dict:
     if payload.profile not in {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}:
         raise HTTPException(status_code=422, detail="Unsupported Community Edition runtime profile")
     settings = get_settings()
-    preferences = read_rental_preferences()
+    preferences = selected_gpu_preferences(read_rental_preferences(), payload.gpu_class)
     if payload.max_minutes > preferences.max_minutes or payload.max_price_per_hour > preferences.max_price_per_hour:
         raise HTTPException(422, "Requested rental exceeds saved duration or hourly price limits; update Settings first")
     budget = min(preferences.max_budget_usd, payload.max_budget_usd or preferences.max_budget_usd)
@@ -546,6 +611,7 @@ async def launch(payload: Launch, request: Request) -> dict:
     def prepare_runtime() -> None:
         with BUILD_LOCK:
             build_bundle()
+            validate_startup_scripts()
             if payload.provider == "runpod":
                 from runtime.h3.runpod_worker import preflight as runpod_preflight
                 runpod_preflight()
@@ -582,6 +648,8 @@ async def launch(payload: Launch, request: Request) -> dict:
                           "gpu_class": preferences.gpu_class,
                           "minimum_vram_gb": preferences.minimum_vram_gb,
                           "requested_at": datetime.now(UTC).isoformat()}
+                if payload.gpu_name:
+                    record["gpu_name"] = payload.gpu_name
                 if imported_profile:
                     record["imported_profile"] = imported_profile
                 if payload.provider == "vast":     # same host rules as the offer list

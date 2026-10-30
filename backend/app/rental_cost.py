@@ -13,9 +13,9 @@ from pathlib import Path
 from .config import get_settings
 
 # Cloud GPUs Tensor Master rents for H3. 24 GB (RTX 4090) runs the 768x1344 Eros graph like the local 3090 does.
-VAST_GPUS = ("RTX_5090", "RTX_4090", "RTX_6000Ada")
-RUNPOD_GPU_NAMES = ("5090", "4090", "RTX PRO 6000", "RTX 6000 Ada")
-MIN_CLOUD_VRAM_GB = 24
+VAST_GPUS = ("RTX_5090", "RTX_5080", "RTX_4090", "RTX_6000Ada")
+RUNPOD_GPU_NAMES = ("5090", "5080", "4090", "RTX PRO 6000", "RTX 6000 Ada")
+MIN_CLOUD_VRAM_GB = 16
 
 LOCK = Path(__file__).resolve().parents[2] / "runtime" / "h3" / "models.lock.json"
 

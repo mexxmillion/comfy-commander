@@ -6,9 +6,11 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -216,6 +218,22 @@ def validate_bundle_manifest(bundle: Path | None = None, manifest_path: Path | N
         raise RuntimeError('Cloud runtime bundle community LoRAs are stale; rebuild with build_local.ps1 -BundleOnly before renting')
 
 
+def validate_startup_scripts(runtime: Path | None = None) -> None:
+    """Parse the exact normalized Linux scripts before allocating paid capacity."""
+    runtime = runtime or ROOT / "runtime/h3"
+    git = shutil.which("git")
+    git_bash = Path(git).resolve().parents[1] / "bin/bash.exe" if git else None
+    bash = str(git_bash) if git_bash and git_bash.is_file() else (shutil.which("bash") if os.name != "nt" else None)
+    if not bash:
+        raise RuntimeError("Linux startup validation requires Bash (included with Git for Windows). No GPU was allocated.")
+    for name in ("remote_prepare.sh", "remote_sync.sh", "remote_start.sh"):
+        payload = normalized_script(runtime / name)
+        result = subprocess.run([bash, "-n"], input=payload, capture_output=True, timeout=15,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False)
+        if result.returncode:
+            raise RuntimeError(f"Linux startup syntax validation failed for {name}; no GPU was allocated")
+
+
 def preflight() -> None:
     configured = settings()
     from backend.app.credential_paths import provider_secret
@@ -263,10 +281,34 @@ def run_ssh(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
                                 stderr=subprocess.STDOUT, timeout=timeout,
                                 creationflags=flags, check=False)
     if result.returncode:
+        tail = logfile.read_text(encoding="utf-8", errors="replace")[-4000:]
+        if "pipefail" in tail and "invalid option name" in tail:
+            raise RuntimeError("Commander startup script has Windows line endings; Linux rejected pipefail. "
+                               f"Deployment bug; see {logfile.name}")
         raise RuntimeError(f"Remote {command.split()[0]} failed; see {logfile.name}")
 
 
 def transfer(record: dict, local: Path, remote_name: str) -> None:
+    # Editors on Windows can rewrite a shell script despite Git's eol attribute.
+    # Normalize the transmitted copy; never modify the checkout or secret files.
+    if remote_name.endswith(".sh"):
+        payload = normalized_script(local)
+        with tempfile.TemporaryDirectory(prefix="commander-script-") as directory:
+            normalized = Path(directory) / local.name
+            normalized.write_bytes(payload)
+            _transfer_file(record, normalized, remote_name)
+        return
+    _transfer_file(record, local, remote_name)
+
+
+def normalized_script(path: Path) -> bytes:
+    payload = path.read_bytes().removeprefix(b"\xef\xbb\xbf").replace(b"\r\n", b"\n")
+    if b"\r" in payload or b"\x00" in payload or not payload.startswith(b"#!/usr/bin/env bash\n"):
+        raise RuntimeError(f"Invalid Linux startup script: {path.name}; no GPU was allocated")
+    return payload
+
+
+def _transfer_file(record: dict, local: Path, remote_name: str) -> None:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     args = ["scp", "-i", str(SSH_KEY), "-P", str(record["ssh_port"]),
             "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
@@ -276,6 +318,12 @@ def transfer(record: dict, local: Path, remote_name: str) -> None:
                                 timeout=300, creationflags=flags, check=False)
     if result.returncode:
         raise RuntimeError(f"Transfer of {remote_name} failed")
+
+
+def worker_ready(worker: dict, worker_id: str, profile: str) -> bool:
+    return (worker.get("id") == worker_id
+            and worker.get("runtime") == f"pocket-h3-cloud-{profile}"
+            and worker.get("status") in {"idle", "busy", "ready"})
 
 
 def transfer_secret(record: dict, value: str, remote_name: str) -> None:
@@ -427,8 +475,7 @@ def launch(record: dict) -> None:
         candidates = VastProvider(vast_api_key()).search_offers(
             OfferSearch(VAST_GPUS, MIN_CLOUD_VRAM_GB, maximum, 0.98, 150,
                         # Vast ignores id= filters; narrow by the picking filters instead so the picked host is on the page
-                        extra_query=(f"inet_down>={float(record.get('min_inet_down', 2000)):g} direct_port_count>=1 cuda_max_good>=13"
-                                     if record.get("exact_offer") else "")))
+                        extra_query=f"inet_down>={float(record.get('min_inet_down', 2000)):g} direct_port_count>=1 cuda_max_good>=13"))
         requested_offer_id = int(record["offer_id"])
         # If the picked listing vanished, only substitute the same GPU model (never a 4090 for a 5090).
         picked = next((offer for offer in candidates if offer.id == requested_offer_id), None)
@@ -443,14 +490,15 @@ def launch(record: dict) -> None:
         from backend.app.rental_cost import vast_estimate
         from backend.app.rental_preferences import offer_allowed, record_preferences
         preferences = record_preferences(record)
+        eligible_count = len(choices)
         choices = [offer for offer in choices if offer_allowed(
             {"gpu": offer.gpu_name, "vram_gb": offer.vram_gb, "price_per_hour": offer.price_per_hour,
              **vast_estimate(offer.raw, record["profile"])}, preferences)]
         if record.get("exact_offer"):               # operator picked this host (e.g. for its bandwidth): no substitutes
             choices = [offer for offer in choices if offer.id == requested_offer_id]
         if not choices:
-            raise RuntimeError("No equivalent verified datacenter offer is still available "
-                               f"(download must cost <= ${settings.max_download_cost_per_gb:g}/GB)")
+            log(f"Offer recheck: {len(candidates)} candidates; {eligible_count} meet host safeguards; 0 meet confirmed GPU/VRAM/budget filters. GPU={preferences.gpu_class}, minimum VRAM={preferences.minimum_vram_gb} GB, maximum GPU rate=${maximum:g}/hr, budget=${preferences.max_budget_usd:g}, lifetime={preferences.max_minutes} min. Selected listing present={picked is not None}.")
+            raise RuntimeError("No equivalent compatible offer remains under the confirmed GPU, VRAM, hourly price and total budget filters. Refresh offers or review Settings > Rentals; no GPU was allocated. See the rental diagnostics for filter details.")
         check_credit(choices[0].price_per_hour, record["profile"])
         active = vast().show_instances() or []
         total_rate = sum(float(item.get("dph_total") or 0) for item in active)
@@ -550,7 +598,7 @@ def launch(record: dict) -> None:
         from backend.app.store import QueueStore
         queue = QueueStore(settings.database_url)
         for _ in range(60):
-            if any(item["id"] == worker_id and item["status"] != "offline"
+            if any(worker_ready(item, worker_id, record["profile"])
                    for item in queue.snapshot()["workers"]):
                 update(status="ready", worker_ready_at=now().isoformat())
                 break
@@ -595,10 +643,21 @@ def launch(record: dict) -> None:
             destroy_instance(read_state(), "Maximum lifetime reached")
     except Exception as exc:
         log(f"Worker setup failed: {type(exc).__name__}: {exc}")
+        try:
+            current = read_state()
+        except (OSError, ValueError):
+            current = record
+        if not current.get("destroyed_at"):
+            update(error=str(exc)[:1500], failed_stage=current.get("status", "startup"), failed_at=now().isoformat())
         if instance_created:
             try:
                 current = read_state()
                 if current.get("instance_id"):
+                    if current.get("ssh_host"):
+                        try:
+                            capture_remote_logs(current)
+                        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                            pass
                     stage = "Failed after ready" if current.get("worker_ready_at") else "Setup failed"
                     destroy_instance(current, f"{stage}: {type(exc).__name__}: {str(exc)[:160]}")
                 else:

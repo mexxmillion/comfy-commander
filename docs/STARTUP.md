@@ -82,3 +82,25 @@ selected job's settings. Change shared defaults deliberately in Settings → Def
 For a phone, keep the PC awake and Commander/Tailscale running. Open the complete
 private HTTPS URL copied from Settings → Phone access, including its port.
 [Phone troubleshooting](PHONE_ACCESS.md).
+
+
+### Rental startup failures
+
+Dispatcher opens the complete queue; the compact row below it provides Workers,
+Rentals, Monitor, Activity and Benchmarks. Rentals retains failed attempts even
+when automatic cleanup has terminated the instance. Use **Diagnostics & logs**
+for lifecycle, setup, model download, worker and ComfyUI output. Logs are redacted;
+review them before sharing. A failed startup is not a successful worker connection.
+Worker runtime mismatches, lost heartbeats and disappearance are shown prominently.
+
+The rental picker defaults to RTX 5090 and also offers RTX 5080 (16 GB).
+Budget, hourly price and lifetime caps still apply. Model downloads finishing does
+not mean startup has completed. Windows shell scripts are normalized to Linux line
+endings during upload so local editor settings cannot break cloud startup.
+
+Before allocation Commander parses the normalized startup scripts with Bash
+(included in Git for Windows). Linux setup checks CUDA before downloading model
+weights. Startup waits for ComfyUI's loopback API to report a CUDA device before
+starting the worker, and the controller verifies the expected profile runtime.
+Setup failures retain their stage, error and logs; Commander explicitly reports
+when its cleanup terminated the instance. Price and lifetime safeguards remain active.
