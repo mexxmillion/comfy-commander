@@ -79,10 +79,11 @@ def _reference_nodes(graph: dict) -> tuple[str, str, list]:
         raise HTTPException(422, "Replacement requires one final H3 video output")
     try:
         refs = json.loads(graph[packs[0]]["inputs"]["references_json"])["references"]
-        if not any(ref.get("kind") == "video" for ref in refs) or not any(ref.get("kind") == "image" for ref in refs):
+        if (len(refs) != 2 or sum(ref.get("kind") == "video" for ref in refs) != 1
+                or sum(ref.get("kind") == "image" for ref in refs) != 1):
             raise ValueError()
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
-        raise HTTPException(422, "Replacement requires at least one source video and one replacement image") from exc
+        raise HTTPException(422, "Replacement requires exactly one source video and one replacement image") from exc
     return packs[0], h3[0], refs
 
 

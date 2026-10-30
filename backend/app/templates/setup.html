@@ -3,8 +3,8 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ 'Settings' if settings_mode else 'Welcome' }} · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=password-settings-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=password-settings-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
+  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=h3-three-modes-ai-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
+  <script defer src="/static/community.js?v=h3-three-modes-ai-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
 </head><body data-settings-mode="{{ 'true' if settings_mode else 'false' }}" data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
   <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p>{% if settings_mode %}<h1>Settings</h1><p>Manage your studio whenever you need.</p>{% else %}<h1>Your ComfyUI.<br><em>Ready to command.</em></h1>{% endif %}</div><a href="/">Back to Generate →</a></header>
   {% if settings_mode %}
@@ -99,13 +99,13 @@
     <div class="section-title"><div><h2>Generation defaults</h2><p>Saved on this server for desktop and phone. Existing drafts and job settings are preserved.</p></div></div>
     <form id="preferences-form" class="management-card">
       <div class="preferences-grid">
-        <label>H3 mode<select name="h3_type"><option value="reference">Reference video</option><option value="frames">First / last frame · FLF2V</option></select></label>
-        <label>Reference model<select name="h3_model"><option value="ref2v-int8">Ref2V · Community</option><option value="fasth3-omni">FastH3 Omni</option><option value="ref2v-singularity">Singularity Ref2VA</option></select></label>
+        <p>H3 Video uses text and optional references. Choose Replacement in Generate for one image and one video.</p>
+        <label>Quality preset<select name="quality_preset"><option value="preview">Preview · 4-step Turbo</option><option value="normal">Normal · 8-step Turbo</option><option value="hq">HQ · 20 steps, no Turbo</option></select></label>
         <label>Format<select name="aspect_ratio">{% for ratio in ['9:16','16:9','1:1','2:3','3:4','3:2','4:3'] %}<option>{{ ratio }}</option>{% endfor %}</select></label>
         <label>Resolution · megapixels<input name="megapixels" type="number" min="0.1" max="16" step="any" required></label>
         <label>Length · seconds<input name="duration" type="number" min="0.25" max="60" step="0.25" required></label>
         <label>Render target<select name="render_target"><option value="any">Any online worker · local + cloud</option><option value="local">Local worker pool</option><option value="cloud">Cloud worker pool · existing worker</option></select></label>
-        <label>Acceleration preset<select name="turbo_steps"><option value="4">Fast · 4-step LoRA</option><option value="8">Quality · 8-step LoRA</option></select></label>
+        <label>Bitrate / encoding<select name="video_encoding"><option value="standard">Standard · smaller files</option><option value="high">High · more detail</option></select></label>
         <label>Sparse attention<select name="sparse_attention"><option value="auto">Model default · Ref2V off / Omni VSA</option><option value="off">Off</option><option>SLA</option><option>VSA</option><option>SOL</option></select></label>
         <label class="check"><input name="ai_enhance" type="checkbox">AI enhance prompt</label>
         <label class="check"><input name="audio_lock" type="checkbox">Audio lock / lip-sync</label>

@@ -65,3 +65,11 @@ def test_settings_and_onboarding_share_management_without_wizard_in_settings():
     assert 'aria-label="Setup progress"' not in settings
     for element in ['preferences-form', 'phone-access-url', 'lora-upload-form', 'import-profile-file', 'cloud-ssh-setup']:
         assert f'id="{element}"' in settings
+
+
+def test_quality_and_encoding_defaults_survive_reload(client, monkeypatch):
+    monkeypatch.setattr(preferences, 'require_admin', lambda *a, **kw: None)
+    assert client.put('/api/v1/settings/preferences', json={'quality_preset': 'hq', 'video_encoding': 'standard'}).status_code == 200
+    saved = client.get('/api/v1/settings/preferences').json()
+    assert saved['quality_preset'] == 'hq' and saved['video_encoding'] == 'standard'
+    assert client.put('/api/v1/settings/preferences', json={'quality_preset': 'unknown'}).status_code == 422

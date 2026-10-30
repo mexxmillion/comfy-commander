@@ -315,7 +315,7 @@ async function loadPreferences() {
     for(const [name,value] of Object.entries(data)) {
       const input=form.elements.namedItem(name);
       if(!input)continue;
-      if(input.type==='checkbox')input.checked=value;else input.value=value;
+      if(input.type==='checkbox')input.checked=value;else input.value=name==='quality_preset'&&value===null?(data.turbo_steps===8?'normal':'preview'):value;
     }
     status.textContent='Saved defaults loaded. Changes apply to fresh forms; existing drafts are kept.';
   } catch(error){status.textContent=error.message+' · Use the Sign in tab to unlock Settings.';}

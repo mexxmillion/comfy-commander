@@ -195,7 +195,7 @@ def test_mobile_navigation_matches_desktop_destinations_and_grouping():
     assert all(f'href="#{route}"' in dispatcher for route in ['tasks', 'monitor', 'workers', 'rentals'])
 
 
-def test_flf2v_has_public_rental_models_and_enabled_controls():
+def test_video_modes_offer_references_frames_and_motion_control():
     root = Path(__file__).parents[1]
     manifest = json.loads((root / "runtime/h3/models.lock.json").read_text(encoding="utf-8"))
     groups = manifest["profiles"]["flf2v-int8"]
@@ -204,7 +204,12 @@ def test_flf2v_has_public_rental_models_and_enabled_controls():
     assert sum(a["group"] == "lightx2v-fl2v" for a in files) == 2
     assert all(len(a["revision"]) == 40 and len(a["sha256"]) == 64 for a in files)
     template = (root / "backend/app/templates/generator.html").read_text(encoding="utf-8")
-    assert '<label><input type="radio" name="h3-type" value="frames">' in template
+    assert 'name="h3-type"' not in template
+    assert 'name="h3-mode" value="standard"' in template
+    assert 'name="h3-mode" value="replacement"' in template
+    assert 'name="h3-mode" value="frames"' in template
+    assert 'id="motion-video"' in template and 'id="motion-image"' in template
+    assert 'name="job-type"' not in template
 
 
 def test_flf2v_cloud_routing_accepts_matching_turbo_and_rejects_ref2v_lora():
@@ -220,3 +225,11 @@ def test_flf2v_cloud_routing_accepts_matching_turbo_and_rejects_ref2v_lora():
     graph["turbo"]["inputs"]["lora_name"] = "minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
     with pytest.raises(HTTPException, match="LoRA not in the cloud model manifest"):
         cloud_profile_for_graph(graph)
+
+
+def test_ai_features_are_visible_under_prompt_before_references():
+    template = (Path(__file__).parents[1] / "backend/app/templates/generator.html").read_text(encoding="utf-8")
+    assert '<section id="prompt-tools"' in template
+    assert '<details id="prompt-tools"' not in template
+    assert template.index('id="direction"') < template.index('id="ai-enhance"') < template.index('id="creative-enabled"') < template.index('id="reference-files"')
+    assert template.index('id="h3-quality"') < template.index('id="h3-advanced"')

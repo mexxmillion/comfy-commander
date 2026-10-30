@@ -22,6 +22,8 @@ class Preferences(BaseModel):
     h3_type: Literal["reference", "frames"] = "reference"
     h3_model: Literal["ref2v-int8", "ref2v-singularity", "fasth3-omni"] = "ref2v-int8"
     turbo_steps: Literal[4, 8] = 4
+    quality_preset: Literal["preview", "normal", "hq"] | None = None
+    video_encoding: Literal["standard", "high"] = "high"
     sparse_attention: Literal["auto", "off", "SLA", "VSA", "SOL"] = "auto"
     ai_enhance: bool = True
     audio_lock: bool = False

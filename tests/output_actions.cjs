@@ -195,7 +195,7 @@ for (const roles of [[], ['first_frame'], ['last_frame'], ['first_frame', 'last_
   const values = {'#frame-h3-model': 'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
     '#h3-model': 'ref2v', '#total-steps': 5, '#megapixels': 0.5, '#duration': 5,
     '#aspect-ratio': '9:16', '#frame-turbo-strength': 0.5, '#direction': 'A cinematic camera move'};
-  const buildContext = {state: {h3Type: 'frames'}, EROSMAX_MODEL: 'unsupported',
+  const buildContext = {state: {h3Type: 'frames'},h3JobType:()=> 'standard', EROSMAX_MODEL: 'unsupported',
     SINGULARITY_MODEL: 'singularity', OMNI_MODEL: 'omni', H3_TEXT_ENCODER: 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',
     VSA_LORA: 'fasth3_vsa_gate.safetensors', selectedLoraEntries: () => [], sparseAttentionInputs: () => null,
     studioRoot: {querySelector: () => ({value: '4'})},
@@ -247,12 +247,47 @@ assert.equal(explicitRoute.pool,'any');assert.equal(explicitRoute.preferred_work
 console.log('Bulk VRAM updates preserve existing pool, worker and architecture unless explicitly changed');
 const replacementControls={},replacementGet=selector=>replacementControls[selector] ||= {};
 let replacementType='replacement';
-const replacementContext={state:{mode:'h3',h3Type:'reference'},$:replacementGet,studioRoot:{querySelector:()=>({value:replacementType})}};
+const replacementContext={h3JobType:()=>replacementType,state:{mode:'h3',h3Type:'reference'},$:replacementGet,studioRoot:{querySelector:()=>({value:replacementType})}};
 vm.createContext(replacementContext);
-vm.runInContext(source.slice(source.indexOf('function validateReplacementReferences('),source.indexOf("studioRoot.querySelectorAll('input[name=\"job-type\"]')")),replacementContext);
-for(const refs of [[],[{kind:'image'}],[{kind:'video'}]])assert.throws(()=>replacementContext.validateReplacementReferences(refs),/one source video and one replacement image/);
+vm.runInContext(source.slice(source.indexOf('function validateReplacementReferences('),source.indexOf("studioRoot.querySelectorAll('input[name=\"h3-mode\"]')",source.indexOf('function validateReplacementReferences('))),replacementContext);
+for(const refs of [[],[{kind:'image'}],[{kind:'video'}],[{kind:'video'},{kind:'image'},{kind:'audio'}]])assert.throws(()=>replacementContext.validateReplacementReferences(refs),/one source video and one replacement image/);
 assert.doesNotThrow(()=>replacementContext.validateReplacementReferences([{kind:'video'},{kind:'image'}]));
 replacementContext.syncReplacementMode(true);
 assert.equal(replacementGet('#h3-audio-lock').checked,true);assert.equal(replacementGet('#replacement-target').required,true);
 replacementType='standard';replacementContext.syncReplacementMode();assert.equal(replacementGet('#replacement-settings').hidden,true);
 console.log('Replacement media requirements and audio-lock default passed');
+// Exercise real generated graphs for the new simple quality presets.
+{
+  const controls={},get=selector=>controls[selector] ||= {value:'',checked:false,addEventListener:()=>{}};
+  Object.assign(get('#duration'),{value:5});Object.assign(get('#megapixels'),{value:.5});get('#aspect-ratio').value='9:16';get('#direction').value='A slow camera move';get('#h3-encoding').value='high';
+  let turbo='4';
+  const simpleContext={FRAME_H3_MODEL:'minimax_h3_fl2va_pruned_int8_convrot.safetensors',h3JobType:()=> 'standard',state:{h3Type:'reference'},$:get,EROSMAX_MODEL:'unsupported',SINGULARITY_MODEL:'singularity',OMNI_MODEL:'omni',H3_TEXT_ENCODER:'encoder',VSA_LORA:'vsa',
+    studioRoot:{querySelector:selector=>{
+      if(selector.includes('h3-mode'))return {value:'standard'};
+      if(selector.includes(':checked'))return {value:turbo};
+      return {set checked(value){if(value)turbo=selector.includes('"8"')?'8':'4';}};
+    }},selectedLoraEntries:()=>[],sparseAttentionInputs:()=>null,preprocessReferenceImage:(graph,input)=>input,
+    sparseAttentionDefaults:()=>{},syncTurboStack:()=>{},markAiPromptStale:()=>{}};
+  vm.createContext(simpleContext);
+  vm.runInContext(constants+source.slice(source.indexOf('function applyQualityPreset('),source.indexOf('function syncTurboStack('))+source.slice(buildStart,buildEnd),simpleContext);
+  for(const [preset,steps,lora,sampler] of [['preview',4,true,'euler'],['normal',8,true,'euler'],['hq',20,false,'res_multistep']]){
+    simpleContext.applyQualityPreset(preset);simpleContext.syncQualityPreset();assert.equal(get('#h3-quality').value,preset);
+    for(const refs of [[],[{kind:'image',file:'h3_mobile/person.png'}]]){
+      const graph=simpleContext.buildH3Workflow(refs,42);
+      assert.equal(graph['131'].class_type,'MiniMaxH3ReferenceToVideo');
+      assert.equal(graph['124'].inputs.steps,steps);assert.equal(Boolean(graph['145']),lora);
+      assert.equal(graph['142'].inputs.sampler_name,sampler);assert.equal(graph['155'].inputs.crf,18);
+      assert.equal(Boolean(graph['131'].inputs['ref_images.ref_image_0']),refs.length===1);
+      assert.equal(Object.values(graph).some(node=>node.class_type==='MiniMaxH3AddGuide'),false);
+    }
+  }
+  get('#h3-encoding').value='standard';assert.equal(simpleContext.buildH3Workflow([],42)['155'].inputs.crf,23);
+  simpleContext.state.h3Type='frames';get('#frame-h3-model').value=simpleContext.FRAME_H3_MODEL;get('#frame-turbo-strength').value=.5;
+  for(const [preset,steps,turboEnabled,sampler] of [['preview',5,true,'euler'],['normal',8,true,'euler'],['hq',20,false,'res_multistep']]) {
+    simpleContext.applyQualityPreset(preset);simpleContext.syncQualityPreset();assert.equal(get('#h3-quality').value,preset);
+    const graph=simpleContext.buildH3Workflow([],42);
+    assert.equal(graph['131'].class_type,'MiniMaxH3ImageToVideo');assert.equal(graph['124'].inputs.steps,steps);
+    assert.equal(Boolean(graph['145']),turboEnabled);assert.equal(graph['142'].inputs.sampler_name,sampler);
+  }
+  console.log('Ref2V text/image modes, Preview/Normal/HQ sampling and encoding graph checks passed');
+}

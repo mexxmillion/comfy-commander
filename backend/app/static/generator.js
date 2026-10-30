@@ -123,6 +123,7 @@ async function restoreDraft() {
     setMode(draft.mode);setH3Type(draft.h3Type);
     const controls=draftControls();
     for (const saved of draft.controls||[]) {
+      if(saved.name==='job-type'){saved.name='h3-mode';if(saved.value==='auto')saved.value='standard';}
       const control=controls.find(item=>saved.id?item.id===saved.id:item.type==='radio'&&item.name===saved.name&&item.value===saved.value);
       if (!control || control.type!==saved.type) continue;
       if (control.tagName!=='SELECT'||[...control.options].some(option=>option.value===saved.value)) control.value=saved.value;
@@ -135,6 +136,7 @@ async function restoreDraft() {
       $("#turbo-enabled").checked = false;
       $("#total-steps").value = 4;
     }
+    if(state.h3Type==='frames')studioRoot.querySelector('input[name="h3-mode"][value="frames"]').checked=true;
     if (!(draft.controls || []).some(control => control.id === "sparse-enabled")) sparseAttentionDefaults();
     state.savedReferences=draft.savedReferences||[];state.savedFrameRefs=draft.savedFrameRefs||{};
     state.selectedLoras=new Map(draft.loras||[]);
@@ -146,7 +148,7 @@ async function restoreDraft() {
     if (restoredFiles) draftQueuedFiles=stored.signature;
     if (state.mode==='h3') syncPromptEnhancement();
     if (state.mode==='qwen') {syncQwenTurbo();syncQwenEnhancement();}
-    syncVoiceMode();syncPromptOnly();syncQwenEditCanvas();syncReplacementMode();
+    syncVoiceMode();syncPromptOnly();syncQwenEditCanvas();syncReplacementMode();syncQualityPreset();
     renderReferences();renderFrameInputs();renderSelectedLoras();renderLoraList();
     window.creativeMaster?.sync();
     notice.textContent=draft.pendingNames?.length&&!restoredFiles
@@ -253,6 +255,7 @@ function setSubmitting(submitting) {
   state.submitting = submitting;
   $("#run-button").disabled = submitting;
   studioRoot.querySelectorAll(".mode-switch button").forEach((button) => { button.disabled = submitting; });
+  studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>{input.disabled=submitting;});
 }
 
 function isImageOutput(file) {
@@ -386,6 +389,7 @@ async function uploadFrameReferences() {
 }
 
 function renderReferences() {
+  renderMotionSlots();
   scheduleDraftSave();
   const list = $("#reference-list");
   list.querySelectorAll("[data-object-url]").forEach(media => URL.revokeObjectURL(media.dataset.objectUrl));
@@ -917,8 +921,8 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
       : { inputs: { prompt: ["181", 18], width: ["162", 0], height: ["162", 1], length: ["132", 1], ref_image_size: "match", clip: ["128", 0], vae: ["119", 0], audio_vae: ["120", 0] }, class_type: "MiniMaxH3ReferenceToVideo" },
     "132": { inputs: { expression: "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17", "values.a": ["133", 0] }, class_type: "ComfyMathExpression" },
     "133": { inputs: { value: duration }, class_type: "PrimitiveFloat" },
-    "142": { inputs: { sampler_name: useErSde ? "er_sde" : "euler" }, class_type: "KSamplerSelect" },
-    "155": { inputs: { frame_rate: 24, loop_count: 0, filename_prefix: "H3/h3_mobile", format: "video/h264-mp4", pix_fmt: "yuv420p", crf: 18, save_metadata: true, trim_to_audio: false, pingpong: false, save_output: true, images: ["122", 0], audio: ["121", 0] }, class_type: "VHS_VideoCombine" },
+    "142": { inputs: { sampler_name: useErSde ? "er_sde" : ($("#h3-sampler")?.value || "euler") }, class_type: "KSamplerSelect" },
+    "155": { inputs: { frame_rate: 24, loop_count: 0, filename_prefix: "H3/h3_mobile", format: "video/h264-mp4", pix_fmt: "yuv420p", crf: $("#h3-encoding")?.value === 'standard' ? 23 : 18, save_metadata: true, trim_to_audio: false, pingpong: false, save_output: true, images: ["122", 0], audio: ["121", 0] }, class_type: "VHS_VideoCombine" },
     "162": { inputs: { aspect_ratio: aspect, megapixels, multiple: 32 }, class_type: "ResolutionSelector" },
     "167": { inputs: { value: ["125", 0] }, class_type: "UnloadAllModels" },
     "168": { inputs: { shift_video: 12, shift_audio: 3, model: ["145", 0] }, class_type: "MiniMaxH3SigmaShift" },
@@ -979,7 +983,7 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
       workflow["131"].inputs.prompt = ["185", 0];
     }
   } else {
-    workflow["181"] = { inputs: { direction: promptText, references_json: JSON.stringify({ references }), system_prompt: "", prompt_provider: enhancePrompt ? "openrouter" : "none", openrouter_api_key: "", openrouter_model: $("#ai-model").value, reasoning_effort: "none", api_base: "", local_model_slug: "", job_type: studioRoot.querySelector('input[name="job-type"]:checked').value, width: ["162", 0], height: ["162", 1], length_seconds: ["133", 0], max_reference_edge: 1280, disable_local_thinking: false }, class_type: "MiniMaxH3ReferencePack" };
+    workflow["181"] = { inputs: { direction: promptText, references_json: JSON.stringify({ references }), system_prompt: "", prompt_provider: enhancePrompt ? "openrouter" : "none", openrouter_api_key: "", openrouter_model: $("#ai-model").value, reasoning_effort: "none", api_base: "", local_model_slug: "", job_type: h3JobType(), width: ["162", 0], height: ["162", 1], length_seconds: ["133", 0], max_reference_edge: 1280, disable_local_thinking: false }, class_type: "MiniMaxH3ReferencePack" };
   }
 
   if (enhancePrompt && !frameMode) {
@@ -1327,6 +1331,8 @@ function recipeFromHistoryEntry(entry) {
     aiModel: frameMode ? prompt["185"]?.inputs.openrouter_model : prompt["181"].inputs.openrouter_model,
     jobType: frameMode ? "standard" : prompt["181"].inputs.job_type,
     replacementTarget: prompt.replacement_4?.inputs?.text || 'person',
+    sampler: prompt['142']?.inputs?.sampler_name || 'euler',
+    videoEncoding: Number(prompt['155']?.inputs?.crf)>=23?'standard':'high',
     loras,
   };
 }
@@ -1505,8 +1511,11 @@ function captureH3Recipe(references, seed) {
     seed,
     enhancePrompt: $("#ai-enhance").checked,
     aiModel: $("#ai-model").value,
-    jobType: studioRoot.querySelector('input[name="job-type"]:checked').value,
+    jobType: h3JobType(),
     replacementTarget: $('#replacement-target').value.trim(),
+    qualityPreset: $('#h3-quality').value,
+    videoEncoding: $('#h3-encoding').value,
+    sampler: $('#h3-sampler').value,
     loras: selectedLoraEntries("h3").filter(([name]) => name !== VSA_LORA).map(([name, strength]) => ({ name, strength })),
   };
 }
@@ -1649,9 +1658,11 @@ function loadRecipe(recipe) {
   $("#ai-model").value = recipe.aiModel || $("#ai-model").value;
   const turbo = studioRoot.querySelector(`input[name="turbo"][value="${recipe.turbo || 4}"]`);
   if (turbo) turbo.checked = true;
-  const jobType = studioRoot.querySelector(`input[name="job-type"][value="${recipe.jobType || "auto"}"]`);
+  const jobType = studioRoot.querySelector(`input[name="h3-mode"][value="${recipe.h3Type === "frames" ? "frames" : recipe.jobType === "replacement" ? "replacement" : "standard"}"]`);
   if (jobType) jobType.checked = true;
   $('#replacement-target').value=recipe.replacementTarget || 'person';
+  $('#h3-encoding').value=recipe.videoEncoding || 'high';
+  $('#h3-sampler').value=recipe.sampler==='res_multistep'?'res_multistep':'euler';
   syncReplacementMode();
   syncTurboStack();
   syncH3OutputMode();
@@ -1943,7 +1954,7 @@ function withPrompt(graph, text) {
 // Captures everything the writer needs from the form now, so it can run in the background.
 function prepareWriter(mode, references, seed) {
   if (mode === 'h3') return {mode, payload:{prompt:$('#direction').value.trim(),references,
-    frame_mode:state.h3Type === 'frames', job_type:studioRoot.querySelector('input[name="job-type"]:checked').value,
+    frame_mode:state.h3Type === 'frames', job_type:h3JobType(),
     aspect_ratio:$('#aspect-ratio').value, megapixels:Number($('#megapixels').value),
     duration:Number($('#duration').value), model:enhancementModel(mode)}};
   return {
@@ -2044,7 +2055,7 @@ async function run(event) {
       throw new Error("Qwen Image 2.1 nodes are not loaded. Check the worker status in Tensor Master.");
     }
     const references = frameMode ? await uploadFrameReferences() : await uploadReferences();
-    if(jobMode==='h3' && !frameMode && studioRoot.querySelector('input[name="job-type"]:checked').value==='replacement') {
+    if(jobMode==='h3' && !frameMode && h3JobType()==='replacement') {
       validateReplacementReferences(references);
       if($('#h3-single-frame').checked)throw new Error('Replacement requires video output. Turn off single-frame mode.');
     }
@@ -2159,6 +2170,9 @@ function setMode(mode, h3Still = null) {
     state.aiPrompts[state.mode] = $("#ai-generated-prompt").value.trim();
   }
   state.mode = mode;
+  const loraPanel=$('#lora-panel');
+  if(mode==='h3')$('#h3-advanced').append(loraPanel);
+  else $('#studio-form').insertBefore(loraPanel,$('.run-panel'));
   if (mode === "h3" && h3Still !== null) $("#h3-single-frame").checked = h3Still;
   if (changed) {
     state.files = [];
@@ -2237,7 +2251,7 @@ function syncH3OutputMode() {
   $("#studio-subtitle").textContent = still
     ? (frameMode ? "MiniMax H3 text / keyframe still" : "MiniMax H3 reference still")
     : (frameMode ? "MiniMax first / last frame video" : "MiniMax reference video");
-  $("#prompt-title").textContent = "User prompt";
+  $("#prompt-title").textContent = "Describe your video";
   $("#engine-note").textContent = still
     ? "True single-frame H3 latent · Fizgig still decode · PNG · no audio file"
     : "Sampler: Euler · Scheduler: simple · VSA 0.75 · Turbo 1.0 · Comfy Kitchen";
@@ -2273,14 +2287,14 @@ function setH3Type(type) {
     $("#frame-turbo-strength").value = 0.5;
   }
   if (!frameMode && previousType !== state.h3Type && state.mode === "h3") $("#turbo-enabled").checked = $("#h3-model").value !== EROSMAX_MODEL;
-  const selected = studioRoot.querySelector(`input[name="h3-type"][value="${state.h3Type}"]`);
+  const selected = studioRoot.querySelector(`input[name="h3-mode"][value="${state.h3Type==='frames'?'frames':h3JobType()}"]`);
   if (selected) selected.checked = true;
   if (state.mode === "h3") {
     $("#studio-subtitle").textContent = frameMode ? "MiniMax first / last frame video" : "MiniMax reference video";
-    $("#prompt-title").textContent = "User prompt";
+    $("#prompt-title").textContent = "Describe your video";
     $("#direction").placeholder = frameMode
       ? "A slow camera push through a neon-lit street at night, reflections moving across wet pavement."
-      : "Replace the person in <Video 1> with the person from <Picture 1>. Keep the camera movement, lighting, clothes and original sound.";
+      : "Describe the video you want. Add references below, or leave them empty for text-to-video.";
     syncPromptEnhancement();
     $("#turbo-stack-help").textContent = frameMode
       ? "Default: 768p non-SLA 4-step Turbo · strength 0.5 · 5 sampling steps · no VSA"
@@ -2359,7 +2373,33 @@ function markAiPromptStale() {
   if (typeof syncAiPromptPanel === "function") syncAiPromptPanel();
 }
 
+function applyQualityPreset(preset) {
+  if(!['preview','normal','hq'].includes(preset))return;
+  // Presets use the public Ref2V base; Omni has intrinsic eight-step acceleration.
+  $('#h3-model').value='minimax_h3_ref2va_pruned_int8_convrot.safetensors';
+  $('#turbo-enabled').checked=preset!=='hq';
+  const steps=preset==='hq'?20:preset==='normal'?8:state.h3Type==='frames'?5:4;
+  studioRoot.querySelector(`input[name="turbo"][value="${steps===8?8:4}"]`).checked=true;
+  $('#total-steps').value=steps;
+  $('#h3-sampler').value=preset==='hq'?'res_multistep':'euler';
+  if(preset==='hq') {
+    const acceleration=[...Object.values(TURBO_LORAS),...Object.values(FRAME_TURBO_LORAS)];
+    let changed=false;
+    for(const name of state.selectedLoras?.keys()||[])if(acceleration.some(file=>name.endsWith(file))){state.selectedLoras.delete(name);changed=true;}
+    if(changed)renderSelectedLoras();
+  }
+  sparseAttentionDefaults();syncTurboStack();markAiPromptStale();
+}
+function syncQualityPreset() {
+  const steps=Number($('#total-steps').value),turbo=$('#turbo-enabled').checked;
+  const base=state.h3Type==='frames'?$('#frame-h3-model').value===FRAME_H3_MODEL:$('#h3-model').value==='minimax_h3_ref2va_pruned_int8_convrot.safetensors';
+  const sampler=$('#h3-sampler').value;
+  $('#h3-quality').value=base?(!turbo&&steps===20&&sampler==='res_multistep'?'hq':turbo&&sampler==='euler'&&steps===(state.h3Type==='frames'?5:4)?'preview':turbo&&sampler==='euler'&&steps===8?'normal':'custom'):'custom';
+}
+$('#h3-quality').addEventListener('change',()=>applyQualityPreset($('#h3-quality').value));
+for(const id of ['total-steps','turbo-enabled','h3-model','h3-sampler'])$('#'+id).addEventListener('change',syncQualityPreset);
 function syncTurboStack() {
+  syncQualityPreset();
   $("#sparse-method").disabled = !$("#sparse-enabled").checked;
   const sparseLabel = $("#sparse-enabled").checked ? `Sparse ${$("#sparse-method").value.toUpperCase()}` : "Sparse attention off";
   const omni = state.h3Type !== 'frames' && $('#h3-model').value === OMNI_MODEL;
@@ -2373,7 +2413,7 @@ function syncTurboStack() {
     });
     $('#total-steps').value = 8;
     $('#turbo-stack-help').textContent = 'FastH3 Omni · native 8-step model · add optional look LoRAs below';
-    $('#engine-note').textContent = `Euler · simple · video/audio shifts 12/3 · guidance 1 · ${sparseLabel}`;
+    $('#engine-note').textContent = `${$("#h3-sampler").value} · simple · video/audio shifts 12/3 · guidance 1 · ${sparseLabel}`;
     return;
   }
   const eros = (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) === EROSMAX_MODEL;
@@ -2407,7 +2447,7 @@ function syncTurboStack() {
       input.nextElementSibling.querySelector("small").textContent = enabled ? `${input.value}-step FL2V Turbo 768p · strength ${$("#frame-turbo-strength").value} · no VSA` : "No external acceleration LoRA";
     });
     const model = $("#frame-h3-model").value === EROSMAX_MODEL ? "ErosMax (experimental)" : "FL2VA";
-    $("#engine-note").textContent = `${model} · Euler · simple schedule · ${enabled ? `${FRAME_TURBO_LORAS[studioRoot.querySelector('input[name="turbo"]:checked').value]} · strength ${$("#frame-turbo-strength").value}` : "no external Turbo"} · no VSA`;
+    $("#engine-note").textContent = `${model} · ${$("#h3-sampler").value} · simple schedule · ${enabled ? `${FRAME_TURBO_LORAS[studioRoot.querySelector('input[name="turbo"]:checked').value]} · strength ${$("#frame-turbo-strength").value}` : "no external Turbo"} · no VSA`;
     return;
   }
   const enabled = $("#turbo-enabled").checked;
@@ -2422,8 +2462,8 @@ function syncTurboStack() {
     ? `Singularity · matching 4/8-step Ref2VA LoRA required · ${vsa}`
     : `LightX2V Ref2V · matching 4/8-step LoRA · ${vsa}`;
   $("#engine-note").textContent = enabled
-    ? `Sampler: Euler · Scheduler: simple · LightX2V Ref2V 1.0 · ${vsa} · Comfy Kitchen`
-    : `Sampler: Euler · Scheduler: simple · ${vsa} · ${$("#h3-model").value === EROSMAX_MODEL ? "Built-in model turbo" : "No external Turbo LoRA"} · Comfy Kitchen`;
+    ? `Sampler: ${$("#h3-sampler").value} · Scheduler: simple · LightX2V Ref2V 1.0 · ${vsa} · Comfy Kitchen`
+    : `Sampler: ${$("#h3-sampler").value} · Scheduler: simple · ${vsa} · ${$("#h3-model").value === EROSMAX_MODEL ? "Built-in model turbo" : "No external Turbo LoRA"} · Comfy Kitchen`;
 }
 
 let sourcePage = 0, sourceLoad = 0;
@@ -2603,16 +2643,39 @@ $("#h3-single-frame").addEventListener("change", () => {
 for (const id of ["duration", "aspect-ratio", "megapixels", "ai-model", "qwen-ai-model", "qwen-reference-resolution", "qwen-edit-canvas"]) {
   $(`#${id}`).addEventListener("change", markAiPromptStale);
 }
+function h3JobType() {
+  return studioRoot.querySelector('input[name="h3-mode"]:checked')?.value==='replacement'?'replacement':'standard';
+}
+function renderMotionSlots() {
+  const references=[...(state.savedReferences||[]),...(state.files||[]).map(file=>({kind:file.type.startsWith('video/')?'video':isAudioFile(file)?'audio':'image',name:file.name}))];
+  for(const kind of ['video','image']) {
+    const matches=references.filter(ref=>ref.kind===kind);
+    $('#motion-'+kind+'-label').textContent=matches.length>1?`${matches.length} ${kind}s · choose one`:matches[0]?.name||matches[0]?.file?.split('/').pop()||(kind==='video'?'Add motion to copy':'Add your character');
+  }
+}
+for(const kind of ['video','image'])$('#motion-'+kind).addEventListener('change',event=>{
+  const file=event.target.files[0];if(!file)return;
+  state.savedReferences=state.savedReferences.filter(ref=>ref.kind!==kind);
+  state.files=state.files.filter(item=>(item.type.startsWith('video/')?'video':isAudioFile(item)?'audio':'image')!==kind);
+  state.files.push(file);event.target.value='';renderReferences();markAiPromptStale();
+});
 function validateReplacementReferences(references) {
-  if(!references.some(ref=>ref.kind==='video') || !references.some(ref=>ref.kind==='image'))throw new Error('Replacement requires at least one source video and one replacement image. Add both in References.');
+  if(references.length!==2 || references.filter(ref=>ref.kind==='video').length!==1 || references.filter(ref=>ref.kind==='image').length!==1)throw new Error('Replacement requires exactly one source video and one replacement image. Remove any extra references.');
 }
 function syncReplacementMode(enableAudioDefault=false) {
-  const replacement=state.mode==='h3' && state.h3Type!=='frames' && studioRoot.querySelector('input[name="job-type"]:checked').value==='replacement';
+  const replacement=state.mode==='h3' && state.h3Type!=='frames' && h3JobType()==='replacement';
   $('#replacement-settings').hidden=!replacement;
   $('#replacement-target').required=replacement;
   if(replacement && enableAudioDefault)$('#h3-audio-lock').checked=true;
+  if(state.mode==='h3') {
+    $('#reference-section-title').textContent=replacement?'One video + one image':'References · optional';
+    $('#reference-help').textContent=replacement?'Add exactly one source video and one replacement image.':'No reference: text-to-video. Add an image or clip to guide the result. Ask in your prompt if an image should be the opening frame.';
+    $('#studio-subtitle').textContent=replacement?'H3 Motion control':state.h3Type==='frames'?'H3 Start / end frames':'H3 References';
+    $('#general-reference-upload').hidden=replacement;
+    $('#motion-reference-inputs').hidden=!replacement;
+  }
 }
-studioRoot.querySelectorAll('input[name="job-type"]').forEach((input) => input.addEventListener("change", ()=>{syncReplacementMode(true);markAiPromptStale();}));
+studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>input.addEventListener('change',()=>{const preset=$('#h3-quality').value;setH3Type(input.value==='frames'?'frames':'reference');applyQualityPreset(preset);syncReplacementMode(true);markAiPromptStale();}));
 $("#toggle-loras").addEventListener("click", () => {
   const picker = $("#lora-picker");
   picker.hidden = !picker.hidden;
@@ -2759,11 +2822,13 @@ function applyGenerationDefaults(preferences) {
   $('#turbo-enabled').checked=true;
   $('#total-steps').value=preferences.h3_type==='frames' && preferences.turbo_steps===4 ? 5 : preferences.turbo_steps;
   sparseAttentionDefaults();
+  if(preferences.quality_preset)applyQualityPreset(preferences.quality_preset);
   if(preferences.sparse_attention!=='auto') {
     $('#sparse-enabled').checked=preferences.sparse_attention!=='off';
     if(preferences.sparse_attention!=='off')$('#sparse-method').value=preferences.sparse_attention==='SOL'?'sol-attn':preferences.sparse_attention.toLowerCase();
   }
   syncTurboStack();syncPromptEnhancement();
+  $('#h3-encoding').value=preferences.video_encoding || 'high';
 }
 async function loadGenerationDefaults() {
   try {
@@ -2850,7 +2915,7 @@ initialize().then(restoreInitialView);
     $('#creative-brief').required=enabled;
     $('#ai-enhance').disabled=enabled;
     $('#ai-model').disabled=enabled;
-    studioRoot.querySelectorAll('input[name="job-type"]').forEach(input=>{input.disabled=enabled || state.h3Type==='frames';});
+    studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>{input.disabled=enabled;});
     if(enabled && !$('#creative-brief').value)$('#creative-brief').value=$('#direction').value;
     syncPromptEnhancement();
     if (state.mode === 'h3') $('#run-button span').textContent = enabled ? ($('#creative-review').checked ? 'Generate ideas · review first' : 'Generate & queue') : 'Run H3';
@@ -2993,7 +3058,7 @@ initialize().then(restoreInitialView);
       const previous=controls.map(c=>c.disabled); controls.forEach(c=>c.disabled=true);
       try {
         const references=frames?await uploadFrameReferences():await uploadReferences();
-        if(!frames && studioRoot.querySelector('input[name="job-type"]:checked').value==='replacement')validateReplacementReferences(references);
+        if(!frames && h3JobType()==='replacement')validateReplacementReferences(references);
         snapshot.recipe={...captureH3Recipe(references,0),direction:brief,aiPrompt:'',enhancePrompt:false};
         snapshot.graph=buildH3Workflow(references,0,{});
       } finally {controls.forEach((c,i)=>c.disabled=previous[i]);}

@@ -38,9 +38,9 @@ def test_one_shot_replacement_preserves_identity_and_audio_and_inverts_target_on
     assert not replacement.is_graph(graph)  # Route by the actual H3 model, not standalone preparation.
 
 
-@pytest.mark.parametrize('kinds', [(), ('image',), ('video',)])
+@pytest.mark.parametrize('kinds', [(), ('image',), ('video',), ('image','image','video'), ('image','video','audio'), ('image','video','video')])
 def test_replacement_requires_image_and_video(kinds):
-    with pytest.raises(HTTPException, match='at least one source video and one replacement image'):
+    with pytest.raises(HTTPException, match='exactly one source video and one replacement image'):
         replacement.compose_chain(h3_graph(kinds), 'person')
 
 
