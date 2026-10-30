@@ -167,7 +167,7 @@
     const pixels = spec.width && spec.height ? `${spec.width} × ${spec.height} px` : null;
     const size = pixels || spec.size_note;
     const length = spec.frames === 1 ? 'Still frame' : spec.duration_seconds ? `${spec.duration_seconds}s · ${spec.frames} frames @ ${spec.fps}fps` : null;
-    for (const value of [spec.type, size, length, spec.steps != null && `${spec.steps} steps · ${spec.sampler || 'sampler ?'}${spec.cfg != null ? ` · CFG ${spec.cfg}` : ''}`, spec.megapixels && `${spec.megapixels} MP · ${spec.aspect}`, spec.seed != null && `Seed ${spec.seed}`])
+    for (const value of [spec.type, size, length, spec.steps != null && `${spec.steps} steps · ${spec.sampler || 'sampler ?'}${spec.cfg != null ? ` · CFG ${spec.cfg}` : ''}`, spec.aspect_label, spec.megapixels && `${spec.megapixels} MP`, spec.seed != null && `Seed ${spec.seed}`])
       if (value) chips.append(el('span', value));
     section.append(chips);
     const prompt = el('div', null, 'spec-prompt');

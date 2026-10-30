@@ -176,3 +176,23 @@ def test_inspector_uses_output_graph_dimensions_and_frame_grid(tmp_path):
     assert (spec["width"], spec["height"], spec["frames"], spec["fps"]) == (640, 640, 39, 24)
     assert spec["encoded_aspect"] == "1:1" and spec["duration_seconds"] == 1.62
     assert spec["type"] == "H3 Motion control · SAM3 → H3"
+    assert spec["aspect_label"] == "Square"
+
+
+@pytest.mark.parametrize("width,height,orientation", [(544, 960, "Portrait"), (960, 544, "Landscape")])
+def test_inspector_orientation_uses_output_canvas_not_legacy_selector_title(tmp_path, width, height, orientation):
+    from backend.app.job_spec import job_spec
+    from backend.app.store import QueueStore
+
+    store = QueueStore(f"sqlite:///{tmp_path / 'jobs.sqlite3'}")
+    job = store.submit(
+        name="Orientation regression", policy="local", min_vram_gb=16,
+        architecture="any", runtime="pocket-h3-local",
+        graph={
+            "131": {"class_type": "MiniMaxH3ReferenceToVideo", "inputs": {"width": width, "height": height, "length": 124}},
+            "162": {"class_type": "ResolutionSelector", "inputs": {"aspect_ratio": "9:16 (Portrait Widescreen)", "megapixels": 0.5}},
+        },
+    )
+    spec = job_spec(store, job + "-t001")
+    assert spec["aspect_label"] == orientation
+    assert (spec["width"], spec["height"]) == (width, height)

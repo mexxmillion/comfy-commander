@@ -191,6 +191,13 @@ def job_spec(store, task_id):
         spec["type"] = job.workflow
         spec["references"] = []
 
+    # Legacy selector titles include "Portrait Widescreen". Describe the actual
+    # output canvas instead, so those titles cannot mislabel a portrait job.
+    width, height = spec.get("width"), spec.get("height")
+    if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
+        orientation = "Portrait" if height > width else "Landscape" if width > height else "Square"
+        spec["aspect_label"] = orientation
+
     recipe = normalize_recipe(recipe)
     original = recipe.get("sourceDirection", recipe.get("direction")) or ""
     ai_prompt = recipe.get("aiPrompt") or (final_prompt if final_prompt and final_prompt != original else "")
