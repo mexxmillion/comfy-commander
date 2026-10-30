@@ -1048,8 +1048,8 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
 
   let previous = "127";
   if($('#character-swap-enabled')?.checked) {
-    if(frameMode || h3JobType()!=='replacement' || $('#h3-model').value!=='minimax_h3_ref2va_pruned_int8_convrot.safetensors')throw new Error('Character Swap v1.5 requires Motion control with the Ref2V Community model.');
-    workflow['189']={class_type:'LoraLoaderModelOnly',inputs:{model:[previous,0],lora_name:CHARACTER_SWAP_LORA,strength_model:1}};
+    if(frameMode || !motionModeSelected() || $('#h3-model').value!=='minimax_h3_ref2va_pruned_int8_convrot.safetensors')throw new Error('Character Swap v1.5 requires Motion control with the Ref2V Community model.');
+    workflow['189']={class_type:'LoraLoaderModelOnly',inputs:{model:[previous,0],lora_name:CHARACTER_SWAP_LORA,strength_model:CommanderReplacementModes.swapStrength($('#character-swap-strength').value)}};
     previous='189';
   }
   if (turboEnabled) {
@@ -1565,6 +1565,7 @@ function captureH3Recipe(references, seed) {
     replacementTarget: $('#replacement-target').value.trim(),
     videoPreparation: replacementDefaults.preparation,
     characterSwapEnabled: $('#character-swap-enabled').checked,
+    characterSwapStrength: $('#character-swap-enabled').checked?CommanderReplacementModes.swapStrength($('#character-swap-strength').value):1,
     qualityPreset: $('#h3-quality').value,
     videoEncoding: $('#h3-encoding').value,
     sampler: $('#h3-sampler').value,
@@ -1716,6 +1717,7 @@ function loadRecipe(recipe) {
   $('#replacement-target').value=recipe.replacementTarget || 'person';
   replacementDefaults.preparation=recipe.videoPreparation || replacementDefaults.preparation;
   $('#character-swap-enabled').checked=recipe.characterSwapEnabled===true;
+  $('#character-swap-strength').value=recipe.characterSwapStrength ?? 1;
   $('#h3-encoding').value=recipe.videoEncoding || 'high';
   $('#h3-sampler').value=recipe.sampler==='res_multistep'?'res_multistep':'euler';
   syncReplacementMode();
@@ -2242,8 +2244,9 @@ function setMode(mode, h3Still = null) {
     renderSelectedLoras();
     renderLoraList();
   }
-  $('#single-prompt').append($('#ai-generated-panel'));
+  $('#prompt-tools').append($('#ai-generated-panel'));
   $('#h3-advanced>.compact-grid').append($('#h3-encoding').closest('.field'));
+  $('#h3-advanced>.compact-grid').append($('#character-swap-strength-field'));
   for(const id of ['qwen-negative','qwen-steps','qwen-cfg','qwen-seed','qwen-reference-resolution','qwen-cache','qwen-edit-canvas']) {
     const field=$('#'+id)?.closest('.field');if(field)$('#image-advanced-fields').append(field);
   }
@@ -2745,8 +2748,10 @@ function syncReplacementMode(enableAudioDefault=false) {
   $('#replacement-settings').hidden=!replacement;
   $('#replacement-target').required=replacement && person;
   $('#replacement-target').closest('label').hidden=!person;
-  $('#character-swap-enabled').disabled=!replacement || !person;
-  if(!replacement || !person)$('#character-swap-enabled').checked=false;
+  $('#character-swap-enabled').disabled=!replacement;
+  if(!replacement)$('#character-swap-enabled').checked=false;
+  $('#character-swap-strength-field').hidden=!replacement;
+  $('#character-swap-strength').disabled=!replacement || !$('#character-swap-enabled').checked;
   $('#use-character-swap-profile').hidden=!person;$('#copy-character-swap-profile').hidden=!person;
   $('#replacement-mode-help').textContent=person?'Character image + source video. SAM3 tracks your selected target; the original location is retained. Instructions are automatic. Add a location image to change the scene too.':'Character image + location image + source video. Instructions are automatic. Scene replacement is experimental; this route does not apply the person-only SAM3 mask or guarantee preservation of other people.';
   if(replacement && enableAudioDefault) {
@@ -2771,10 +2776,12 @@ async function characterSwapProfile() {
   if(!response.ok)throw new Error('Could not load the Character Swap profile.');
   return response.json();
 }
+$('#character-swap-enabled').addEventListener('change',()=>{syncReplacementMode();scheduleDraftSave();});
+$('#character-swap-strength').addEventListener('input',scheduleDraftSave);
 $('#use-character-swap-profile').onclick=async()=>{
   try {
     const profile=await characterSwapProfile();
-    applyQualityPreset(profile.qualityPreset);$('#character-swap-enabled').checked=true;$('#h3-audio-lock').checked=true;
+    applyQualityPreset(profile.qualityPreset);$('#character-swap-enabled').checked=true;$('#character-swap-strength').value=profile.characterSwapStrength ?? 1;$('#h3-audio-lock').checked=true;syncReplacementMode();
     $('#duration').value=profile.duration;$('#megapixels').value=profile.megapixels;$('#aspect-ratio').value=profile.aspect;
     markAiPromptStale();scheduleDraftSave();toast('v1.5 starter settings applied. Your prompt and references are kept. Nothing queued.');
   }catch(error){toast(error.message);}
@@ -3014,16 +3021,17 @@ initialize().then(restoreInitialView);
     const enabled=state.mode==='h3' && $('#creative-enabled').checked;
     studioRoot.classList.toggle('creative-active',enabled);
     $('#creative-controls').hidden = !enabled;
-    const noPrompt=enabled || motionModeSelected() || ['faces','ltx'].includes(state.mode);
+    $('#creative-library').hidden = !enabled;
+    const noPrompt=motionModeSelected() || ['faces','ltx'].includes(state.mode);
     $('#single-prompt').hidden=noPrompt;
     $('#direction').disabled=noPrompt;
     $('#direction').required=!noPrompt;
     $('#creative-brief').disabled=!enabled;
-    $('#creative-brief').required=enabled;
+    $('#creative-brief').required=false;
     $('#ai-enhance').disabled=enabled;
     $('#ai-model').disabled=enabled;
     studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>{input.disabled=busy;});
-    if(enabled && !$('#creative-brief').value)$('#creative-brief').value=$('#direction').value;
+    if(enabled)$('#creative-brief').value=$('#direction').value;
     syncPromptEnhancement();
     if (state.mode === 'h3') $('#run-button span').textContent = enabled ? ($('#creative-review').checked ? 'Generate ideas · review first' : 'Generate & queue') : 'Run H3';
   }
@@ -3051,6 +3059,7 @@ initialize().then(restoreInitialView);
     if (loaded.recipe) loadRecipe(loaded.recipe);
     $('#creative-enabled').checked = true;
     $('#creative-brief').value = loaded.brief || '';
+    $('#direction').value = loaded.brief || '';
     $('#creative-count').value = String(loaded.count || 5);
     $('#creative-direction').value = loaded.direction || '';
     $('#creative-reference-notes').value = loaded.reference_notes || '';
@@ -3150,7 +3159,8 @@ initialize().then(restoreInitialView);
   }
   async function generate() {
     if(busy)return;
-    const brief=$('#creative-brief').value.trim();
+    const brief=$('#direction').value.trim();
+    $('#creative-brief').value=brief;
     if(!brief)return toast('Enter your creative brief first.');
     const frames=state.h3Type==='frames';
     const review=$('#creative-review').checked;

@@ -20,3 +20,7 @@ test('slot replacement preserves picture roles and video metadata',()=>{
 test('instructions are deterministic and bind image roles',()=>{
  assert.match(modes.prompts.all,/<Picture 1>/);assert.match(modes.prompts.all,/<Picture 2>/);assert.match(modes.prompts.all,/<Video 1>/);assert.doesNotMatch(modes.prompts.all,/Describe the new/);
 });
+test('character swap strength accepts its range and rejects invalid values',()=>{
+ for(const value of ['0','0.65','1','2'])assert.equal(modes.swapStrength(value),Number(value));
+ for(const value of ['', 'nan', Infinity, '-.1', '2.01'])assert.throws(()=>modes.swapStrength(value));
+});

@@ -48,7 +48,7 @@
 <section class="h3-only creative-master" aria-label="Creative Engine">
           <label class="switch-row"><input id="creative-enabled" type="checkbox" disabled><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Creative Engine</strong><small id="creative-availability">Loading Creative Engine…</small></span></label>
           <div id="creative-controls" hidden>
-            <label class="field"><span>Creative brief</span><textarea id="creative-brief" rows="4" disabled placeholder="Create five distinct toothpaste commercials using my product images."></textarea></label>
+            <textarea id="creative-brief" hidden disabled aria-label="Saved creative brief"></textarea>
             <div class="compact-grid"><label class="field"><span>Variations</span><select id="creative-count"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select></label>
         <label class="switch-row"><input id="creative-review" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Review before queuing</strong><small>On: generate ideas only. Off: generate and queue renders.</small></span></label></div>
             <details class="creative-options"><summary>Creative options · direction, references &amp; model</summary>
@@ -112,7 +112,8 @@
         <div id="replacement-settings" class="h3-only reference-mode-only" hidden>
           <select id="replacement-mode" hidden aria-label="Automatic replacement mode"><option value="person">Person</option><option value="all">Person + scene</option></select>
           <label class="field"><span>Person to replace · SAM3 tracking prompt</span><input id="replacement-target" type="text" minlength="3" maxlength="300" value="person" placeholder="The person in the red shirt"></label>
-          <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength 1.0 · off by default</small></span></label>
+          <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength in Advanced · off by default</small></span></label>
+          <label id="character-swap-strength-field" class="field" hidden><span>Character Swap v1.5 strength</span><input id="character-swap-strength" type="number" min="0" max="2" step="0.05" value="1" disabled><small>1.0 default · higher values may change appearance or motion</small></label>
           <button id="use-character-swap-profile" class="text-button" type="button">Use v1.5 starter profile</button><button id="copy-character-swap-profile" class="text-button" type="button">Copy profile JSON</button>
           <p id="replacement-mode-help" class="hint">Requires exactly one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
         </div>

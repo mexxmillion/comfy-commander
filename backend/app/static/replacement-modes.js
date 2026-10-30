@@ -5,6 +5,11 @@
   };
   const api = {
     prompts,
+    swapStrength(value) {
+      const strength=Number(value);
+      if(value==='' || !Number.isFinite(strength) || strength<0 || strength>2)throw new Error('Character Swap strength must be between 0 and 2.');
+      return strength;
+    },
     mode: refs => refs.filter(r=>r.kind==='image').length>=2?'all':'person',
     replaceSlot(refs, slot, ref) {
       const images=refs.filter(r=>r.kind==='image'),videos=refs.filter(r=>r.kind==='video');

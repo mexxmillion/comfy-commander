@@ -42,5 +42,17 @@ Creative Engine previously disabled all mode buttons. Frames and Motion control
 now remain selectable and turn Creative Engine off automatically, preserving
 its brief. Browser checks verified both switches without submitting a render.
 
+Character Swap v1.5 can be enabled for either replacement route. Advanced
+contains its strength control (0–2, default 1), which feeds the LoRA node and
+is saved/restored with the recipe. The toggle remains off by default. Enabling
+it still requires the Ref2V Community model and available LoRA weights. The
+combined scene route with this LoRA needs separate rendering/QC tests.
+
+AI enhancement and Creative Engine use compact toggle rows rather than cards.
+The main prompt stays in place and supplies the Creative brief. Extra controls
+expand below the toggle; saved batches are visible only while Creative Engine
+is enabled. Browser measurements confirmed identical prompt/toggle positions
+with Creative Engine off and on.
+
 The branch also adds a 12 px safe-area-aware inset to the Generate header and
 draft-status text. Computed browser styles confirmed both left/right insets.
