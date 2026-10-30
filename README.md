@@ -108,6 +108,9 @@ to the relevant provider for validation and API use; a configured HF token is
 also transferred over SSH to rented workers for model downloads. They are not
 stored in a Tensor Master account. [Credential details](docs/STARTUP.md#where-credentials-go).
 
+To stop the controller and local workers, use **Kill Commander.cmd** in that
+installation folder. ComfyUI and paid rentals keep running. [Startup and shutdown](docs/STARTUP.md#stop-commander).
+
 ## Generation and deployment
 
 H3 offers **References**, **Frames** and **Motion control**. Main controls are
