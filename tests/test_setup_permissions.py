@@ -34,8 +34,8 @@ def test_provider_permissions_are_visible_and_attached_to_token_inputs(settings_
 @pytest.mark.parametrize('settings_mode', [False, True])
 def test_token_entry_explains_local_storage_and_provider_worker_use(settings_mode):
     page = templates.get_template('setup.html').render(status={}, profiles={}, settings_mode=settings_mode)
-    assert 'stored on the computer running Commander' in page
-    assert 'sends them to the relevant provider' in page
-    assert 'transferred over SSH to your rented worker' in page
+    assert 'stored on your Commander computer' in page
+    assert 'used only to connect Commander to your selected services and workers' in page
+    assert 'not sent to Tensor Master or other users' in page
     assert page.index('id="credential-privacy"') < page.index('aria-label="RunPod credential"')
     assert 'Credentials stay on this machine' not in page
