@@ -179,3 +179,15 @@ Before pasting a token in **Setup → Connections** or **Settings → Connection
 Connection checks perform read-only validation. They do not prove permission to
 create a paid Pod or upload a file, and do not perform either operation as a test.
 Keep tokens in the setup form, never in workflow graphs, screenshots or Git.
+
+
+### Where credentials go
+
+Keys saved in Setup are stored on the computer running Commander, in its
+installation-owned credential directory (or an explicitly configured private
+location). They are not stored in a Tensor Master account. Validation and API
+operations send the relevant credential to its provider. For cloud model
+access, the configured HF token is also transferred over SSH to the rented
+worker; public, ungated downloads can run without it. Use a token scoped to
+the required repositories and operations. Do not describe credentials as
+"never sent anywhere" or assume that connection success proves write access.
