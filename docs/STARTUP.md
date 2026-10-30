@@ -44,6 +44,19 @@ need a local ComfyUI or local worker. A web-only restart preserves stored jobs;
 after an OS reboot, inspect existing rentals at the provider before launching
 another. Do not assume a controller-side watchdog survived the reboot.
 
+## Stop Commander
+
+Double-click **Kill Commander.cmd** in the installation folder and confirm Y.
+Finish active jobs first. It stops only that checkout's web server and local
+worker bridges, with process IDs and a result message. It leaves ComfyUI,
+cloud workers, rental managers and deadline watchdogs running, and preserves
+saved settings, credentials, outputs and checkpoints. Rental billing continues
+until the rental is terminated. Other Commander checkouts are not stopped.
+
+For a fresh-clone cutover, run this from the old installation, then start the new
+clone. The new controller uses its own saved state; review existing rentals in
+the old installation/provider before switching.
+
 ## Worker missing after reboot
 
 - Confirm ComfyUI responds on the configured localhost address.
