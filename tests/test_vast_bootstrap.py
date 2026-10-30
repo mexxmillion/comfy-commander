@@ -3,7 +3,8 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkeypatch, tmp_path):
+@pytest.mark.parametrize("resume_existing", [False, True])
+def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkeypatch, tmp_path, resume_existing):
     from backend.app import config, credential_paths, rental_cost, rental_preferences
     from backend.app.providers import vast
     from runtime.h3 import managed_worker as worker
@@ -16,6 +17,11 @@ def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkey
                                  huggingface_token_file=tmp_path / "hf-token")
     offer = SimpleNamespace(id=1, gpu_name="RTX 4090", vram_gb=24, price_per_hour=.5, raw={})
     state = {"profile": "ref2v-int8", "offer_id": 1, "max_minutes": 30, "max_price_per_hour": 1}
+    if resume_existing:
+        from datetime import timedelta
+        state.update(status="needs_attention", instance_id=123, deadline=(worker.now()+timedelta(minutes=30)).isoformat())
+    original_deadline = state.get("deadline")
+    creations = []
     monkeypatch.setattr(config, "get_settings", lambda: configured)
     monkeypatch.setattr(worker, "preflight", lambda: None)
     monkeypatch.setattr(worker, "vast_api_key", lambda: "provider-fixture")
@@ -25,7 +31,7 @@ def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkey
     monkeypatch.setattr(rental_preferences, "record_preferences", lambda _: None)
     monkeypatch.setattr(rental_preferences, "offer_allowed", lambda *a: True)
     monkeypatch.setattr(worker, "check_credit", lambda *a: None)
-    provider = SimpleNamespace(show_instances=lambda: [], create_instance=lambda **k: {"success": True, "new_contract": 123},
+    provider = SimpleNamespace(show_instances=lambda: [], create_instance=lambda **k: (creations.append(k) or {"success": True, "new_contract": 123}),
                                show_instance=lambda **k: {"ssh_host": "localhost", "ssh_port": 1234})
     monkeypatch.setattr(worker, "vast", lambda: provider)
     monkeypatch.setattr(worker, "ssh_bootstrap_command", lambda: "fixture")
@@ -51,11 +57,14 @@ def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkey
         raise StopBeforeRemoteInstall
     monkeypatch.setattr(worker, "transfer_secret", transfer)
     monkeypatch.setattr(worker, "destroy_instance", lambda *a: state.update(status="destroyed"))
-    with pytest.raises(StopBeforeRemoteInstall):
-        worker.launch(state)
+    worker.launch(state, resume_existing=resume_existing)
     assert reads == [("huggingface", configured.huggingface_token_file)]
     assert transfers == [("isolated-token-fixture", "hf_read.txt")]
-    assert state["status"] == "destroyed"
+    assert state["status"] == "needs_attention"
+    assert not state.get("destroyed_at")
+    assert len(creations) == (0 if resume_existing else 1)
+    if resume_existing:
+        assert state["deadline"] == original_deadline
 
 
 def test_script_transfer_normalizes_windows_line_endings(monkeypatch, tmp_path):

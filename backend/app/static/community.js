@@ -401,7 +401,7 @@ async function loadRentalPreferences() {
     for(const [key,value] of Object.entries(preferences)) if(form.elements[key]) form.elements[key].value=value;
     form.elements.max_minutes.max=caps.max_minutes;
     form.elements.max_price_per_hour.max=caps.max_price_per_hour;
-    document.querySelector('#rental-hard-caps').textContent=`Installation caps: $${caps.max_price_per_hour}/GPU-hour · ${caps.max_minutes} minutes · ${caps.max_active_gpus} GPUs · $${caps.fleet_hourly_cap}/fleet-hour.`;
+    document.querySelector('#rental-hard-caps').textContent=`Fleet safeguards: up to $${caps.max_price_per_hour}/GPU-hour · ${caps.max_minutes} minutes · ${caps.max_active_gpus} GPUs · $${caps.fleet_hourly_cap}/fleet-hour.`;
     status.textContent='Saved rental limits loaded.';
   } catch(error) {status.textContent=error.message;}
 }
@@ -411,7 +411,7 @@ async function submitRentalPreferences(save) {
   const payload=Object.fromEntries([...new FormData(form)].map(([key,value])=>[key,key==='gpu_class'?value:Number(value)]));
   try {
     await jsonRequest('/api/v1/settings/rentals'+(save?'':'/validate'),{method:save?'PUT':'POST',body:JSON.stringify(payload)});
-    status.textContent=save?'Rental limits saved for new rentals.':'Valid. No changes saved.';
+    status.textContent=save?'Rental limits saved for new rentals immediately. No restart needed; existing rentals are unchanged.':'Valid. No changes saved.';
   } catch(error) {status.textContent=error.message;}
 }
 document.querySelector('#rental-preferences-form')?.addEventListener('submit',event=>{event.preventDefault();void submitRentalPreferences(true);});

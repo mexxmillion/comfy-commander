@@ -25,6 +25,19 @@ class ControllerUnavailable(RuntimeError):
     pass
 
 
+def optional_runtime_boot_id(comfy):
+    """Older local installs expose this extension; public workers need no such route."""
+    try:
+        response = comfy.get('/h3-mobile/status')
+        if not response.is_success:
+            return None
+        body = response.json()
+        value = body.get('boot_id') if isinstance(body, dict) else None
+        return value if isinstance(value, str) and value else None
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
 def release_local_model_cache(comfy, *, pressure_only=False):
     # /free is processed between prompts by ComfyUI, never mid-sampling.
     # Reset node/model caches too: UnloadAllModels alone retains their handles.
@@ -295,7 +308,7 @@ def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Che
             # Register the reserved prompt before Comfy accepts it. A lost
             # controller connection cannot make the queue assign it elsewhere.
             report(progress=1, message='Reserving ComfyUI prompt', prompt_id=prompt_id, wait_for_controller=True)
-            boot_id = comfy.get('/h3-mobile/status').json().get('boot_id')
+            boot_id = optional_runtime_boot_id(comfy)
             task['comfy_boot_id'] = boot_id
             if checkpoint is not None:
                 checkpoint.save(task)
@@ -405,9 +418,7 @@ def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Che
                                     if local_gpu:
                                         log_path.with_name(f'gpu{local_gpu}.drain').touch()
                                     raise RuntimeError('Inference runtime health failed three consecutive checks. Use Restart worker & requeue in Tasks.')
-                            status_response = comfy.get('/h3-mobile/status')
-                            status_response.raise_for_status()
-                            current_boot = status_response.json().get('boot_id')
+                            current_boot = optional_runtime_boot_id(comfy)
                             if boot_id and current_boot and current_boot != boot_id:
                                 restarted = True
                                 first_progress_at = last_progress_at = None

@@ -239,8 +239,6 @@ def preflight() -> None:
     from backend.app.credential_paths import provider_secret
     if not provider_secret("vast", configured.vast_api_key_file):
         raise RuntimeError("Missing Vast API key")
-    if not provider_secret("huggingface", configured.huggingface_token_file):
-        raise RuntimeError("Missing Hugging Face token")
     validate_ssh_key_files()
     from backend.app.cloud_ssh import vast_public_key_registered
     if not vast_public_key_registered(vast(), SSH_PUBLIC_KEY.read_text(encoding='utf-8')):
@@ -274,6 +272,10 @@ def ssh_arguments(record: dict) -> list[str]:
             "-o", "ServerAliveInterval=30", f"root@{record['ssh_host']}"]
 
 
+class SSHTransportError(RuntimeError):
+    pass
+
+
 def run_ssh(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     with logfile.open("a", encoding="utf-8") as output:
@@ -281,11 +283,100 @@ def run_ssh(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
                                 stderr=subprocess.STDOUT, timeout=timeout,
                                 creationflags=flags, check=False)
     if result.returncode:
+        if result.returncode == 255:
+            raise SSHTransportError(f'SSH connection interrupted; see {logfile.name}')
         tail = logfile.read_text(encoding="utf-8", errors="replace")[-4000:]
         if "pipefail" in tail and "invalid option name" in tail:
             raise RuntimeError("Commander startup script has Windows line endings; Linux rejected pipefail. "
                                f"Deployment bug; see {logfile.name}")
         raise RuntimeError(f"Remote {command.split()[0]} failed; see {logfile.name}")
+
+
+def run_remote_phase(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
+    """Keep setup alive across SSH resets; reconnect to the same bounded instance."""
+    phase = 'models' if logfile == phase_log('models') else 'prepare'
+    base = f'/workspace/commander-{phase}'
+    # flock prevents duplicate setup processes if the start acknowledgement is lost.
+    runner = (f'echo $$ > {base}.pid; {command} > {base}.log 2>&1; '
+              f'code=$?; printf "%s\\n" "$code" > {base}.exit.tmp; '
+              f'mv {base}.exit.tmp {base}.exit')
+    start = (f'command -v flock >/dev/null || exit 78; '
+             f'if test -f {base}.exit || (test -f {base}.pid && kill -0 "$(cat {base}.pid)" 2>/dev/null); '
+             f'then :; else nohup flock -n {base}.lock bash -c {shlex.quote(runner)} '
+             f'</dev/null >/dev/null 2>&1 & fi')
+    end = min(time.monotonic() + timeout,
+              time.monotonic() + max(0, (datetime.fromisoformat(record['deadline']) - now()).total_seconds()))
+    started, offset, disconnected = False, 1, False
+    outage_started = None
+    download_retries, retry_started = 0, None
+    while time.monotonic() < end:
+        if read_state().get('destroyed_at'):
+            raise RuntimeError('Rental terminated while setup was in progress')
+        try:
+            if not started:
+                run_ssh(record, start, timeout=20, logfile=LOG)
+                started = True
+            poll = (f'if test -f {base}.log; then tail -c +{offset} {base}.log; fi; '
+                    f'printf "\\n__COMMANDER_EXIT__"; '
+                    f'if test -f {base}.exit; then cat {base}.exit; else echo RUNNING; fi')
+            result = subprocess.run(['ssh', *ssh_arguments(record), poll], capture_output=True,
+                                    timeout=20, check=False,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            if result.returncode:
+                raise ConnectionError('SSH transport unavailable')
+            payload, marker, status = result.stdout.rpartition(b'\n__COMMANDER_EXIT__')
+            if not marker:
+                raise ConnectionError('Incomplete setup status response')
+            if payload:
+                with logfile.open('ab') as output:
+                    output.write(payload)
+                offset += len(payload)
+            if disconnected:
+                log(f'{phase}: SSH reconnected; continuing on the same instance')
+                disconnected = False
+            outage_started = None
+            status = status.strip()
+            if status == b'0':
+                return
+            if status != b'RUNNING':
+                evidence = logfile.read_text(encoding='utf-8', errors='replace')[-8000:].lower()
+                needs_human = any(reason in evidence for reason in ('401', '403', 'gated repo', 'checksum', 'did not match the lock'))
+                transient_download = phase == 'models' or any(reason in evidence for reason in
+                    ('readtimeouterror', 'connection reset', 'temporary failure', 'timed out'))
+                if transient_download and not needs_human and download_retries < 2:
+                    retry_started = retry_started or time.monotonic()
+                    if time.monotonic() - retry_started < 120 and end - time.monotonic() > 15:
+                        download_retries += 1
+                        log(f'{phase} download failed; retry {download_retries}/2 on the same instance using cached partial files. Original deadline unchanged.')
+                        run_ssh(record, f'rm -f {base}.exit {base}.pid', timeout=20, logfile=LOG)
+                        started, offset = False, 1
+                        time.sleep(10)
+                        continue
+                raise RuntimeError(f'Linux {phase} process exited with code {status.decode("ascii", errors="replace")[:20]}; see {logfile.name}')
+        except (OSError, subprocess.TimeoutExpired, ConnectionError, SSHTransportError):
+            outage_started = outage_started or time.monotonic()
+            if not disconnected:
+                log(f'{phase}: SSH interrupted; remote setup continues. Retrying for up to two minutes within the original deadline; no new GPU will be rented.')
+            disconnected = True
+            if time.monotonic() - outage_started >= 120:
+                raise TimeoutError(f'{phase}: SSH reconnection failed continuously for two minutes; remote setup logs will be captured before cleanup')
+        time.sleep(5)
+    raise TimeoutError(f'{phase}: setup/reconnection exceeded the original rental deadline; see {logfile.name}')
+
+
+def retain_for_diagnosis(record: dict, error: Exception) -> bool:
+    """Hold genuine setup failures for repair; the independent watchdog bounds cost."""
+    if not record.get('deadline') or record.get('destroyed_at'):
+        return False
+    if isinstance(error, TimeoutError) and any(reason in str(error) for reason in ('two minutes', 'original rental deadline', 'SSH never accepted')):
+        return False
+    if record.get('status') not in {'preparing', 'syncing_models', 'starting', 'waiting_for_worker', 'transferring', 'ssh_connecting'}:
+        return False
+    if now() >= datetime.fromisoformat(record['deadline']):
+        return False
+    update(status='needs_attention', recovery_message='Instance retained for diagnosis and same-instance repair. Still billable; original automatic termination deadline unchanged.')
+    log('Setup needs attention; retaining this instance and logs for repair. No replacement rented. Original watchdog deadline remains active.')
+    return True
 
 
 def transfer(record: dict, local: Path, remote_name: str) -> None:
@@ -458,7 +549,9 @@ def destroy_instance(record: dict, reason: str) -> None:
     log(f"Instance {instance_id} destroyed: {reason}")
 
 
-def launch(record: dict) -> None:
+def launch(record: dict, *, resume_existing: bool = False) -> None:
+    if resume_existing and (record.get("status") != "needs_attention" or record.get("destroyed_at") or not record.get("instance_id") or record.get("worker_ready_at")):
+        raise RuntimeError("Only an existing retained setup failure can be resumed; no GPU was allocated")
     tunnel = None
     instance_created = False
     try:
@@ -470,97 +563,114 @@ def launch(record: dict) -> None:
         from backend.app.providers.base import OfferSearch
         from backend.app.providers.vast import VastProvider
         settings = get_settings()
-        maximum = min(float(record["max_price_per_hour"]), settings.max_gpu_price_per_hour)
-        from backend.app.rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS
-        candidates = VastProvider(vast_api_key()).search_offers(
-            OfferSearch(VAST_GPUS, MIN_CLOUD_VRAM_GB, maximum, 0.98, 150,
-                        # Vast ignores id= filters; narrow by the picking filters instead so the picked host is on the page
-                        extra_query=f"inet_down>={float(record.get('min_inet_down', 2000)):g} direct_port_count>=1 cuda_max_good>=13"))
-        requested_offer_id = int(record["offer_id"])
-        # If the picked listing vanished, only substitute the same GPU model (never a 4090 for a 5090).
-        picked = next((offer for offer in candidates if offer.id == requested_offer_id), None)
-        wanted_gpu = record.get("gpu_name") or (picked.gpu_name if picked else None)
-        if wanted_gpu:
-            candidates = [offer for offer in candidates if offer.gpu_name == wanted_gpu]
-        choices = ranked_rental_offers(candidates, requested_id=requested_offer_id,
-                                       max_price=maximum, max_download_cost=settings.max_download_cost_per_gb,
-                                       profile=record["profile"],
-                                       require_datacenter=not record.get("allow_non_datacenter", False),
-                                       min_inet_down=float(record.get("min_inet_down", 2000)))
-        from backend.app.rental_cost import vast_estimate
-        from backend.app.rental_preferences import offer_allowed, record_preferences
-        preferences = record_preferences(record)
-        eligible_count = len(choices)
-        choices = [offer for offer in choices if offer_allowed(
-            {"gpu": offer.gpu_name, "vram_gb": offer.vram_gb, "price_per_hour": offer.price_per_hour,
-             **vast_estimate(offer.raw, record["profile"])}, preferences)]
-        if record.get("exact_offer"):               # operator picked this host (e.g. for its bandwidth): no substitutes
-            choices = [offer for offer in choices if offer.id == requested_offer_id]
-        if not choices:
-            log(f"Offer recheck: {len(candidates)} candidates; {eligible_count} meet host safeguards; 0 meet confirmed GPU/VRAM/budget filters. GPU={preferences.gpu_class}, minimum VRAM={preferences.minimum_vram_gb} GB, maximum GPU rate=${maximum:g}/hr, budget=${preferences.max_budget_usd:g}, lifetime={preferences.max_minutes} min. Selected listing present={picked is not None}.")
-            raise RuntimeError("No equivalent compatible offer remains under the confirmed GPU, VRAM, hourly price and total budget filters. Refresh offers or review Settings > Rentals; no GPU was allocated. See the rental diagnostics for filter details.")
-        check_credit(choices[0].price_per_hour, record["profile"])
-        active = vast().show_instances() or []
-        total_rate = sum(float(item.get("dph_total") or 0) for item in active)
-        if len(active) >= settings.max_active_gpus:
-            raise RuntimeError("Fleet count or hourly budget limit would be exceeded")
-        selected = None
-        result = None
-        for choice in choices[:5]:
-            if total_rate + choice.price_per_hour > settings.max_total_price_per_hour:
-                continue
-            try:
-                attempted = vast().create_instance(
-                    id=choice.id, image=IMAGE, disk=150,
-                    label=f"tensor-master-h3-{choice.id}", ssh=True,
-                    direct=True, cancel_unavail=True,
-                    onstart_cmd=ssh_bootstrap_command())
-            except Exception as exc:
-                # Retry only an unavailable offer, not billing or invalid arguments.
-                if getattr(getattr(exc, "response", None), "status_code", None) == 400:
-                    error = exc.response.json()
-                    detail = str(error.get("msg") or error.get("error") or "Vast rejected rental")[:500]
-                    log(f"Vast rejected offer {choice.id}: {detail}")
-                    if "no_such_ask" in detail:
-                        continue
-                    raise RuntimeError(f"Vast rental rejected: {detail}") from exc
-                raise
-            if attempted.get("success") and attempted.get("new_contract"):
-                selected, result = choice, attempted
-                break
-            raise RuntimeError("Vast did not confirm the rental")
-        if selected is None or result is None:
-            raise RuntimeError("Equivalent Vast offers disappeared before a contract could be created")
-        if selected.id != requested_offer_id:
-            log(f"Using equivalent offer {selected.id} at ${selected.price_per_hour:.3f}/hour instead of expired offer {requested_offer_id}")
-            record = update(offer_id=selected.id, substituted_offer_id=requested_offer_id)
-        instance_id = int(result["new_contract"])
-        instance_created = True
-        started = now()
-        record = update(instance_id=instance_id, status="booting", rented_at=started.isoformat(),
-                        price_per_hour=selected.price_per_hour, gpu=selected.gpu_name,
-                        deadline=(started + timedelta(minutes=int(record["max_minutes"]))).isoformat())
-        log(f"Rented instance {instance_id} at ${selected.price_per_hour:.3f}/hour")
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        with LOG.open("a", encoding="utf-8") as output:
-            subprocess.Popen([sys.executable, str(ROOT / "runtime/h3/vast_watchdog.py"),
-                              str(instance_id), "--minutes", str(record["max_minutes"]),
-                              "--key-file", str(KEY), "--state-file", str(STATE)],
-                             stdin=subprocess.DEVNULL, stdout=output, stderr=output,
-                             creationflags=flags, close_fds=True)
+        if resume_existing:
+            if now() >= datetime.fromisoformat(record['deadline']):
+                raise RuntimeError('Original rental deadline has expired; cannot resume')
+            instance_id = int(record['instance_id'])
+            instance_created = True
+            record = update(status='reconnecting', error=None, recovery_message=None)
+            log('Resuming setup on the same retained instance; no create request, original deadline unchanged')
+        else:
+            maximum = min(float(record["max_price_per_hour"]), settings.max_gpu_price_per_hour)
+            from backend.app.rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS
+            candidates = VastProvider(vast_api_key()).search_offers(
+                OfferSearch(VAST_GPUS, MIN_CLOUD_VRAM_GB, maximum, 0.98, 150,
+                            # Vast ignores id= filters; narrow by the picking filters instead so the picked host is on the page
+                            extra_query=f"inet_down>={float(record.get('min_inet_down', 2000)):g} direct_port_count>=1 cuda_max_good>=13"))
+            requested_offer_id = int(record["offer_id"])
+            # If the picked listing vanished, only substitute the same GPU model (never a 4090 for a 5090).
+            picked = next((offer for offer in candidates if offer.id == requested_offer_id), None)
+            wanted_gpu = record.get("gpu_name") or (picked.gpu_name if picked else None)
+            if wanted_gpu:
+                candidates = [offer for offer in candidates if offer.gpu_name == wanted_gpu]
+            choices = ranked_rental_offers(candidates, requested_id=requested_offer_id,
+                                           max_price=maximum, max_download_cost=settings.max_download_cost_per_gb,
+                                           profile=record["profile"],
+                                           require_datacenter=not record.get("allow_non_datacenter", False),
+                                           min_inet_down=float(record.get("min_inet_down", 2000)))
+            from backend.app.rental_cost import vast_estimate
+            from backend.app.rental_preferences import offer_allowed, record_preferences
+            preferences = record_preferences(record)
+            eligible_count = len(choices)
+            choices = [offer for offer in choices if offer_allowed(
+                {"gpu": offer.gpu_name, "vram_gb": offer.vram_gb, "price_per_hour": offer.price_per_hour,
+                 **vast_estimate(offer.raw, record["profile"])}, preferences)]
+            if record.get("exact_offer"):               # operator picked this host (e.g. for its bandwidth): no substitutes
+                choices = [offer for offer in choices if offer.id == requested_offer_id]
+            if not choices:
+                log(f"Offer recheck: {len(candidates)} candidates; {eligible_count} meet host safeguards; 0 meet confirmed GPU/VRAM/budget filters. GPU={preferences.gpu_class}, minimum VRAM={preferences.minimum_vram_gb} GB, maximum GPU rate=${maximum:g}/hr, budget=${preferences.max_budget_usd:g}, lifetime={preferences.max_minutes} min. Selected listing present={picked is not None}.")
+                raise RuntimeError("No equivalent compatible offer remains under the confirmed GPU, VRAM, hourly price and total budget filters. Refresh offers or review Settings > Rentals; no GPU was allocated. See the rental diagnostics for filter details.")
+            check_credit(choices[0].price_per_hour, record["profile"])
+            active = vast().show_instances() or []
+            total_rate = sum(float(item.get("dph_total") or 0) for item in active)
+            if len(active) >= settings.max_active_gpus:
+                raise RuntimeError("Fleet count or hourly budget limit would be exceeded")
+            selected = None
+            result = None
+            for choice in choices[:5]:
+                if total_rate + choice.price_per_hour > settings.max_total_price_per_hour:
+                    continue
+                try:
+                    attempted = vast().create_instance(
+                        id=choice.id, image=IMAGE, disk=150,
+                        label=f"tensor-master-h3-{choice.id}", ssh=True,
+                        direct=True, cancel_unavail=True,
+                        onstart_cmd=ssh_bootstrap_command())
+                except Exception as exc:
+                    # Retry only an unavailable offer, not billing or invalid arguments.
+                    if getattr(getattr(exc, "response", None), "status_code", None) == 400:
+                        error = exc.response.json()
+                        detail = str(error.get("msg") or error.get("error") or "Vast rejected rental")[:500]
+                        log(f"Vast rejected offer {choice.id}: {detail}")
+                        if "no_such_ask" in detail:
+                            continue
+                        raise RuntimeError(f"Vast rental rejected: {detail}") from exc
+                    raise
+                if attempted.get("success") and attempted.get("new_contract"):
+                    selected, result = choice, attempted
+                    break
+                raise RuntimeError("Vast did not confirm the rental")
+            if selected is None or result is None:
+                raise RuntimeError("Equivalent Vast offers disappeared before a contract could be created")
+            if selected.id != requested_offer_id:
+                log(f"Using equivalent offer {selected.id} at ${selected.price_per_hour:.3f}/hour instead of expired offer {requested_offer_id}")
+                record = update(offer_id=selected.id, substituted_offer_id=requested_offer_id)
+            instance_id = int(result["new_contract"])
+            instance_created = True
+            started = now()
+            record = update(instance_id=instance_id, status="booting", rented_at=started.isoformat(),
+                            price_per_hour=selected.price_per_hour, gpu=selected.gpu_name,
+                            deadline=(started + timedelta(minutes=int(record["max_minutes"]))).isoformat())
+            log(f"Rented instance {instance_id} at ${selected.price_per_hour:.3f}/hour")
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            with LOG.open("a", encoding="utf-8") as output:
+                subprocess.Popen([sys.executable, str(ROOT / "runtime/h3/vast_watchdog.py"),
+                                  str(instance_id), "--minutes", str(record["max_minutes"]),
+                                  "--key-file", str(KEY), "--state-file", str(STATE)],
+                                 stdin=subprocess.DEVNULL, stdout=output, stderr=output,
+                                 creationflags=flags, close_fds=True)
         while now() < datetime.fromisoformat(record["deadline"]):
             instance = vast().show_instance(id=instance_id)
+            provider_status = (instance.get('actual_status') or instance.get('cur_state')) if instance else None
+            if provider_status in {'stopped', 'exited', 'offline'}:
+                raise RuntimeError(f"Provider reports instance {provider_status} before SSH startup")
+            if provider_status == 'loading':
+                update(status='waiting_for_container', provider_stage='Container image download / build')
+                time.sleep(10)
+                continue
             if instance and instance.get("ssh_host") and instance.get("ssh_port"):
                 record = update(status="transferring", ssh_host=instance["ssh_host"],
-                                ssh_port=int(instance["ssh_port"]), ssh_ready_at=now().isoformat())
+                                ssh_port=int(instance["ssh_port"]))
                 break
             time.sleep(10)
         else:
             raise TimeoutError("Rental did not reach SSH before the deadline")
         update(status="ssh_connecting")
-        for _ in range(36):
+        ssh_deadline = min(now() + timedelta(seconds=120), datetime.fromisoformat(record['deadline']))
+        while now() < ssh_deadline:
             try:
                 run_ssh(record, "true", timeout=20, logfile=LOG)
+                record = update(status='transferring', ssh_ready_at=now().isoformat())
                 break
             except (RuntimeError, subprocess.TimeoutExpired):
                 time.sleep(10)
@@ -578,11 +688,15 @@ def launch(record: dict) -> None:
         run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token",
                 timeout=60, logfile=LOG)
         provision_prompt_key(record)
+        if resume_existing:
+            run_ssh(record, 'for phase in prepare models; do base=/workspace/commander-$phase; '
+                    'if test -f "$base.exit" && test "$(cat "$base.exit")" != 0; '
+                    'then rm -f "$base.exit" "$base.pid"; fi; done', timeout=20, logfile=LOG)
         update(status="preparing")
-        run_ssh(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
+        run_remote_phase(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
                 logfile=phase_log("prepare"))
         update(status="syncing_models", runtime_ready_at=now().isoformat())
-        run_ssh(record, f"H3_PROFILE={record['profile']} bash /workspace/remote_sync.sh",
+        run_remote_phase(record, f"H3_PROFILE={record['profile']} bash /workspace/remote_sync.sh",
                 timeout=2700, logfile=phase_log("models"))
         update(status="starting", models_ready_at=now().isoformat())
         tunnel = start_tunnel(record)
@@ -659,6 +773,8 @@ def launch(record: dict) -> None:
                         except (OSError, RuntimeError, subprocess.TimeoutExpired):
                             pass
                     stage = "Failed after ready" if current.get("worker_ready_at") else "Setup failed"
+                    if retain_for_diagnosis(current, exc):
+                        return
                     destroy_instance(current, f"{stage}: {type(exc).__name__}: {str(exc)[:160]}")
                 else:
                     vast().destroy_instance(id=instance_id)
@@ -675,18 +791,18 @@ def launch(record: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("launch", "destroy"))
+    parser.add_argument("action", choices=("launch", "resume", "destroy"))
     parser.add_argument("--reason", default="Operator requested")
     parser.add_argument("--state-file")
     args = parser.parse_args()
     if args.state_file:
         configure_state(args.state_file)
-    if args.action == "launch":
+    if args.action in {"launch", "resume"}:
         sys.path.insert(0, str(ROOT))
         from backend.process_lock import process_lock
         with process_lock(STATE.with_suffix('.manager.lock')) as owned:
             if owned:
-                launch(read_state())
+                launch(read_state(), resume_existing=args.action == "resume")
     else:
         destroy_instance(read_state(), args.reason)
 

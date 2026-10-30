@@ -13,6 +13,13 @@
     banner.querySelector('strong').textContent=`Rental / worker needs attention${pending.length>1?' · '+pending.length+' alerts':''}`;
   };
   document.addEventListener('click',event=>{
+    const retry=event.target.closest('[data-resume-rental]');
+    if(retry){
+      retry.disabled=true;retry.textContent='Resuming same GPU…';
+      fetch(`/api/v1/cloud/resume/${encodeURIComponent(retry.dataset.resumeRental)}`,{method:'POST',credentials:'same-origin'})
+        .then(async response=>{if(!response.ok)throw new Error((await response.json()).detail||'Retry unavailable');retry.textContent='Resume requested · deadline unchanged';})
+        .catch(error=>{retry.textContent=error.message;retry.disabled=false;});
+    }
     const button=event.target.closest('[data-rental-diagnostics]');
     if(button){selected=button.dataset.rentalDiagnostics;$('#rental-log-stage').value='all';report=null;$('#rental-diagnostics-title').textContent=`Rental ${selected}`;$('#rental-diagnostics-log').textContent='Loading retained diagnostics…';dialog.showModal();void refresh();}
     if(event.target.closest('#ack-rental-alerts')) {

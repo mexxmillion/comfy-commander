@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=rental-diagnostics-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=rental-progress-recovery-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
     <script defer src="/static/generation-defaults.js?v=1"></script>
     <script defer src="/static/generator.js?v=consistent-canvas-defaults-20261029"></script>
     <script defer src="/static/llm-ui.js?v=1"></script>
-    <script defer src="/static/console.js?v=rental-diagnostics-20261029"></script>
-    <script defer src="/static/rental-diagnostics.js?v=1"></script>
+    <script defer src="/static/console.js?v=rental-progress-recovery-20261029"></script>
+    <script defer src="/static/rental-diagnostics.js?v=2"></script>
     <link rel="stylesheet" href="/static/generator.css?v=gallery-full-frame-20261029">
   </head>
   <body>
@@ -86,9 +86,10 @@
             <div class="rental-stats"><span>Rate<b>{% if rental.price_per_hour %}${{ "%.3f"|format(rental.price_per_hour) }}/hr{% else %}pending{% endif %}</b></span><span>Elapsed<b>{{ rental.elapsed_minutes|default(0) }} min</b></span><span>Est. cost<b>${{ "%.3f"|format(rental.estimated_cost|default(0)) }}</b></span><span>Ready time<b>{{ "%.1f"|format(rental.ready_seconds / 60) ~ ' min' if rental.ready_seconds is not none else '—' }}</b></span></div>
             {% if rental.error and not rental.failure %}<p class="danger">{{ rental.error }}</p>{% endif %}
             {% if rental.failure %}<p class="danger"><strong>Failed stage:</strong> {{ rental.failed_stage or 'offer / startup' }} · {{ rental.cleanup_status }}</p><p class="danger">{{ rental.failure_message }}</p>{% endif %}{% if rental.cleanup_explanation %}<p>{{ rental.cleanup_explanation }}</p>{% endif %}
-            {% if rental.worker_warning %}<p class="danger">{{ rental.worker_warning }}</p>{% endif %}
+            {% if rental.sync_progress %}{% set sync = rental.sync_progress %}<section class="model-sync-progress" aria-label="Model download progress"><strong>{{ sync.downloaded_gib }} / {{ sync.total_gib }} GiB · {{ sync.percent }}%</strong><progress max="100" value="{{ sync.percent }}" aria-label="Model bytes downloaded"></progress><small>{{ sync.files_ready }}/{{ sync.files_total }} files verified · {{ sync.stage|capitalize }} · {{ sync.file }}</small><small>{% if sync.speed_mbps %}{{ sync.speed_mbps }} MB/s · {% endif %}{% if sync.stage == 'verifying' %}Verifying model integrity{% elif sync.eta_minutes is not none %}Rough download ETA: ~{{ sync.eta_minutes }} min{% else %}Calculating download ETA…{% endif %} · worker startup follows</small></section>{% endif %}
+            {% if rental.recovery_message %}<p class="danger">{{ rental.recovery_message }}</p>{% endif %}{% if rental.provider_stage and rental.status == "waiting_for_container" %}<p>{{ rental.provider_stage }} · waiting for the provider; SSH is not ready yet.</p>{% endif %}{% if rental.worker_warning %}<p class="danger">{{ rental.worker_warning }}</p>{% endif %}
             <div class="cloud-actions">
-              <button type="button" data-rental-diagnostics="{{ rental.rental_id }}">Diagnostics &amp; logs</button>
+              <button type="button" data-rental-diagnostics="{{ rental.rental_id }}">Diagnostics &amp; logs</button>{% if rental.status == "needs_attention" and not rental.destroyed_at %}<button type="button" data-resume-rental="{{ rental.rental_id }}">Retry setup · same GPU</button>{% endif %}
               {% if rental.ssh_host and not rental.destroyed_at %}<button type="button" data-ssh-command="{{ rental.ssh_command }}">SSH</button><button type="button" data-copy-ssh="{{ rental.ssh_command }}">Copy SSH</button>{% endif %}
               {% if rental.instance_id and not rental.destroyed_at %}<button type="button" class="danger" data-destroy-rental="{{ rental.rental_id }}">Terminate</button>{% endif %}
               <a href="/api/v1/cloud/logs/manager?rental_id={{ rental.rental_id }}" target="_blank" rel="noopener">Lifecycle</a>
@@ -99,7 +100,7 @@
           {% if active_rentals %}<div class="rental-grid">{% for rental in active_rentals %}{{ rental_card(rental) }}{% endfor %}</div>
           {% elif not rental_history %}<p class="muted">No managed rentals yet. Rent one or several GPUs; each will appear here through startup, ready, and shutdown.</p>
           {% else %}<p class="muted">No active rentals.</p>{% endif %}
-          {% if rental_failures %}<details class="rental-failures" open><summary class="danger">Failed rentals · {{ rental_failures|length }} · records and logs retained</summary><div class="rental-grid">{% for rental in rental_failures %}{{ rental_card(rental) }}{% endfor %}</div></details>{% endif %}
+          {% if rental_failures %}<details class="rental-failures"><summary class="danger">Failed rentals · {{ rental_failures|length }} · records and logs retained</summary><div class="rental-grid">{% for rental in rental_failures %}{{ rental_card(rental) }}{% endfor %}</div></details>{% endif %}
           {% if rental_history %}{% set uncertain = rental_history|selectattr("status", "equalto", "creation_unknown")|list %}<details class="rental-history">
             <summary>Rental history · {{ rental_history|length }} ended · ${{ "%.2f"|format(rental_history|sum(attribute="estimated_cost")) }} est. spend{% if uncertain %} · <span class="danger">{{ uncertain|length }} creation unknown, verify in the provider console</span>{% endif %}</summary>
             <div class="rental-grid">{% for rental in rental_history %}{{ rental_card(rental) }}{% endfor %}</div>

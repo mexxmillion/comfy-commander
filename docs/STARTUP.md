@@ -104,3 +104,50 @@ weights. Startup waits for ComfyUI's loopback API to report a CUDA device before
 starting the worker, and the controller verifies the expected profile runtime.
 Setup failures retain their stage, error and logs; Commander explicitly reports
 when its cleanup terminated the instance. Price and lifetime safeguards remain active.
+
+
+During model sync the active rental shows transferred GiB, total profile size,
+files verified, the current file, measured transfer speed and a rough download
+ETA. The estimate starts after transfer samples arrive and excludes subsequent
+integrity verification and worker startup. Files count as ready only after their
+size/checksum checks pass. Cached or resumed bytes count toward completion.
+Failed-rental history starts collapsed and keeps your expansion choice during
+live refresh; new failure alerts and retained diagnostics remain available.
+
+
+Runtime installation and model sync run independently of the SSH connection,
+under a remote process lock. If the connection resets, Commander reconnects to
+the same instance for up to two minutes; it does not allocate a replacement.
+Transient model download failures receive at most two retries using partial
+cached files. Access/credential and integrity failures require diagnosis.
+A deterministic setup failure is retained as **Needs attention**, with logs and
+the original automatic termination deadline. It remains billable during that
+repair window; terminate it yourself if you do not want to keep it. The original
+price, budget and lifetime limits are never extended by recovery. Container image
+loading is distinct from SSH readiness, runtime setup, model sync and worker readiness.
+
+
+Change **Settings → Rentals → Maximum GPU price** and click **Validate & save
+limits** to update the hourly ceiling for new Vast.ai and RunPod rentals. This
+applies immediately and persists across restart. Existing rental records keep
+their confirmed rate, total budget and original deadline. The installation's
+fleet hourly/count and lifetime safeguards remain outer limits.
+
+Both providers require CUDA 13 or newer for the bundled CUDA 13 image. RunPod
+availability and creation use the same minimum CUDA, CPU, RAM, network and disk
+requirements. An exact CUDA 13.0 match would incorrectly exclude newer compatible
+hosts and report no capacity even when the general GPU catalogue shows stock.
+
+
+Use **Retry setup · same GPU** on a retained failure after reviewing its logs.
+This uploads the current supported setup and resumes the original instance;
+it cannot create another GPU or extend the deadline. Installed packages and
+model cache are retained. Package downloads use longer timeouts/retries, and
+setup can safely reuse the already checked-out pinned ComfyUI source.
+
+
+Hugging Face credentials are optional for public, ungated model downloads.
+Without a configured token workers download anonymously and retain revision,
+size and checksum verification. Gated/private files still require an authorized
+read token and any required access approval. Cached files are verified locally.
+The public worker does not require the private mobile extension status route.

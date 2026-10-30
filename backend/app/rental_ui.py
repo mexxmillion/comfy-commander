@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import math
 import re
 import sqlite3
 import subprocess
@@ -314,9 +315,40 @@ def require_admin(request: Request, *, mutation: bool = False) -> None:
 TERMINAL = {"destroyed", "failed", "creation_unknown"}
 
 
+def model_sync_progress(path: Path) -> dict | None:
+    logfile = path.with_name(path.stem + "-models.log")
+    if not logfile.is_file():
+        return None
+    with logfile.open('rb') as stream:
+        stream.seek(max(0, logfile.stat().st_size - 65536))
+        lines = stream.read().decode('utf-8', errors='replace').splitlines()
+    for line in reversed(lines):
+        try:
+            event = json.loads(line)
+            if event.get('event') != 'sync_progress':
+                continue
+            total, done = int(event['total_bytes']), int(event['bytes'])
+            if total <= 0 or not 0 <= done <= total:
+                continue
+            rate = float(event.get('bytes_per_second') or 0)
+            eta = event.get('eta_seconds')
+            return dict(percent=round(done / total * 100, 1),
+                        downloaded_gib=round(done / 1024**3, 2), total_gib=round(total / 1024**3, 2),
+                        speed_mbps=round(rate / 1e6, 1) if math.isfinite(rate) and rate > 0 else None,
+                        eta_minutes=math.ceil(float(eta) / 60) if eta is not None and math.isfinite(float(eta)) and float(eta) >= 0 else None,
+                        file=str(event.get('file', '')).replace('\\', '/').split('/')[-1][:160],
+                        stage=str(event.get('stage', 'downloading'))[:30],
+                        files_ready=max(0, int(event.get('files_ready', 0))),
+                        files_total=max(0, int(event.get('files_total', 0))))
+        except (ValueError, TypeError, KeyError, AttributeError):
+            continue
+    return None
+
+
 def _decorate(record: dict, path: Path) -> dict:
     record = dict(record)
     record.setdefault("rental_id", path.stem)
+    record['sync_progress'] = model_sync_progress(path) if record.get('status') == 'syncing_models' else None
     record["failure"] = bool(record.get("error") or record.get("status") in {"failed", "destroy_failed", "creation_unknown"}
                              or "failed" in str(record.get("destroy_reason", "")).lower())
     record["failure_message"] = record.get("error") or record.get("destroy_reason") or ""
@@ -708,6 +740,31 @@ async def destroy_one(rental_id: str, request: Request) -> dict:
     finally:
         log.close()
     return {"status": "destroy_requested", "rental_id": rental_id}
+
+
+@router.post('/resume/{rental_id}', status_code=202)
+async def resume_setup(rental_id: str, request: Request) -> dict:
+    _admin(request, mutation=True)
+    path = _state_path(rental_id)
+    record = json.loads(path.read_text(encoding='utf-8'))
+    if (record.get('status') != 'needs_attention' or record.get('destroyed_at')
+            or not record.get('instance_id') or record.get('worker_ready_at')
+            or datetime.now(UTC) >= datetime.fromisoformat(record['deadline'])):
+        raise HTTPException(409, 'Only a retained setup failure before its original deadline can be retried')
+    def prepare():
+        with BUILD_LOCK:
+            build_bundle()
+            validate_startup_scripts()
+    try:
+        await asyncio.to_thread(prepare)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    manager = ROOT / 'runtime/h3/runpod_worker.py' if record.get('provider') == 'runpod' else MANAGER
+    with (ROOT / 'state/managed-process.log').open('a', encoding='utf-8') as output:
+        subprocess.Popen([sys.executable, str(manager), 'resume', '--state-file', str(path)], cwd=ROOT,
+                         stdin=subprocess.DEVNULL, stdout=output, stderr=output, close_fds=True,
+                         creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    return dict(status='resume_requested', rental_id=rental_id, instance_id=record['instance_id'], deadline=record['deadline'])
 
 
 @router.post("/destroy-all", status_code=202)
