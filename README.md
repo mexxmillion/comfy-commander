@@ -3,7 +3,10 @@
 [![License: AGPL v3 or later](https://img.shields.io/badge/License-AGPL_v3_or_later-663399.svg)](LICENSE)
 [![Tests](https://github.com/mexxmillion/comfy-commander/actions/workflows/ci.yml/badge.svg)](https://github.com/mexxmillion/comfy-commander/actions/workflows/ci.yml)
 
-**Create on your own GPU. Scale to a worker fleet. Control it from your phone.**
+**Your ComfyUI workflows. Any device. GPU optional. Cloud scalable.**
+
+Run ComfyUI workflows from your phone, MacBook, laptop or PC. No local GPU
+required—connect your own or scale with cloud GPUs.
 
 Comfy Commander is a self-hosted workspace for ComfyUI image and video generation.
 One interface brings together prompts, references, a persistent gallery, the job
