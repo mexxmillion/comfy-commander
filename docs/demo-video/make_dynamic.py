@@ -1,6 +1,7 @@
 """Render the second competition cut with continuously animated compositions."""
 import math
 import subprocess
+import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import imageio_ffmpeg
@@ -39,11 +40,16 @@ def main():
     phone=Image.open(P.parent/'images/generate-phone.png').convert('RGB')
     setup=Image.open(P/'captures/onboarding.png').convert('RGB')
     hero=Image.open(P/'creative-studio.png').convert('RGB')
-    ends=[0,12,27,46,65,83,101,114]
-    out=P/'comfy-commander-dynamic-v2.mp4'
+    short='--short' in sys.argv
+    total=55 if short else 114
+    ends=[0,5,15,23,33,43,50,55] if short else [0,12,27,46,65,83,101,114]
+    out=P/('comfy-commander-55sec.mp4' if short else 'comfy-commander-dynamic-v2.mp4')
     cmd=[FF,'-y','-f','rawvideo','-vcodec','rawvideo','-pix_fmt','rgb24','-s',f'{W}x{H}','-r',str(FPS),'-i','-', '-i',str(P/'comfy-commander-competition-demo.mp4'),'-map','0:v','-map','1:a','-vf','scale=1920:1080','-c:v','libx264','-preset','fast','-crf','19','-c:a','aac','-ar','48000','-b:a','192k','-t','114','-movflags','+faststart',str(out)]
-    proc=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=open(P/'dynamic-render.log','w'))
-    for frame in range(114*FPS):
+    if short:
+        cmd[cmd.index(str(P/'comfy-commander-competition-demo.mp4'))]=str(P/'short-soundtrack.m4a')
+        cmd[cmd.index('-t')+1]=str(total)
+    proc=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=open(P/('short-render.log' if short else 'dynamic-render.log'),'w'))
+    for frame in range(total*FPS):
         t=frame/FPS;scene=max(i for i in range(7) if t>=ends[i]);s=t-ends[scene];duration=ends[scene+1]-ends[scene]
         im=Image.new('RGB',(W,H),'#0b0e16');d=ImageDraw.Draw(im)
         for x in range(-80,1400,80):
@@ -63,11 +69,11 @@ def main():
             txt(d,(68,465),'ComfyUI power.',36,WHITE,True);txt(d,(68,512),'Ready for your next idea.',31,Y)
         elif scene==1:
             txt(d,(60,90),'YOUR STUDIO. EVERYWHERE.',45,WHITE,True)
-            if s<5:
+            if s<(2.5 if short else 5):
                 image_card(im,setup,(60,185+int(35*(1-ease(s))),1160,440))
                 txt(d,(65,650),'Guided setup  /  Bring your keys  /  Choose your compute',23,Y)
             else:
-                q=ease(s-5);image_card(im,desktop,(55-int(15*math.sin(s*.3)),210,900,440))
+                q=ease(s-(2.5 if short else 5));image_card(im,desktop,(55-int(15*math.sin(s*.3)),210,900,440))
                 image_card(im,phone,(990+int((1-q)*250),155+int(math.sin(s)*8),235,490))
                 for i,word in enumerate(['DESKTOP','REMOTE','PHONE']):
                     txt(d,(70+i*310,155),word,20,Y if int(s)%3==i else GRAY,True)
@@ -83,7 +89,7 @@ def main():
         elif scene==3:
             txt(d,(60,85),'ELASTIC COMPUTE',49,WHITE,True)
             txt(d,(62,150),'Capacity at your fingertips.',31,Y)
-            count=min(12,1+int(s*1.2))
+            count=min(12,1+int(s*(2 if short else 1.2)))
             for i in range(12):
                 x=65+(i%6)*200;y=280+(i//6)*165;active=i<count
                 scale=ease(s-i*.3);off=int(45*(1-scale))
@@ -98,7 +104,7 @@ def main():
             for i,(h,sub) in enumerate(labels):
                 x=65+(i%2)*295;y=200+(i//2)*170;off=int((1-ease(s-i*.25))*80)
                 card(d,(x-off,y,x+270-off,y+140),h,sub,i==int(s/3)%4)
-            if s>6:
+            if s>(3 if short else 6):
                 d.rounded_rectangle((65,590,1215,675),20,fill='#222b20',outline=Y,width=2)
                 for i,h in enumerate(['SOURCE','SAM 3','TARGET GUIDE','H3 RESULT']):
                     txt(d,(95+i*285,619),h,22,Y,True)
@@ -121,14 +127,14 @@ def main():
             txt(d,(70,585),'github.com/mexxmillion/comfy-commander',25,WHITE)
             txt(d,(70,635),'#OpenSourceHiggsfield   /   AGPL-3.0',22,Y)
         d=ImageDraw.Draw(im)
-        d.rectangle((0,H-5,int(W*t/114),H),fill=Y)
+        d.rectangle((0,H-5,int(W*t/total),H),fill=Y)
         txt(d,(60,30),'CC  /  COMFY COMMANDER',15,Y,True)
         txt(d,(1050,30),f'{scene+1:02d}  /  07',15,GRAY)
         # Fade each chapter from black, with a short final fade.
-        fade=min(1,s/.35,(114-t)/.6)
+        fade=min(1,s/.25,(total-t)/.6)
         if fade<1:im=Image.blend(Image.new('RGB',(W,H),'#080b12'),im,max(0,fade))
-        if frame% (FPS*10)==0:print(f'{t:.0f}/114 seconds',flush=True)
-        if frame in [FPS*5,FPS*20,FPS*37,FPS*55,FPS*75,FPS*92,FPS*108]:im.save(P/f'v2-preview-{int(t):03d}.jpg')
+        if frame% (FPS*10)==0:print(f'{t:.0f}/{total} seconds',flush=True)
+        if not short and frame in [FPS*5,FPS*20,FPS*37,FPS*55,FPS*75,FPS*92,FPS*108]:im.save(P/f'v2-preview-{int(t):03d}.jpg')
         proc.stdin.write(im.tobytes())
     proc.stdin.close()
     if proc.wait():raise SystemExit('ffmpeg failed; see dynamic-render.log')

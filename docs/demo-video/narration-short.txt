@@ -1,0 +1,13 @@
+Meet Comfy Commander by Tensor Master. ComfyUI power, ready wherever inspiration strikes.
+
+Create on your desktop, or open your private studio from your phone. Guided setup connects your keys, compute, and curated profiles.
+
+Every generation becomes a managed job. Queue it, prioritize it, track progress, and recreate it with a new direction.
+
+Start with one GPU. Scale across local machines, RunPod, or Vast, with capacity and price ceilings you control.
+
+Create with MiniMax H3, Fast H3, Qwen Image, and Turbo presets. Character replacement brings SAM three tracking and H3 together.
+
+Want an agent to help? Connect Codex through MCP to prepare jobs and monitor your studio.
+
+From one idea to a whole shot list. Creativity first. Scalable compute at your fingertips.

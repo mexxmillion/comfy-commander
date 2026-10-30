@@ -1,5 +1,11 @@
 # Competition demo video
 
+## 55-second cut
+
+`comfy-commander-55sec.mp4` is the condensed dynamic explainer, with a rewritten narration (`narration-short.txt`), seven animated chapters, product screenshots, concept imagery and music. Export: 1920×1080, 24 fps, H.264/AAC, exactly 55 seconds.
+
+To rebuild, generate `narration-short.mp3` using the Andrew multilingual neural voice at +5% rate, mix it with the original generated music into `short-soundtrack.m4a` (55 seconds, -16 LUFS target), then run `python make_dynamic.py --short`.
+
 ## Dynamic second cut
 
 `comfy-commander-dynamic-v2.mp4` rebuilds the explainer with continuous motion: particle/grid backgrounds, eased title and panel entrances, animated dispatcher packets, GPU activation, moving UI compositions and chapter fades. It uses the first cut's narration/music. Duration is 1:54; output is 1920×1080 at 24 fps (graphics rendered at 1280×720 and scaled for delivery).
