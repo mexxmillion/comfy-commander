@@ -9,10 +9,26 @@ Run ComfyUI workflows from your phone, MacBook, laptop or PC. No local GPU
 required—connect your own GPUs or rent cloud GPUs directly through RunPod or
 Vast.ai, with prices and spending limits you control.
 
-Comfy Commander is a self-hosted workspace for ComfyUI image and video generation.
-One interface brings together prompts, references, a persistent gallery, the job
-queue, local workers and rented GPUs. It is an independent community project,
-not an official Comfy.org product. Tensor Master remains the execution-engine name.
+ComfyUI is a powerful creative tool. We wanted an easy way to use that power
+from any device—from a phone on the go to a laptop at your desk—and a way to
+keep more than one GPU working when a project grows.
+
+A standard ComfyUI instance processes its queue one job at a time. Having three
+or four GPUs available does not automatically spread that queue across them.
+Comfy Commander adds a dispatcher that routes jobs to compatible ComfyUI workers,
+so multiple jobs can run in parallel across your local and rented GPUs.
+
+GPUs are expensive to own, and creative demand changes from day to day. Rent
+cloud GPUs when you need them, choose how much to spend, and scale capacity with
+your ideas or production workload—from a single experiment to a larger shot list.
+
+Comfy Commander brings this together in a self-hosted workspace for image and
+video generation: prompts, references, a persistent gallery, managed jobs and
+GPU workers in one interface. Easy for everyday creation, with MCP and API access
+for agent-driven production.
+
+Comfy Commander is an independent community project, not an official Comfy.org
+product. Tensor Master remains the execution-engine name.
 
 ![Desktop video workspace](docs/images/generate-desktop.png)
 
