@@ -142,6 +142,8 @@ async def process_video(payload: VideoRequest, request: Request):
             "preparation": {
                 "source": payload.file,
                 "preview": preview,
+                **({"source_trim": payload.trim} if payload.trim else {}),
+                **({"source_crop": payload.crop} if payload.crop else {}),
                 **{k: settings[k] for k in ("width", "height", "frame_count")},
             },
         },
