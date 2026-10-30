@@ -437,7 +437,8 @@ function renderReferences() {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.setAttribute("aria-label", `Remove ${file.name}`);
-    remove.textContent = "×";
+    remove.className = "remove-reference";
+    remove.textContent = "× Remove";
     remove.addEventListener("click", () => {
       if (file.saved) state.savedReferences.splice(index, 1);
       else state.files.splice(index - state.savedReferences.length, 1);
