@@ -15,6 +15,10 @@ These commands do not need a PowerShell execution-policy change. The older
 `tools/first_run.ps1` remains an installation helper; do not rerun installation
 just to reconnect after a reboot.
 
+For a separate empty checkout or a recorded first run, follow the
+[clean-install recording guide](CLEAN_INSTALL_RECORDING.md). It explains browser
+and credential isolation without wiping an existing installation.
+
 ## Daily startup
 
 1. Double-click **Start Commander.cmd** in the repository folder.

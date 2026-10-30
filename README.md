@@ -21,6 +21,8 @@ not an official Comfy.org product. Tensor Master remains the execution-engine na
 | **GPU rentals** | Search Vast.ai / RunPod, review an offer and selected model profile, then explicitly confirm price, budget and lifetime. Cloud-only operation needs no local ComfyUI. |
 | **Phone-ready UI** | The same responsive workspace through private Tailscale HTTPS. Setup shows the complete phone URL, including its port, with Copy. |
 | **Image and video creation** | Qwen Image 2.1; H3 References, Start/End Frames and Motion control; Ref2V INT8, Singularity and FastH3 Omni profiles. |
+| **Reference preprocessing** | Isolate a subject or garment, preview structure/depth, and crop, resize or trim video before generation. Preview, Save, then reuse the prepared reference. |
+| **Creative Engine** | Turn one brief into distinct concepts, review the variations, then queue a batch with traceable prompts and settings. |
 | **Motion and character replacement** | One character image plus one source video; approved SAM3 tracking → target-only inversion → H3, with audio lock and retained guide/mask evidence. Optional Character Swap v1.5 LoRA is off by default. |
 | **Your media stays organized** | Controller-owned inputs, gallery/database and returned cloud outputs; full-frame thumbnails, playback, edit/rerun and traceable job/settings data. |
 | **Profile-based setup** | Check ComfyUI, nodes and models; download only the chosen model set. Windows can prepare a separate managed runtime after a source/dependency review. |
@@ -30,6 +32,12 @@ not an official Comfy.org product. Tensor Master remains the execution-engine na
 The supported public scope is Qwen Image 2.1, MiniMax H3 Ref2VA, Singularity,
 FastH3 and SAM3 replacement. Model licenses apply separately. Private identities,
 credentials and model weights are not included in Git.
+
+Commander drives ComfyUI through its API: a worker submits an approved workflow
+with `POST /prompt`, follows progress through `/ws` and `/history`, and returns
+media to the gallery. A replacement can chain SAM3 tracking, masking/inversion
+and H3 in one workflow submission. ComfyUI remains behind the worker; using the
+phone does not expose its API publicly.
 
 ## Install once
 
@@ -57,6 +65,8 @@ available from the gear after onboarding.
 - **Cloud:** connect a provider key through Connections. That human action also
   prepares the dedicated worker SSH pair; Vast registers only its public half.
   Choose an offer in Dispatcher → Rentals when you actually want paid capacity.
+- **Model access:** public, ungated weights can download without an HF token.
+  Gated/private files require your authorized read token and any access approval.
 - **Phone:** follow Setup / Settings → Phone access, install Tailscale on both
   devices, and use the copied private HTTPS URL. [Phone guide](docs/PHONE_ACCESS.md).
 - **AI:** optional. Rendering and deterministic workflow validation do not need
@@ -97,8 +107,8 @@ FastH3 Omni uses VSA by default. Advanced controls retain seed, model, LoRAs and
 SLA/VSA/SOL selection. Recipes preserve explicit selections.
 
 Motion control defaults to five seconds, portrait 9:16, 0.5 MP, Normal/eight
-steps and audio lock. Reference processing previews CPU preparation before Save;
-replacement graphs resize/resample the source to the requested output window.
+steps and audio lock. Reference processing previews isolation/depth before Save; video preparation
+crops, resizes and resamples the source to the requested output window.
 A completed render still needs visual/audio QC, including its SAM3 evidence.
 
 Tested short local workflows run on RTX 5070 Ti / RTX 5080-class **16 GB GPUs**
@@ -115,6 +125,7 @@ unknown workflow dependencies remain unresolved until reviewed.
 
 | Guide | Covers |
 |---|---|
+| [Clean install & recording](docs/CLEAN_INSTALL_RECORDING.md) | Empty checkout, isolated credentials, onboarding and a truthful end-to-end recording checklist |
 | [Daily startup](docs/STARTUP.md) | Restarting, local worker reconnection, two GPUs, configuration and logs |
 | [Local GPU setup](docs/local-setup.md) | ComfyUI, pinned nodes, model downloads and managed Windows preparation |
 | [Optional LLM](docs/LLM.md) | OpenRouter / compatible endpoints, vision, native media, JSON and context sizing |
@@ -138,16 +149,21 @@ MCP. The stdio test initializes the real MCP subprocess, discovers tools, reads
 status/profiles/resources and confirms submission is disabled without creating
 jobs. LLM integration tests use mocked transports, not billable completions.
 
-This is a community preview. Short local H3 runs and checkpoint reconnection have
-been exercised. **A real fresh Windows GPU installation and full cloud
-boot/render still need end-to-end user testing.** An authorized rental reached
-runtime preparation, then the host reboot interrupted it; the test instance was
-destroyed. Automated tests are not a substitute for driver/wheel compatibility
-checks or visual acceptance of generated media.
+This is a community preview. Short local H3 runs, checkpoint reconnection and
+real user-submitted jobs on both Vast.ai and RunPod have returned outputs.
+A capped recovery test retained a package-download failure, resumed the same
+instance and recovered an SSH interruption. A slow host still failed to finish
+model sync within its original 30-minute limit; startup time is not guaranteed.
+
+**A completely fresh Windows GPU/runtime installation and anonymous cold model
+downloads still need recorded end-to-end testing.** Automated tests and a completed
+job do not establish driver/wheel compatibility or visual/audio acceptance.
 
 For a true fresh-install test, clone into a new folder without copying `.env`,
-`state/`, `.venv`, credentials, gallery data or model weights from another
-installation. Do not wipe a working installation to test a new checkout.
+`state/`, `.venv`, credentials, gallery data or model weights. A machine-wide
+credential environment variable or an old browser draft can otherwise make a
+new checkout look configured. The [clean-install recording guide](docs/CLEAN_INSTALL_RECORDING.md)
+includes an optional isolated session helper. Keep the working installation intact.
 
 ## Project and license
 
