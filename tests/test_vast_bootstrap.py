@@ -51,11 +51,11 @@ def test_vast_bootstrap_reaches_model_token_transfer_with_settings_object(monkey
         raise StopBeforeRemoteInstall
     monkeypatch.setattr(worker, "transfer_secret", transfer)
     monkeypatch.setattr(worker, "destroy_instance", lambda *a: state.update(status="destroyed"))
-    with pytest.raises(StopBeforeRemoteInstall):
-        worker.launch(state)
+    worker.launch(state)
     assert reads == [("huggingface", configured.huggingface_token_file)]
     assert transfers == [("isolated-token-fixture", "hf_read.txt")]
-    assert state["status"] == "destroyed"
+    assert state["status"] == "needs_attention"
+    assert not state.get("destroyed_at")
 
 
 def test_script_transfer_normalizes_windows_line_endings(monkeypatch, tmp_path):

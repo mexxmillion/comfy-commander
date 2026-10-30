@@ -274,6 +274,10 @@ def ssh_arguments(record: dict) -> list[str]:
             "-o", "ServerAliveInterval=30", f"root@{record['ssh_host']}"]
 
 
+class SSHTransportError(RuntimeError):
+    pass
+
+
 def run_ssh(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     with logfile.open("a", encoding="utf-8") as output:
@@ -281,11 +285,98 @@ def run_ssh(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
                                 stderr=subprocess.STDOUT, timeout=timeout,
                                 creationflags=flags, check=False)
     if result.returncode:
+        if result.returncode == 255:
+            raise SSHTransportError(f'SSH connection interrupted; see {logfile.name}')
         tail = logfile.read_text(encoding="utf-8", errors="replace")[-4000:]
         if "pipefail" in tail and "invalid option name" in tail:
             raise RuntimeError("Commander startup script has Windows line endings; Linux rejected pipefail. "
                                f"Deployment bug; see {logfile.name}")
         raise RuntimeError(f"Remote {command.split()[0]} failed; see {logfile.name}")
+
+
+def run_remote_phase(record: dict, command: str, *, timeout: int, logfile: Path) -> None:
+    """Keep setup alive across SSH resets; reconnect to the same bounded instance."""
+    phase = 'models' if logfile == phase_log('models') else 'prepare'
+    base = f'/workspace/commander-{phase}'
+    # flock prevents duplicate setup processes if the start acknowledgement is lost.
+    runner = (f'echo $$ > {base}.pid; {command} > {base}.log 2>&1; '
+              f'code=$?; printf "%s\\n" "$code" > {base}.exit.tmp; '
+              f'mv {base}.exit.tmp {base}.exit')
+    start = (f'command -v flock >/dev/null || exit 78; '
+             f'if test -f {base}.exit || (test -f {base}.pid && kill -0 "$(cat {base}.pid)" 2>/dev/null); '
+             f'then :; else nohup flock -n {base}.lock bash -c {shlex.quote(runner)} '
+             f'</dev/null >/dev/null 2>&1 & fi')
+    end = min(time.monotonic() + timeout,
+              time.monotonic() + max(0, (datetime.fromisoformat(record['deadline']) - now()).total_seconds()))
+    started, offset, disconnected = False, 1, False
+    outage_started = None
+    download_retries, retry_started = 0, None
+    while time.monotonic() < end:
+        if read_state().get('destroyed_at'):
+            raise RuntimeError('Rental terminated while setup was in progress')
+        try:
+            if not started:
+                run_ssh(record, start, timeout=20, logfile=LOG)
+                started = True
+            poll = (f'if test -f {base}.log; then tail -c +{offset} {base}.log; fi; '
+                    f'printf "\\n__COMMANDER_EXIT__"; '
+                    f'if test -f {base}.exit; then cat {base}.exit; else echo RUNNING; fi')
+            result = subprocess.run(['ssh', *ssh_arguments(record), poll], capture_output=True,
+                                    timeout=20, check=False,
+                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            if result.returncode:
+                raise ConnectionError('SSH transport unavailable')
+            payload, marker, status = result.stdout.rpartition(b'\n__COMMANDER_EXIT__')
+            if not marker:
+                raise ConnectionError('Incomplete setup status response')
+            if payload:
+                with logfile.open('ab') as output:
+                    output.write(payload)
+                offset += len(payload)
+            if disconnected:
+                log(f'{phase}: SSH reconnected; continuing on the same instance')
+                disconnected = False
+            outage_started = None
+            status = status.strip()
+            if status == b'0':
+                return
+            if status != b'RUNNING':
+                evidence = logfile.read_text(encoding='utf-8', errors='replace')[-8000:].lower()
+                needs_human = any(reason in evidence for reason in ('401', '403', 'gated repo', 'checksum', 'did not match the lock'))
+                if phase == 'models' and not needs_human and download_retries < 2:
+                    retry_started = retry_started or time.monotonic()
+                    if time.monotonic() - retry_started < 120 and end - time.monotonic() > 15:
+                        download_retries += 1
+                        log(f'Model download failed; retry {download_retries}/2 on the same instance using cached partial files. Original deadline unchanged.')
+                        run_ssh(record, f'rm -f {base}.exit {base}.pid', timeout=20, logfile=LOG)
+                        started, offset = False, 1
+                        time.sleep(10)
+                        continue
+                raise RuntimeError(f'Linux {phase} process exited with code {status.decode("ascii", errors="replace")[:20]}; see {logfile.name}')
+        except (OSError, subprocess.TimeoutExpired, ConnectionError, SSHTransportError):
+            outage_started = outage_started or time.monotonic()
+            if not disconnected:
+                log(f'{phase}: SSH interrupted; remote setup continues. Retrying for up to two minutes within the original deadline; no new GPU will be rented.')
+            disconnected = True
+            if time.monotonic() - outage_started >= 120:
+                raise TimeoutError(f'{phase}: SSH reconnection failed continuously for two minutes; remote setup logs will be captured before cleanup')
+        time.sleep(5)
+    raise TimeoutError(f'{phase}: setup/reconnection exceeded the original rental deadline; see {logfile.name}')
+
+
+def retain_for_diagnosis(record: dict, error: Exception) -> bool:
+    """Hold genuine setup failures for repair; the independent watchdog bounds cost."""
+    if not record.get('deadline') or record.get('destroyed_at'):
+        return False
+    if isinstance(error, TimeoutError) and any(reason in str(error) for reason in ('two minutes', 'original rental deadline', 'SSH never accepted')):
+        return False
+    if record.get('status') not in {'preparing', 'syncing_models', 'starting', 'waiting_for_worker', 'transferring', 'ssh_connecting'}:
+        return False
+    if now() >= datetime.fromisoformat(record['deadline']):
+        return False
+    update(status='needs_attention', recovery_message='Instance retained for diagnosis and same-instance repair. Still billable; original automatic termination deadline unchanged.')
+    log('Setup needs attention; retaining this instance and logs for repair. No replacement rented. Original watchdog deadline remains active.')
+    return True
 
 
 def transfer(record: dict, local: Path, remote_name: str) -> None:
@@ -550,17 +641,26 @@ def launch(record: dict) -> None:
                              creationflags=flags, close_fds=True)
         while now() < datetime.fromisoformat(record["deadline"]):
             instance = vast().show_instance(id=instance_id)
+            provider_status = (instance.get('actual_status') or instance.get('cur_state')) if instance else None
+            if provider_status in {'stopped', 'exited', 'offline'}:
+                raise RuntimeError(f"Provider reports instance {provider_status} before SSH startup")
+            if provider_status == 'loading':
+                update(status='waiting_for_container', provider_stage='Container image download / build')
+                time.sleep(10)
+                continue
             if instance and instance.get("ssh_host") and instance.get("ssh_port"):
                 record = update(status="transferring", ssh_host=instance["ssh_host"],
-                                ssh_port=int(instance["ssh_port"]), ssh_ready_at=now().isoformat())
+                                ssh_port=int(instance["ssh_port"]))
                 break
             time.sleep(10)
         else:
             raise TimeoutError("Rental did not reach SSH before the deadline")
         update(status="ssh_connecting")
-        for _ in range(36):
+        ssh_deadline = min(now() + timedelta(seconds=120), datetime.fromisoformat(record['deadline']))
+        while now() < ssh_deadline:
             try:
                 run_ssh(record, "true", timeout=20, logfile=LOG)
+                record = update(status='transferring', ssh_ready_at=now().isoformat())
                 break
             except (RuntimeError, subprocess.TimeoutExpired):
                 time.sleep(10)
@@ -579,10 +679,10 @@ def launch(record: dict) -> None:
                 timeout=60, logfile=LOG)
         provision_prompt_key(record)
         update(status="preparing")
-        run_ssh(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
+        run_remote_phase(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
                 logfile=phase_log("prepare"))
         update(status="syncing_models", runtime_ready_at=now().isoformat())
-        run_ssh(record, f"H3_PROFILE={record['profile']} bash /workspace/remote_sync.sh",
+        run_remote_phase(record, f"H3_PROFILE={record['profile']} bash /workspace/remote_sync.sh",
                 timeout=2700, logfile=phase_log("models"))
         update(status="starting", models_ready_at=now().isoformat())
         tunnel = start_tunnel(record)
@@ -659,6 +759,8 @@ def launch(record: dict) -> None:
                         except (OSError, RuntimeError, subprocess.TimeoutExpired):
                             pass
                     stage = "Failed after ready" if current.get("worker_ready_at") else "Setup failed"
+                    if retain_for_diagnosis(current, exc):
+                        return
                     destroy_instance(current, f"{stage}: {type(exc).__name__}: {str(exc)[:160]}")
                 else:
                     vast().destroy_instance(id=instance_id)

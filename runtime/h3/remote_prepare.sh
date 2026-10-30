@@ -13,7 +13,10 @@ mkdir -p /workspace/h3-cloud-unpacked /opt/h3-runtime
 tar -xzf /workspace/h3-cloud-runtime.tar.gz -C /workspace/h3-cloud-unpacked
 cp -a /workspace/h3-cloud-unpacked/h3-runtime/. /opt/h3-runtime/
 COMFYUI_REF=$(/opt/h3-venv/bin/python -c 'import json; print(json.load(open("/opt/h3-runtime/local-runtime.json"))["comfyui_revision"])')
-git clone --filter=blob:none https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI
+if [[ ! -d /opt/ComfyUI/.git ]]; then
+  git clone --filter=blob:none https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI
+fi
+[[ "$(git -C /opt/ComfyUI remote get-url origin)" == https://github.com/comfyanonymous/ComfyUI.git ]]
 git -C /opt/ComfyUI checkout "$COMFYUI_REF"
 cp -a /workspace/h3-cloud-unpacked/comfy-source/. /opt/ComfyUI/
 cp -a /workspace/h3-cloud-unpacked/custom_nodes/. /opt/ComfyUI/custom_nodes/

@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=rental-diagnostics-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=rental-progress-recovery-20261029">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
     <script defer src="/static/generation-defaults.js?v=1"></script>
     <script defer src="/static/generator.js?v=consistent-canvas-defaults-20261029"></script>
     <script defer src="/static/llm-ui.js?v=1"></script>
-    <script defer src="/static/console.js?v=rental-diagnostics-20261029"></script>
+    <script defer src="/static/console.js?v=rental-progress-recovery-20261029"></script>
     <script defer src="/static/rental-diagnostics.js?v=1"></script>
     <link rel="stylesheet" href="/static/generator.css?v=gallery-full-frame-20261029">
   </head>
@@ -87,7 +87,7 @@
             {% if rental.error and not rental.failure %}<p class="danger">{{ rental.error }}</p>{% endif %}
             {% if rental.failure %}<p class="danger"><strong>Failed stage:</strong> {{ rental.failed_stage or 'offer / startup' }} · {{ rental.cleanup_status }}</p><p class="danger">{{ rental.failure_message }}</p>{% endif %}{% if rental.cleanup_explanation %}<p>{{ rental.cleanup_explanation }}</p>{% endif %}
             {% if rental.sync_progress %}{% set sync = rental.sync_progress %}<section class="model-sync-progress" aria-label="Model download progress"><strong>{{ sync.downloaded_gib }} / {{ sync.total_gib }} GiB · {{ sync.percent }}%</strong><progress max="100" value="{{ sync.percent }}" aria-label="Model bytes downloaded"></progress><small>{{ sync.files_ready }}/{{ sync.files_total }} files verified · {{ sync.stage|capitalize }} · {{ sync.file }}</small><small>{% if sync.speed_mbps %}{{ sync.speed_mbps }} MB/s · {% endif %}{% if sync.stage == 'verifying' %}Verifying model integrity{% elif sync.eta_minutes is not none %}Rough download ETA: ~{{ sync.eta_minutes }} min{% else %}Calculating download ETA…{% endif %} · worker startup follows</small></section>{% endif %}
-            {% if rental.worker_warning %}<p class="danger">{{ rental.worker_warning }}</p>{% endif %}
+            {% if rental.recovery_message %}<p class="danger">{{ rental.recovery_message }}</p>{% endif %}{% if rental.provider_stage and rental.status == "waiting_for_container" %}<p>{{ rental.provider_stage }} · waiting for the provider; SSH is not ready yet.</p>{% endif %}{% if rental.worker_warning %}<p class="danger">{{ rental.worker_warning }}</p>{% endif %}
             <div class="cloud-actions">
               <button type="button" data-rental-diagnostics="{{ rental.rental_id }}">Diagnostics &amp; logs</button>
               {% if rental.ssh_host and not rental.destroyed_at %}<button type="button" data-ssh-command="{{ rental.ssh_command }}">SSH</button><button type="button" data-copy-ssh="{{ rental.ssh_command }}">Copy SSH</button>{% endif %}

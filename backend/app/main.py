@@ -679,7 +679,7 @@ async def dashboard(request: Request, store: QueueStore = STORE) -> Response:
                    for worker in state["workers"]):
             state["metrics"]["burn_rate"] += float(managed.get("price_per_hour") or 0)
     # Ended rentals fold into a collapsed history so they cannot crowd live capacity.
-    rental_failures = [item for item in managed_rentals if item.get("failure")]
+    rental_failures = [item for item in managed_rentals if item.get("failure") and item not in active_rentals]
     rental_attention = [item for item in managed_rentals if item.get("failure") or item.get("worker_warning")]
     rental_history = [item for item in managed_rentals if item not in active_rentals and not item.get("failure")]
     for rental in managed_rentals:

@@ -113,3 +113,15 @@ integrity verification and worker startup. Files count as ready only after their
 size/checksum checks pass. Cached or resumed bytes count toward completion.
 Failed-rental history starts collapsed and keeps your expansion choice during
 live refresh; new failure alerts and retained diagnostics remain available.
+
+
+Runtime installation and model sync run independently of the SSH connection,
+under a remote process lock. If the connection resets, Commander reconnects to
+the same instance for up to two minutes; it does not allocate a replacement.
+Transient model download failures receive at most two retries using partial
+cached files. Access/credential and integrity failures require diagnosis.
+A deterministic setup failure is retained as **Needs attention**, with logs and
+the original automatic termination deadline. It remains billable during that
+repair window; terminate it yourself if you do not want to keep it. The original
+price, budget and lifetime limits are never extended by recovery. Container image
+loading is distinct from SSH readiness, runtime setup, model sync and worker readiness.

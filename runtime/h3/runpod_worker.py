@@ -150,10 +150,10 @@ def launch(record):
         shared.run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token", timeout=60, logfile=shared.LOG)
         shared.provision_prompt_key(record)
         shared.update(status="preparing")
-        shared.run_ssh(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
+        shared.run_remote_phase(record, f"H3_PROFILE={shlex.quote(record['profile'])} bash /workspace/remote_prepare.sh", timeout=1800,
                        logfile=shared.phase_log("prepare"))
         shared.update(status="syncing_models", runtime_ready_at=shared.now().isoformat())
-        shared.run_ssh(record, f"H3_PROFILE={record['profile']} bash /workspace/remote_sync.sh", timeout=2700,
+        shared.run_remote_phase(record, f"H3_PROFILE={record['profile']} bash /workspace/remote_sync.sh", timeout=2700,
                        logfile=shared.phase_log("models"))
         shared.update(status="starting", models_ready_at=shared.now().isoformat())
         tunnel = shared.start_tunnel(record)
@@ -204,6 +204,13 @@ def launch(record):
             shared.update(error=str(exc)[:1500], failed_stage=current.get("status", "startup"), failed_at=shared.now().isoformat())
         if pod_id:
             try:
+                if current.get('ssh_host'):
+                    try:
+                        shared.capture_remote_logs(current)
+                    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                        pass
+                if shared.retain_for_diagnosis(current, exc):
+                    return
                 destroy({"instance_id": pod_id}, "Setup or connection failed")
             except Exception as cleanup_error:  # noqa: BLE001 - retain the original error and flag cleanup for the operator
                 shared.log(f"Runpod cleanup failed: {type(cleanup_error).__name__}")
