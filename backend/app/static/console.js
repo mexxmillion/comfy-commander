@@ -526,7 +526,7 @@
     }
     document.querySelectorAll('[data-live-queued]').forEach(badge=>{badge.textContent=String(metrics.queued ?? 0);});
     for(const [hash,key] of [['monitor','running'],['tasks','active_tasks'],['workers','active_workers']]) {
-      document.querySelectorAll(`a[href="#${hash}"] span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
+      document.querySelectorAll(`a[href="#${hash}"]:not(#dispatcher-nav) span`).forEach(badge=>{badge.textContent=String(metrics[key] ?? 0);});
     }
   }
   function onJobSubmitted() {
