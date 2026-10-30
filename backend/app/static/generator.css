@@ -496,6 +496,9 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
 }
 @scope (#generator) { :scope{min-height:0} }
 @scope (#generator) {
+ .topbar,#draft-status{padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right))}
+}
+@scope (#generator) {
  @media(min-width:1000px){
   .ai-generated{margin-top:6px;padding-top:6px}.ai-generated summary{gap:8px;min-height:26px;font-size:12px}.ai-generated summary>span{min-width:22px;height:22px;font-size:10px}.ai-generated summary small{display:none}
   #single-prompt>.ai-generated{margin-top:6px}.prompt-tools .switch-row small{font-size:10px}.prompt-tools .ai-model-settings{font-size:10px}#creative-library{margin-top:2px}#creative-library summary{font-size:11px}
