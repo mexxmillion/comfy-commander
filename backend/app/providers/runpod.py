@@ -27,7 +27,7 @@ chmod 700 /root/.ssh
 printf '%s\\n' "$PUBLIC_KEY" > /root/.ssh/authorized_keys
 chmod 600 /root/.ssh/authorized_keys
 ssh-keygen -A
-exec /usr/sbin/sshd -D -e -o PermitRootLogin=prohibit-password -o PasswordAuthentication=no -o AllowTcpForwarding=yes
+exec /usr/sbin/sshd -D -e -o PermitRootLogin=prohibit-password -o PasswordAuthentication=no -o AllowTcpForwarding=yes -o ClientAliveInterval=15 -o ClientAliveCountMax=3 -o TCPKeepAlive=yes
 '''
 
 

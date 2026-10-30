@@ -224,7 +224,7 @@ def launch(record, *, resume_existing=False):
                         pass
                 if shared.retain_for_diagnosis(current, exc):
                     return
-                destroy({"instance_id": pod_id}, "Setup or connection failed")
+                destroy({"instance_id": pod_id}, f"Setup or connection failed: {type(exc).__name__}: {exc}")
             except Exception as cleanup_error:  # noqa: BLE001 - retain the original error and flag cleanup for the operator
                 shared.log(f"Runpod cleanup failed: {type(cleanup_error).__name__}")
                 shared.update(status="destroy_failed", error="Check Runpod console; cleanup not confirmed")
