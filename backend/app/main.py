@@ -28,6 +28,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import character_replacement, creative, krea, ltx, qwen_prompt, reference_preprocess
 from .community import router as community_router
+from .local_models import router as local_models_router
 from .community import setup_status
 from .community_loras import entries_for_profile
 from .config import get_settings
@@ -81,6 +82,7 @@ app.include_router(rental_router)
 app.include_router(generator_router)
 app.include_router(media_router)
 app.include_router(community_router)
+app.include_router(local_models_router)
 app.include_router(studio_agent_router)
 app.include_router(profile_import_router)
 app.include_router(preferences_router)

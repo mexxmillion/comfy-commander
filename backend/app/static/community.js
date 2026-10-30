@@ -48,6 +48,7 @@ document.querySelectorAll('[data-compute]').forEach(card => {
     localStorage.setItem('commander-compute-mode', computeMode);
     document.querySelectorAll('[data-compute]').forEach(item => item.classList.toggle('selected', item === card));
     document.querySelector('#compute-next').disabled = false;
+    if (computeMode !== 'cloud') window.dispatchEvent(new Event('commander-local-setup'));
   });
 });
 if (computeMode) document.querySelector('#compute-next').disabled = false;
@@ -75,6 +76,7 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
     await loadPhoneAccess();
     await loadCloudSsh();
     if(settingsMode) await loadPreferences();
+    window.dispatchEvent(new Event('commander-local-auth-ready'));
   } catch (error) {
     alert(error.message);
     button.disabled = false;

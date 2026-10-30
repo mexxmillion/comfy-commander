@@ -45,7 +45,9 @@ Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
 seven screens:
 
 1. Create the local admin password.
-2. Choose local, cloud, or hybrid compute.
+2. Choose local, cloud, or hybrid compute. Local choices open a ComfyUI, model
+   and custom-node checklist. Pick a starter profile and explicitly download
+   missing pinned weights into its models folders; see the [local setup guide](docs/local-setup.md).
 3. Connect only the providers you want.
 4. Review the Qwen Image and MiniMax H3 starter profiles.
 5. Connect your phone through Tailscale, or skip for now.
