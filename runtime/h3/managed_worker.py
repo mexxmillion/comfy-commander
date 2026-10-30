@@ -526,7 +526,7 @@ def launch(record: dict) -> None:
         ] + credential_files(record):
             transfer(record, path, remote_name)
         from backend.app.credential_paths import provider_secret
-        transfer_secret(record, provider_secret("huggingface", settings().huggingface_token_file), "hf_read.txt")
+        transfer_secret(record, provider_secret("huggingface", settings.huggingface_token_file), "hf_read.txt")
         run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token",
                 timeout=60, logfile=LOG)
         provision_prompt_key(record)
