@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Comfy Commander</title>
     <link rel="stylesheet" href="?asset=app.css&v=mobile-outputs-1">
-    <link rel="stylesheet" href="/static/console.css?v=rental-progress-recovery-20261029">
+    <link rel="stylesheet" href="/static/console.css?v=unified-rental-history-20261030">
     <script id="console-state" type="application/json">{{ state|tojson }}</script>
     <script defer src="/static/generation-defaults.js?v=1"></script>
-    <script defer src="/static/generator.js?v=consistent-canvas-defaults-20261029"></script>
+    <script defer src="/static/replacement-modes.js?v=swap-strength-4"></script>
+    <script defer src="/static/generator.js?v=optional-motion-enhancement-8"></script>
     <script defer src="/static/llm-ui.js?v=1"></script>
     <script defer src="/static/console.js?v=rental-progress-recovery-20261029"></script>
     <script defer src="/static/rental-diagnostics.js?v=2"></script>
-    <link rel="stylesheet" href="/static/generator.css?v=gallery-full-frame-20261029">
+    <link rel="stylesheet" href="/static/generator.css?v=motion-top-prompt-7">
   </head>
   <body>
     <div id="workspace-navigation-stack"><nav class="workspace-nav" aria-label="Main navigation">
@@ -98,12 +99,12 @@
             </div>
           </article>{% endmacro %}
           {% if active_rentals %}<div class="rental-grid">{% for rental in active_rentals %}{{ rental_card(rental) }}{% endfor %}</div>
-          {% elif not rental_history %}<p class="muted">No managed rentals yet. Rent one or several GPUs; each will appear here through startup, ready, and shutdown.</p>
+          {% elif not rental_history and not rental_failures %}<p class="muted">No managed rentals yet. Rent one or several GPUs; each will appear here through startup, ready, and shutdown.</p>
           {% else %}<p class="muted">No active rentals.</p>{% endif %}
-          {% if rental_failures %}<details class="rental-failures"><summary class="danger">Failed rentals · {{ rental_failures|length }} · records and logs retained</summary><div class="rental-grid">{% for rental in rental_failures %}{{ rental_card(rental) }}{% endfor %}</div></details>{% endif %}
-          {% if rental_history %}{% set uncertain = rental_history|selectattr("status", "equalto", "creation_unknown")|list %}<details class="rental-history">
-            <summary>Rental history · {{ rental_history|length }} ended · ${{ "%.2f"|format(rental_history|sum(attribute="estimated_cost")) }} est. spend{% if uncertain %} · <span class="danger">{{ uncertain|length }} creation unknown, verify in the provider console</span>{% endif %}</summary>
-            <div class="rental-grid">{% for rental in rental_history %}{{ rental_card(rental) }}{% endfor %}</div>
+          {% set rental_log = rental_failures + rental_history %}
+          {% if rental_log %}{% set uncertain = rental_log|selectattr("status", "equalto", "creation_unknown")|list %}<details class="rental-history">
+            <summary>Rental history &amp; logs <small>{{ rental_log|length }} records · {{ rental_failures|length }} failed · ${{ "%.2f"|format(rental_log|sum(attribute="estimated_cost")) }} est. spend</small>{% if uncertain %}<small class="danger">{{ uncertain|length }} creation unknown · verify in provider console</small>{% endif %}</summary>
+            <div class="rental-grid">{% for rental in rental_log %}{{ rental_card(rental) }}{% endfor %}</div>
           </details>{% endif %}
           <small>Billing starts at provider allocation and includes setup/model sync. Idle shutdown: {{ limits.idle }} minutes. Maximum lifetime: {{ limits.lifetime }} hours.</small>
         </section>

@@ -26,6 +26,7 @@
         <label><input type="radio" name="h3-mode" value="replacement"><span><strong>Motion control</strong><small>One image + one video</small></span></label>
       </div>
       <section class="panel hero-panel">
+        <div id="motion-prompt-panel" hidden><div class="section-label"><span>01</span><h2>Motion control prompt</h2></div></div>
         <div id="single-prompt"><div class="section-label"><span>01</span><h2 id="prompt-title">Describe your video</h2><button id="clear-prompt" class="text-button" type="button" aria-label="Clear prompt" aria-controls="direction">Clear</button></div>
         <textarea id="direction" rows="5" required placeholder="Describe the video you want. Add references below, or leave them empty for text-to-video."></textarea>
         <label id="qwen-negative-field" class="field qwen-only" hidden><span>Negative prompt · native mode only</span><textarea id="qwen-negative" rows="2" placeholder="Optional. Leave blank when CFG is 1."></textarea></label>
@@ -48,7 +49,7 @@
 <section class="h3-only creative-master" aria-label="Creative Engine">
           <label class="switch-row"><input id="creative-enabled" type="checkbox" disabled><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Creative Engine</strong><small id="creative-availability">Loading Creative Engine…</small></span></label>
           <div id="creative-controls" hidden>
-            <label class="field"><span>Creative brief</span><textarea id="creative-brief" rows="4" disabled placeholder="Create five distinct toothpaste commercials using my product images."></textarea></label>
+            <textarea id="creative-brief" hidden disabled aria-label="Saved creative brief"></textarea>
             <div class="compact-grid"><label class="field"><span>Variations</span><select id="creative-count"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select></label>
         <label class="switch-row"><input id="creative-review" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Review before queuing</strong><small>On: generate ideas only. Off: generate and queue renders.</small></span></label></div>
             <details class="creative-options"><summary>Creative options · direction, references &amp; model</summary>
@@ -106,13 +107,20 @@
         <div id="motion-reference-inputs" class="frame-inputs" hidden>
           <label class="frame-slot" for="motion-video"><span>Motion video</span><input id="motion-video" type="file" accept="video/*"><strong id="motion-video-label">Add motion to copy</strong><small>Exactly one source video</small></label>
           <label class="frame-slot" for="motion-image"><span>Character image</span><input id="motion-image" type="file" accept="image/*"><strong id="motion-image-label">Add your character</strong><small>Exactly one image</small></label>
+          <label class="frame-slot" for="motion-location"><span>Location image · optional</span><input id="motion-location" type="file" accept="image/*"><strong id="motion-location-label">Keep original location</strong><small>Add a scene to replace the background</small></label>
         </div>
         <div id="reference-list" class="reference-list" aria-live="polite"></div>
         <div id="replacement-settings" class="h3-only reference-mode-only" hidden>
+          <label class="switch-row"><input id="motion-prompt-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Optional prompt</strong><small>Prefilled instructions you can edit</small></span></label>
+          <label id="motion-enhance-row" class="switch-row"><input id="motion-enhance" type="checkbox" checked><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>AI enhance motion prompt</strong><small>On by default · turn off to run without an AI provider</small></span></label>
+          <label id="motion-prompt-field" class="field" hidden><span>Motion control instructions</span><textarea id="motion-prompt" rows="4" maxlength="40000" disabled></textarea></label>
+          <p id="motion-prompt-note" class="hint">AI enhancement uses your configured provider. Turn it off to render directly from the automatic or optional instructions without an AI provider.</p>
+          <select id="replacement-mode" hidden aria-label="Automatic replacement mode"><option value="person">Person</option><option value="all">Person + scene</option></select>
           <label class="field"><span>Person to replace · SAM3 tracking prompt</span><input id="replacement-target" type="text" minlength="3" maxlength="300" value="person" placeholder="The person in the red shirt"></label>
-          <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength 1.0 · off by default</small></span></label>
+          <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength in Advanced · off by default</small></span></label>
+          <label id="character-swap-strength-field" class="field" hidden><span>Character Swap v1.5 strength</span><input id="character-swap-strength" type="number" min="0" max="2" step="0.05" value="1" disabled><small>1.0 default · higher values may change appearance or motion</small></label>
           <button id="use-character-swap-profile" class="text-button" type="button">Use v1.5 starter profile</button><button id="copy-character-swap-profile" class="text-button" type="button">Copy profile JSON</button>
-          <p class="hint">Requires exactly one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
+          <p id="replacement-mode-help" class="hint">Requires exactly one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
         </div>
 
         <label id="h3-audio-lock-row" class="switch-row h3-only reference-mode-only">

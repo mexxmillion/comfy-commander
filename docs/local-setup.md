@@ -21,7 +21,13 @@ starts a download, GPU rental or render.
    require manual attention.
 2. Sign in to Commander and select the full ComfyUI folder containing `main.py`
    and `custom_nodes`. A portable parent containing `ComfyUI` also works.
-   Enter the host's path even when accessing setup from a phone.
+   Use **Browse…** to choose a folder on the Commander computer, or enter its
+   full path manually. The picker lists local folders only, requires admin
+   sign-in and works from a phone without browsing the phone's storage.
+   Then click **Validate & save folder** to check the installation structure,
+   selected model files, custom-node folders and loaded node classes. Review
+   the resulting missing-file/node report. Browsing and validation do not
+   install software, download models or start a render.
 3. Select **H3 References · starter** or **Qwen Image · starter**. The checklist
    shows diffusion weights, text encoders, VAEs and matching acceleration LoRAs,
    with download sizes and exact destinations beneath `ComfyUI/models`.

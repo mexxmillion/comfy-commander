@@ -21,6 +21,13 @@ code { color: var(--lime); }
 .phone-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; color: var(--muted); font-size: .85rem; }
 .phone-steps span { border-top: 1px solid var(--line); padding-top: 12px; }
 .phone-card .note { margin: 0; }
+.host-folder-path{display:flex;gap:8px;align-items:center;min-width:0}
+.host-folder-path input{flex:1;min-width:0}
+.host-folder-path button{flex-shrink:0;width:auto;white-space:nowrap}
+#host-folder-dialog{width:min(640px,calc(100vw - 24px));max-height:85vh;overflow:auto;background:#211e28;color:#f5f3ed;border:1px solid #60596c;border-radius:14px;padding:20px}
+#host-folder-dialog::backdrop{background:#0009}
+#host-folder-list{display:grid;gap:5px;max-height:40vh;overflow:auto;margin:12px 0}
+#host-folder-list button{text-align:left;overflow-wrap:anywhere}
 @media (max-width: 760px) {
   .lora-grid, .registered-card { grid-template-columns: 1fr; }
   .management-card fieldset { grid-template-columns: 1fr; }

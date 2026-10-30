@@ -34,6 +34,32 @@ class EnhanceRequest(BaseModel):
     megapixels: float = Field(default=0.7, ge=0.1, le=16)
     duration: float = Field(default=5, ge=0.25, le=60)
     model: str = Field(default='google/gemini-3-flash-preview', min_length=1, max_length=200)
+    motion_mode: Literal['person', 'person_scene'] | None = None
+    custom_motion_prompt: bool = False
+    target_description: str = Field(default='person', min_length=3, max_length=300)
+
+
+def motion_direction(payload):
+    """Canonical motion contract; custom direction is an explicit optional UI choice."""
+    from .character_replacement import DEFAULT_REPLACEMENT_PROMPT
+    if not payload.motion_mode:
+        return payload.prompt
+    if payload.frame_mode:
+        raise HTTPException(422, 'Motion control uses a source video, not Frames mode.')
+    counts = {kind: sum(ref.get('kind') == kind for ref in payload.references)
+              for kind in ('image', 'video', 'audio')}
+    expected = 2 if payload.motion_mode == 'person_scene' else 1
+    if counts != {'image': expected, 'video': 1, 'audio': 0} or len(payload.references) != expected + 1:
+        raise HTTPException(422, 'Motion control needs one source video, one character image and an optional location image.')
+    if payload.motion_mode == 'person':
+        base = DEFAULT_REPLACEMENT_PROMPT + '\nThe selected source target is: ' + payload.target_description
+    else:
+        base = ('Replace the performer in <Video 1> with the character in <Picture 1>. '
+                'Preserve the character identity, face, hairstyle and clothing. Replace the original '
+                'background entirely with the location in <Picture 2>. The video supplies motion, '
+                'poses, timing and camera framing, not identity, clothing or background. Match scene '
+                'lighting, shadows and foot contact. Preserve source audio when present. One continuous shot.')
+    return base + ('\nAdditional operator direction:\n' + payload.prompt if payload.custom_motion_prompt else '')
 
 
 def reference_path(name: str) -> Path:
@@ -120,6 +146,7 @@ async def reference_content(references: ReferenceSet):
 
 
 async def enhance(payload: EnhanceRequest):
+    direction = motion_direction(payload)
     provider = await asyncio.to_thread(llm.connection, read_key)
     normalized = [{**item, 'kind': 'image' if item.get('kind') in {'first_frame', 'last_frame'} else item.get('kind')}
                   for item in payload.references]
@@ -142,7 +169,7 @@ async def enhance(payload: EnhanceRequest):
     try:
         async with httpx.AsyncClient(timeout=180) as client:
             headers = provider.headers
-            mode = payload.job_type
+            mode = ('replacement' if payload.motion_mode == 'person' else 'standard') if payload.motion_mode else payload.job_type
             if not payload.frame_mode and mode == 'auto':
                 mode = 'standard'
                 if counts['video'] and counts['image']:
@@ -158,9 +185,9 @@ async def enhance(payload: EnhanceRequest):
                 system = director.build_system_prompt(target, 'Balanced')
                 user = director.build_user_prompt(target, payload.prompt, payload.duration, counts['image'], width=width, height=height)
             else:
-                filename = 'system_prompt_replacement.md' if mode == 'replacement' else 'system_prompt.md'
+                filename = 'system_prompt_motion_scene.md' if payload.motion_mode == 'person_scene' else 'system_prompt_replacement.md' if mode == 'replacement' else 'system_prompt.md'
                 system = (PROMPTS/filename).read_text(encoding='utf-8')
-                user = f'USER DIRECTION:\n{payload.prompt}\n\nTARGET FORMAT:\n{width} x {height}; {payload.duration:g} seconds'
+                user = f'USER DIRECTION:\n{direction}\n\nTARGET FORMAT:\n{width} x {height}; {payload.duration:g} seconds'
             if manifest:
                 user += '\n\nReference manifest:\n' + '\n'.join(manifest)
             if notes := role_notes(payload.references):

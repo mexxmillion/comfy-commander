@@ -47,11 +47,24 @@ def test_progress_parser_ignores_partial_and_invalid_log_lines(tmp_path):
     assert result["file"] == "weights.bin" and result["eta_minutes"] == 1
 
 
-def test_failed_history_is_collapsed_by_default():
+def test_unified_history_retains_all_logs_and_stays_collapsed():
     from pathlib import Path
+    from jinja2 import Environment
     markup = Path("backend/app/templates/dashboard.html").read_text(encoding="utf-8")
-    assert '<details class="rental-failures">' in markup
-    assert '<details class="rental-failures" open>' not in markup
+    fragment = markup[markup.index('{% macro rental_card'):markup.index('<small>Billing starts')]
+    failed = dict(rental_id='failed-test', provider='runpod', status='creation_unknown',
+                  failure=True, estimated_cost=1, ready_seconds=None)
+    ended = dict(rental_id='ended-test', provider='vast', status='destroyed',
+                 failure=False, destroyed_at='test', estimated_cost=2, ready_seconds=None)
+    rendered = Environment(autoescape=True).from_string(fragment).render(
+        active_rentals=[], rental_failures=[failed], rental_history=[ended])
+    assert rendered.count('<details class="rental-history">') == 1
+    assert '<details class="rental-history" open' not in rendered
+    assert 'class="rental-failures"' not in rendered
+    assert rendered.count('data-rental-diagnostics=') == 2
+    assert 'failed-test' in rendered and 'ended-test' in rendered
+    assert '2 records' in rendered and '1 failed' in rendered
+    assert 'creation unknown' in rendered
 
 
 def test_public_download_uses_no_token_when_unconfigured(monkeypatch,tmp_path):

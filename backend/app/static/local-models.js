@@ -6,6 +6,35 @@
   let inventory = null, selection = null, timer = null, busy = false, checkVersion = 0;
   let runtimePlan = null, runtimeTimer = null;
   const status = message => { $('#local-model-status').textContent = message; };
+  let browsed = null, browseVersion = 0;
+  async function browse(path='') {
+    const version=++browseVersion;
+    browsed=null;$('#host-folder-select').disabled=true;
+    $('#host-folder-status').textContent='Reading local folders…';
+    $('#host-folder-list').replaceChildren();
+    try {
+      const data=await jsonRequest('/api/v1/setup/local-models/folders?path='+encodeURIComponent(path));
+      if(version!==browseVersion)return;
+      browsed=data;$('#host-folder-path').value=data.path;$('#host-folder-up').disabled=!data.parent;
+      const roots=$('#host-folder-roots');roots.replaceChildren();
+      for(const root of data.roots){const button=document.createElement('button');button.type='button';button.className='quiet';button.textContent=root;button.onclick=()=>void browse(root);roots.append(button);}
+      const list=$('#host-folder-list');
+      for(const folder of data.folders){const button=document.createElement('button');button.type='button';button.className='quiet';button.textContent='📁 '+folder.name;button.onclick=()=>void browse(folder.path);list.append(button);}
+      $('#host-folder-status').textContent=data.truncated?'First 200 folders shown. Enter a more specific path to narrow the list.':data.folders.length?'Open a subfolder, or use the current folder.':'No visible subfolders. You can use this folder.';
+      $('#host-folder-select').disabled=false;
+    } catch(error){if(version===browseVersion)$('#host-folder-status').textContent=error.message;}
+  }
+  $('#browse-local-comfy').onclick=()=>{$('#host-folder-dialog').showModal();void browse($('#local-comfy-root').value.trim());};
+  $('#host-folder-open').onclick=()=>void browse($('#host-folder-path').value.trim());
+  $('#host-folder-path').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();void browse(event.target.value.trim());}});
+  $('#host-folder-up').onclick=()=>{if(browsed?.parent)void browse(browsed.parent);};
+  $('#host-folder-close').onclick=()=>{$('#host-folder-dialog').close();browseVersion++;};
+  $('#host-folder-dialog').addEventListener('cancel',()=>{browseVersion++;});
+  $('#host-folder-select').onclick=()=>{
+    if(!browsed)return;
+    $('#local-comfy-root').value=browsed.path;$('#host-folder-dialog').close();browseVersion++;checkVersion++;clear();
+    status('Folder selected. Click Validate & save folder to check ComfyUI, models and loaded nodes. Nothing was downloaded.');
+  };
   const payload = () => ({root: $('#local-comfy-root').value.trim(), model_set: $('#local-model-set').value});
   const enable = () => {
     $('#download-local-models').disabled = busy || !inventory || !inventory.missing_bytes || inventory.files.some(row => row.status === 'conflict') || !$('#local-download-consent').checked;

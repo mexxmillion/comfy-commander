@@ -33,6 +33,45 @@ LOCK = Lock()
 STATE = {"status": "idle"}
 
 
+def local_folder_listing(value: str = '') -> dict:
+    """List folders only, for an authenticated human choosing a host runtime."""
+    roots = [Path('/')]
+    if os.name == 'nt':
+        import ctypes
+        roots = [Path(f'{letter}:\\') for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                 if ctypes.windll.kernel32.GetDriveTypeW(f'{letter}:\\') in {2, 3, 6}]
+    chosen = Path(value) if value else Path.home()
+    if not chosen.is_absolute() or str(chosen).startswith(('\\\\', '//')):
+        raise ValueError('Choose an absolute local folder on the Commander computer.')
+    if os.name == 'nt' and chosen.anchor.casefold() not in {str(root).casefold() for root in roots}:
+        raise ValueError('Choose a local drive, not a network share.')
+    chosen = chosen.resolve(strict=True)
+    if str(chosen).startswith(('\\\\', '//')) or not chosen.is_dir():
+        raise ValueError('Choose an existing local folder.')
+    folders = []
+    for entry in chosen.iterdir():
+        try:
+            if entry.is_dir() and not entry.is_symlink() and not entry.is_junction() and not entry.name.startswith('.'):
+                folders.append({'name': entry.name, 'path': str(entry)})
+        except OSError:
+            continue
+    folders.sort(key=lambda item: item['name'].casefold())
+    return {'path': str(chosen), 'parent': str(chosen.parent) if chosen.parent != chosen else None,
+            'roots': [str(root) for root in roots], 'folders': folders[:200],
+            'truncated': len(folders) > 200}
+
+
+@router.get('/folders')
+def browse_local_folders(request: Request, path: str = ''):
+    require_admin(request)
+    if len(path) > 2048:
+        raise HTTPException(400, 'Folder path is too long.')
+    try:
+        return local_folder_listing(path)
+    except (ValueError, OSError):
+        raise HTTPException(400, 'Cannot browse that folder. Choose an accessible local folder on the Commander computer.') from None
+
+
 def required_node_packages(model_set):
     names = ["viggle_turbo.py"] if model_set == "qwen" else [
         "h3_beta57.py", "comfyui-kjnodes", "comfyui-videohelpersuite",
