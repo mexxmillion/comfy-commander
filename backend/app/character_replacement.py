@@ -15,6 +15,10 @@ from .h3_media import h3_input_paths
 
 SAM3_CHECKPOINT = "sam3.1_multiplex_fp16.safetensors"
 CHARACTER_SWAP_LORA = "h3_character_swap_v1.5.safetensors"
+DEFAULT_REPLACEMENT_PROMPT = ("Replace the person in <Video 1> with the character in <Picture 1>. "
+    "Preserve the character's face, hairstyle, clothing and proportions consistently throughout. "
+    "Copy the source movement, poses, timing and gestures. Preserve the camera, framing, background, "
+    "lighting and original soundtrack. Keep the character fully clothed and naturally integrated into the scene.")
 
 
 def character_swap_profile() -> dict:
@@ -103,7 +107,7 @@ def _reference_nodes(graph: dict) -> tuple[str, str, list]:
     return packs[0], h3[0], refs
 
 
-def _chain_nodes(pack: str, refs: list, target: str) -> dict:
+def _chain_nodes(pack: str, refs: list, target: str, graph: dict | None = None) -> dict:
     source = next(ref["file"] for ref in refs if ref.get("kind") == "video")
     try:
         request = PrepareRequest(source_video=source, target_description=target, output_slug="one-shot")
@@ -116,10 +120,18 @@ def _chain_nodes(pack: str, refs: list, target: str) -> dict:
             if isinstance(value, list) and len(value) == 2:
                 node["inputs"][key] = ([pack, 9 if value[1] == 0 else 12] if value[0] == "1"
                                        else ["replacement_" + value[0], value[1]])
-    return {"replacement_" + key: node for key, node in nodes.items()}
+    result = {"replacement_" + key: node for key, node in nodes.items()}
+    if graph is not None:
+        video = next(ref for ref in refs if ref.get('kind') == 'video')
+        target_inputs = graph[_reference_nodes(graph)[1]]['inputs']
+        result['replacement_video_prepare'] = {'class_type':'TMPrepareVideo','inputs':{
+            'source_file':source,'width':target_inputs.get('width', graph[pack]['inputs'].get('width')), 'height':target_inputs.get('height', graph[pack]['inputs'].get('height')),
+            'frame_count':graph[_reference_nodes(graph)[1]]['inputs']['length'],
+            'crop_json':json.dumps(video.get('crop')), 'trim_json':json.dumps(video.get('trim'))}}
+    return result
 
 
-def compose_chain(graph: dict, target: str) -> dict:
+def compose_chain(graph: dict, target: str, prepare_video: bool = True) -> dict:
     """Wire tracked target inversion straight into H3 in the same prompt."""
     if is_chain(graph):
         raise HTTPException(422, "Replacement stages are already present")
@@ -129,7 +141,9 @@ def compose_chain(graph: dict, target: str) -> dict:
     if any(node.get("class_type") == "MiniMaxH3AddGuide" for node in graph.values()):
         raise HTTPException(422, "Replacement uses a video reference, without image guide nodes")
     result = deepcopy(graph)
-    result.update(_chain_nodes(pack, refs, target))
+    result.update(_chain_nodes(pack, refs, target, graph if prepare_video else None))
+    if prepare_video:
+        result[pack]['inputs']['prepared_video_0']=['replacement_video_prepare',0]
     result[h3]["inputs"]["ref_videos.ref_video_0"] = ["replacement_9", 0]
     return result
 
@@ -139,7 +153,13 @@ def validate_chain(graph: dict) -> dict:
     base = {key: deepcopy(node) for key, node in graph.items() if not key.startswith("replacement_")}
     pack, h3, refs = _reference_nodes(base)
     target = graph.get("replacement_4", {}).get("inputs", {}).get("text", "")
-    expected = _chain_nodes(pack, refs, target)
+    prepared = 'replacement_video_prepare' in graph
+    expected = _chain_nodes(pack, refs, target, base if prepared else None)
+    if prepared:
+        if base[pack]['inputs'].pop('prepared_video_0', None) != ['replacement_video_prepare',0]:
+            raise HTTPException(422, "Replacement must use the canonical prepared video")
+    elif 'prepared_video_0' in base[pack]['inputs']:
+        raise HTTPException(422, "Prepared video is missing its canonical stage")
     actual = {key: node for key, node in graph.items() if key.startswith("replacement_")}
     if actual != expected or base[h3]["inputs"].get("ref_videos.ref_video_0") != ["replacement_9", 0]:
         raise HTTPException(422, "Replacement must retain the approved SAM3 tracking and target-only inversion wiring")

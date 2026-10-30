@@ -182,11 +182,33 @@ def publish_reference_caches(api, task, entry, output_root, report):
             retry_transfer(upload_cache, report)
 
 
+def execution_phase(kind):
+    return {'TMPrepareVideo':'Preparing video · resize / 24 fps / trim',
+            'MiniMaxH3ReferencePack':'Loading prepared references',
+            'SAM3_Detect':'SAM3 · selecting the target person',
+            'SAM3_VideoTrack':'SAM3 · tracking source frames',
+            'SAM3_TrackToMask':'SAM3 · building the target mask',
+            'MiniMaxH3ReferenceToVideo':'H3 · encoding image, video and audio references',
+            'SamplerCustomAdvanced':'H3 · sampling',
+            'VAEDecode':'Decoding generated video',
+            'VHS_VideoCombine':'Encoding video and audio'}.get(kind, 'Processing · ' + (kind or 'ComfyUI'))
+
+
+def progress_message(kind, value, maximum):
+    if kind == 'SAM3_VideoTrack':
+        return f'SAM3 tracking · source frame {value}/{maximum}'
+    if kind in {'SamplerCustomAdvanced', 'KSampler', 'KSamplerAdvanced'}:
+        return f'Sampling {value}/{maximum}'
+    return f'{execution_phase(kind)} · {value}/{maximum}'
+
+
 def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Checkpoint | None = None, local_gpu: int | None = None) -> None:
     task_id = task["task_id"]
     lease_token = task["lease_token"]
     client_id = uuid4().hex
     accepted_at: float | None = None
+    executing_node = None
+    phase_message = "Waiting in ComfyUI queue"
     first_progress_at: float | None = None
     last_progress_at: float | None = None
     cloud_mode = os.getenv("TENSOR_WORKER_PROVIDER", "Local") != "Local"
@@ -334,20 +356,30 @@ def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Che
                     event = json.loads(message)
                     data = event.get("data", {})
                     if data.get("prompt_id") == prompt_id:
-                        if event.get("type") == "progress":
-                            progress_node = task['graph'].get(str(data.get('node')), {})
-                            if (load_gate is not None and int(data.get('value') or 0) > 0
-                                    and progress_node.get('class_type') in {'SamplerCustomAdvanced', 'KSampler', 'KSamplerAdvanced'}):
-                                load_gate.release()
-                            if first_progress_at is None:
+                        if event.get("type") == "executing" and data.get("node") is not None:
+                            executing_node = str(data['node'])
+                            kind = task['graph'].get(executing_node, {}).get('class_type', '')
+                            if kind in {'SamplerCustomAdvanced', 'KSampler', 'KSamplerAdvanced'} and first_progress_at is None:
                                 first_progress_at = time.monotonic()
-                            last_progress_at = time.monotonic()
+                            phase_message = execution_phase(kind)
+                            report(message=phase_message, prompt_id=prompt_id)
+                        elif event.get("type") == "progress":
+                            node_id = str(data.get('node') or executing_node or '')
+                            kind = task['graph'].get(node_id, {}).get('class_type', '')
+                            sampling = kind in {'SamplerCustomAdvanced', 'KSampler', 'KSamplerAdvanced'}
+                            if sampling:
+                                if load_gate is not None and int(data.get('value') or 0) > 0:
+                                    load_gate.release()
+                                if first_progress_at is None:
+                                    first_progress_at = time.monotonic()
+                                last_progress_at = time.monotonic()
                             maximum = max(int(data.get("max") or 1), 1)
                             value = int(data.get("value") or 0)
-                            report(
-                                progress=min(95, 10 + round(85 * value / maximum)),
-                                message=f"Sampling {value}/{maximum}",
-                            )
+                            phase_message = progress_message(kind, value, maximum)
+                            if sampling:
+                                report(progress=min(95, 10 + round(85 * value / maximum)), message=phase_message)
+                            else:
+                                report(message=phase_message)
                         elif event.get("type") == "execution_error":
                             raise RuntimeError(
                                 str(data.get("exception_message") or "ComfyUI execution error")
@@ -450,6 +482,7 @@ def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Che
                         artifact['timings'] = execution_timings(entry, measured['queue_seconds'],
                             finished_at - accepted_at, measured['before_sampling_seconds'],
                             measured['sampling_seconds'], measured['after_sampling_seconds'], restarted)
+                        artifact["timings"]["sampling_scope"] = "sampler_nodes"
                         if local_h3:
                             release_local_model_cache(comfy, pressure_only=True)
                         report(
@@ -460,7 +493,7 @@ def run_task(api: httpx.Client, comfy: httpx.Client, task: dict, checkpoint: Che
                             artifact=artifact,
                         )
                         return
-                    report(message="ComfyUI is still processing", prompt_id=prompt_id)
+                    report(message=phase_message, prompt_id=prompt_id)
                     last_report = time.monotonic()
             raise TimeoutError("ComfyUI job exceeded the three-hour limit")
     except ControllerUnavailable as exc:

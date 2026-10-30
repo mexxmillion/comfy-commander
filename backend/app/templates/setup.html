@@ -3,8 +3,8 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ 'Settings' if settings_mode else 'Welcome' }} · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=compact-settings-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=compact-settings-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
+  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=video-preparation-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
+  <script defer src="/static/community.js?v=video-preparation-20261029"></script><script defer src="/static/agent-widget.js?v=profile-only-20261029"></script>
 </head><body data-settings-mode="{{ 'true' if settings_mode else 'false' }}" data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
   <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p>{% if settings_mode %}<h1>Settings</h1><p>Manage your studio whenever you need.</p>{% else %}<h1>Set up your workspace</h1><p>Connect compute, models and private access.</p>{% endif %}</div><a href="/">Back to Generate →</a></header>
   {% if settings_mode %}
@@ -107,6 +107,9 @@
         <label>Render target<select name="render_target"><option value="any">Any online worker · local + cloud</option><option value="local">Local worker pool</option><option value="cloud">Cloud worker pool · existing worker</option></select></label>
         <label>Bitrate / encoding<select name="video_encoding"><option value="standard">Standard · smaller files</option><option value="high">High · more detail</option></select></label>
         <label>Sparse attention<select name="sparse_attention"><option value="auto">Model default · Ref2V off / Omni VSA</option><option value="off">Off</option><option>SLA</option><option>VSA</option><option>SOL</option></select></label>
+        <label>Replacement video preparation<select name="replacement_video_preparation"><option value="target">Resize to output · 24 fps · requested length</option><option value="original">Original reference resolution · slower</option></select></label>
+        <label>Replacement quality<select name="replacement_quality"><option value="preview">Preview · 4 steps</option><option value="normal">Normal · 8 steps</option><option value="hq">HQ · 20 steps</option></select></label>
+        <label class="wide-field">Replacement default prompt<textarea name="replacement_prompt" rows="3" minlength="1" maxlength="4000" required></textarea></label>
         <label class="check"><input name="ai_enhance" type="checkbox">AI enhance prompt</label>
         <label class="check"><input name="audio_lock" type="checkbox">Audio lock / lip-sync</label>
       </div>

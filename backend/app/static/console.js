@@ -178,6 +178,10 @@
     } else if (spec.enhance === false) section.append(el('p', 'AI enhancement off · prompt used exactly as written', 'inspect-note'));
     const grid = el('dl', null, 'inspect-grid');
     grid.append(el('dt', 'Resolution'), el('dd', pixels || spec.size_note || 'Not recorded'));
+    if(spec.requested_duration_seconds != null)grid.append(el('dt','Requested duration'),el('dd',`${spec.requested_duration_seconds}s → ${spec.duration_seconds}s on H3's frame grid`));
+    if(spec.encoded_aspect)grid.append(el('dt','Aspect ratio'),el('dd',`Requested ${spec.aspect?.split(' ')[0] || 'graph dimensions'} · encoded ${spec.encoded_aspect} (aligned pixels)`));
+    if(spec.video_preparation)grid.append(el('dt','Reference preparation'),el('dd',spec.video_preparation));
+    if(spec.frame_note)grid.append(el('dt','Frame count'),el('dd',`${spec.frames ?? 'Unknown'} output frames · ${spec.frame_note}`));
     if (spec.scheduler) grid.append(el('dt', 'Scheduler'), el('dd', spec.scheduler));
     const order = ['Diffusion', 'Text encoder', 'VAE'];
     for (const model of [...spec.models].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role))) grid.append(el('dt', model.role), el('dd', name(model.name)));
@@ -266,7 +270,7 @@
       for (const [key,value] of [['Task',task.id],['Priority',`${task.priority??100}${task.status==='queued'&&task.rank?` · rank #${task.rank}`:''}`],['Worker',task.worker_id||'Unassigned'],['Submitted',date(task.created_at)],['Runtime',task.runtime],['Policy',task.policy],['Requirement',task.requirement],['Attempt',task.attempt],['Progress',`${task.progress}%`],['Prompt ID',task.prompt_id||'—']]) grid.append(el('dt',key),el('dd',String(value)));
       fragment.append(grid,el('div',task.message||'No worker message yet.','inspect-message'));
       const timing=task.artifact?.timings||{}, boxes=el('div',null,'timing-list');
-      for (const [label,key] of [['Queue','queue_seconds'],['Generation','generation_seconds'],['Before sampling','before_sampling_seconds'],['Sampling','sampling_seconds'],['After sampling','after_sampling_seconds']]) {const box=el('div');box.append(el('span',label),el('strong',seconds(timing[key])));boxes.append(box);}
+      for (const [label,key] of [['Queue','queue_seconds'],['Generation','generation_seconds'],['Before sampling','before_sampling_seconds'],[timing.sampling_scope==='sampler_nodes'?'Sampling':'Progress window (legacy)','sampling_seconds'],['After sampling','after_sampling_seconds']]) {const box=el('div');box.append(el('span',label),el('strong',seconds(timing[key])));boxes.append(box);}
       fragment.append(el('h3','Execution timings','inspect-title'),boxes);
       if(timing.recovery_seconds!=null){const recovery=el('div');recovery.append(el('span','Interrupted attempt / recovery'),el('strong',seconds(timing.recovery_seconds)));boxes.append(recovery);}
       const url=outputUrl(task.artifact), output=el('div',null,'inspect-artifact');

@@ -27,6 +27,9 @@ const state = {
   aiPromptSources: { h3: "", qwen: "" },
   runPrompt: null,
 };
+const REPLACEMENT_PROMPT = 'Replace the person in <Video 1> with the character in <Picture 1>. Preserve the character’s face, hairstyle, clothing and proportions consistently throughout. Copy the source movement, poses, timing and gestures. Preserve the camera, framing, background, lighting and original soundtrack. Keep the character fully clothed and naturally integrated into the scene.';
+let replacementDefaults = {quality:'normal', preparation:'target',prompt:REPLACEMENT_PROMPT};
+
 const DRAFT_KEY = 'tensor-master.generator-draft.v1';
 let draftReady = false, draftEarlyEdit = false, draftQueuedFiles = null, draftDatabase, draftLastSnapshot;
 
@@ -420,7 +423,7 @@ function renderReferences() {
     tile.className = "reference";
     const mediaType = file.kind === "audio" ? "audio" : file.kind === "video" ? "video" : "img";
     const media = document.createElement(mediaType);
-    media.src = file.src;
+    media.src = file.reference?.preparation?.preview ? referenceFileUrl(file.reference.preparation.preview) : file.src;
     if (!file.saved) media.dataset.objectUrl = file.src;
     if (mediaType !== "img") media.preload = "none";
     if (media.tagName === "VIDEO") media.muted = state.mode !== "voice";
@@ -484,6 +487,10 @@ function renderReferences() {
         tile.append(reset);
       }
     }
+    if(file.kind==='video' && state.mode==='h3') {
+      const process=document.createElement('button');process.type='button';process.className='isolate-reference';process.textContent='Process';
+      process.onclick=()=>openVideoProcessing(index);tile.append(process);
+    }
     list.append(tile);
   });
   syncQwenEditCanvas();
@@ -530,6 +537,40 @@ async function openIsolationEditor(index) {
   } catch (error) { toast(error.message); }
   finally { setSubmitting(false); }
 }
+
+let videoEditor=null;
+async function openVideoProcessing(index) {
+  if(state.submitting)return;
+  try {
+    setSubmitting(true);await uploadReferences();
+    const target=state.savedReferences[index];if(target?.kind!=='video')throw new Error('Choose the video reference again.');
+    videoEditor={target,result:null};
+    $('#video-processing-plan').textContent=`${$('#aspect-ratio').value} · ${$('#megapixels').value} MP · ${$('#duration').value}s requested · 24 fps`;
+    $('#video-processing-status').textContent='Click Process & preview, review the result, then save.';
+    $('#video-processing-save').disabled=true;$('#video-processing-result').hidden=true;
+    $('#video-processing').showModal();
+  }catch(error){toast(error.message);}finally{setSubmitting(false);}
+}
+$('#video-processing-preview').onclick=async()=>{
+  const editor=videoEditor;if(!editor)return;
+  const button=$('#video-processing-preview');button.disabled=true;$('#video-processing-save').disabled=true;
+  $('#video-processing-status').textContent='Processing on controller CPU · resizing / 24 fps / trimming. Original kept.';
+  try {
+    const response=await fetch('/api/v1/generator/process-video',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file:editor.target.preparation?.source || editor.target.file,crop:editor.target.crop,trim:editor.target.trim,
+        aspect_ratio:$('#aspect-ratio').value,megapixels:Number($('#megapixels').value),duration:Number($('#duration').value)})});
+    const result=await response.json();if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Video processing failed.');
+    if(editor!==videoEditor)return;
+    editor.result=result.reference;const video=$('#video-processing-result');video.src=referenceFileUrl(result.preview_file || result.reference.file);video.hidden=false;
+    $('#video-processing-save').disabled=false;$('#video-processing-status').textContent=`Preview ready · ${result.reference.preparation.width} × ${result.reference.preparation.height} · 24 fps · up to ${result.maximum_frames} frames. Review, then Save reference.`;
+  }catch(error){$('#video-processing-status').textContent=error.message;}finally{button.disabled=false;}
+};
+$('#video-processing-save').onclick=()=>{
+  const editor=videoEditor,position=state.savedReferences.indexOf(editor?.target);
+  if(!editor?.result || position<0)return toast('Reference changed. Reopen Process.');
+  state.savedReferences[position]=editor.result;$('#video-processing-result').pause();$('#video-processing').close();
+  markAiPromptStale();renderReferences();scheduleDraftSave();toast('Processed video saved. Original kept.');
+};
 
 function setIsolationBusy(busy) {
   if (isolationEditor) isolationEditor.busy = busy;
@@ -1520,6 +1561,7 @@ function captureH3Recipe(references, seed) {
     aiModel: $("#ai-model").value,
     jobType: h3JobType(),
     replacementTarget: $('#replacement-target').value.trim(),
+    videoPreparation: replacementDefaults.preparation,
     characterSwapEnabled: $('#character-swap-enabled').checked,
     qualityPreset: $('#h3-quality').value,
     videoEncoding: $('#h3-encoding').value,
@@ -1669,6 +1711,7 @@ function loadRecipe(recipe) {
   const jobType = studioRoot.querySelector(`input[name="h3-mode"][value="${recipe.h3Type === "frames" ? "frames" : recipe.jobType === "replacement" ? "replacement" : "standard"}"]`);
   if (jobType) jobType.checked = true;
   $('#replacement-target').value=recipe.replacementTarget || 'person';
+  replacementDefaults.preparation=recipe.videoPreparation || replacementDefaults.preparation;
   $('#character-swap-enabled').checked=recipe.characterSwapEnabled===true;
   $('#h3-encoding').value=recipe.videoEncoding || 'high';
   $('#h3-sampler').value=recipe.sampler==='res_multistep'?'res_multistep':'euler';
@@ -2677,7 +2720,12 @@ function syncReplacementMode(enableAudioDefault=false) {
   $('#replacement-target').required=replacement;
   $('#character-swap-enabled').disabled=!replacement;
   if(!replacement)$('#character-swap-enabled').checked=false;
-  if(replacement && enableAudioDefault)$('#h3-audio-lock').checked=true;
+  if(replacement && enableAudioDefault) {
+    $('#h3-audio-lock').checked=true;
+    $('#duration').value=5;$('#megapixels').value=0.5;$('#aspect-ratio').value='9:16 (Portrait Widescreen)';
+    applyQualityPreset(replacementDefaults.quality);
+    if(!$('#direction').value.trim())$('#direction').value=replacementDefaults.prompt;
+  }
   if(state.mode==='h3') {
     $('#reference-section-title').textContent=replacement?'One video + one image':'References · optional';
     $('#reference-help').textContent=replacement?'Add exactly one source video and one replacement image.':'No reference: text-to-video. Add an image or clip to guide the result. Ask in your prompt if an image should be the opening frame.';
@@ -2837,6 +2885,7 @@ async function restoreInitialView() {
   await restoreDispatchedJob();
 }
 function applyGenerationDefaults(preferences) {
+  replacementDefaults={quality:preferences.replacement_quality || 'normal',preparation:preferences.replacement_video_preparation || 'target',prompt:preferences.replacement_prompt || REPLACEMENT_PROMPT};
   setH3Type(preferences.h3_type);
   $('#h3-model').value = {'ref2v-int8':'minimax_h3_ref2va_pruned_int8_convrot.safetensors','ref2v-singularity':SINGULARITY_MODEL,'fasth3-omni':OMNI_MODEL}[preferences.h3_model];
   $('#aspect-ratio').value=[...$('#aspect-ratio').options].find(option=>option.value.split(' ')[0]===preferences.aspect_ratio).value;

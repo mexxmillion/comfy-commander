@@ -139,7 +139,8 @@ def build_bundle(destination: Path, community_manifest: Path | None = None) -> N
         try:
             with tarfile.open(partial, 'w:gz') as bundle:
                 for path in sorted(stage.rglob('*')):
-                    if path.is_file() and '.git' not in path.relative_to(stage).parts:
+                    if (path.is_file() and not {'.git', '__pycache__'} & set(path.relative_to(stage).parts)
+                            and path.suffix not in {'.pyc', '.pyo'}):
                         bundle.add(path, arcname=path.relative_to(stage).as_posix(), recursive=False)
             partial.replace(destination)
         finally:

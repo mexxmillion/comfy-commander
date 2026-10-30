@@ -323,7 +323,8 @@ def queue_batch(store, batch_id: str, selection: Selection, validate_graph) -> d
             if (any(node.get("class_type") == "MiniMaxH3ReferencePack"
                     and node.get("inputs", {}).get("job_type") == "replacement" for node in graph.values())
                     and not character_replacement.is_chain(graph)):
-                graph = character_replacement.compose_chain(graph, batch["recipe"].get("replacementTarget", "person"))
+                graph = character_replacement.compose_chain(graph, batch["recipe"].get("replacementTarget", "person"),
+                    prepare_video=batch["recipe"].get("videoPreparation", "target") != "original")
             validate_graph(graph)
             job_id = f"job-{uuid4().hex[:12]}"
             recipe = dict(batch["recipe"], direction=batch["brief"], sourceDirection=batch["brief"],

@@ -45,6 +45,7 @@ from .providers.base import OfferSearch
 from .providers.vast import VastProvider
 from .recipes import normalize_recipe
 from .rental_preferences import router as rental_preferences_router
+from .video_processing import router as video_processing_router
 from .rental_ui import (
     TERMINAL as TERMINAL_RENTAL_STATES,
 )
@@ -84,6 +85,7 @@ app.include_router(studio_agent_router)
 app.include_router(profile_import_router)
 app.include_router(preferences_router)
 app.include_router(rental_preferences_router)
+app.include_router(video_processing_router)
 app.add_middleware(GalleryCompression, minimum_size=1000)
 
 
@@ -748,7 +750,8 @@ async def submit_job(payload: JobSubmission, store: QueueStore = STORE) -> dict[
         recipe = payload.recipe or {}
         if recipe.get("singleFrame"):
             raise HTTPException(422, "Replacement requires video output")
-        payload.graph = character_replacement.compose_chain(payload.graph, recipe.get("replacementTarget", "person"))
+        payload.graph = character_replacement.compose_chain(payload.graph, recipe.get("replacementTarget", "person"),
+            prepare_video=recipe.get("videoPreparation", "target") != "original")
     reference_preprocess.prepare_graph(payload.graph, get_settings().comfyui_input_dir)
     validate_pocket_graph(payload.graph)
     job_id = store.submit(

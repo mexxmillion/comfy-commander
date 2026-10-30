@@ -390,6 +390,12 @@
 
       <p class="hint">Your original stays unchanged. With both options enabled, depth is estimated first, then the subject mask is applied. Saved processing results are available in Sources.</p>
     </dialog>
+    <dialog id="video-processing" aria-label="Video processing">
+      <form method="dialog"><h2>Process video reference</h2><button type="submit">Close</button></form>
+      <p id="video-processing-plan"></p><p class="hint">Resize, preserve framing, resample to 24 fps and limit to the requested output window. Runs on this controller’s CPU. The same stage is included in replacement API graphs.</p>
+      <div class="launch-actions"><button type="button" id="video-processing-preview">Process &amp; preview</button><button type="button" id="video-processing-save" disabled>Save reference</button></div>
+      <p id="video-processing-status" role="status"></p><video id="video-processing-result" controls playsinline hidden style="width:100%;max-height:45vh"></video>
+    </dialog>
     <dialog id="gallery-viewer" aria-label="Job output viewer"><form method="dialog"><button type="submit">Close player</button></form><div id="gallery-viewer-media"></div><p id="gallery-viewer-title"></p></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </div>

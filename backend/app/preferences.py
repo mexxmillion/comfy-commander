@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from .character_replacement import DEFAULT_REPLACEMENT_PROMPT
 from .config import get_settings
 from .rental_ui import require_admin
 
@@ -27,6 +28,9 @@ class Preferences(BaseModel):
     sparse_attention: Literal["auto", "off", "SLA", "VSA", "SOL"] = "auto"
     ai_enhance: bool = True
     audio_lock: bool = False
+    replacement_video_preparation: Literal["target", "original"] = "target"
+    replacement_prompt: str = Field(default=DEFAULT_REPLACEMENT_PROMPT, min_length=1, max_length=4000, pattern=r"\S")
+    replacement_quality: Literal["preview", "normal", "hq"] = "normal"
 
 
 def read_preferences() -> Preferences:

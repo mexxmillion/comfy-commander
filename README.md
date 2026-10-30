@@ -396,3 +396,15 @@ keep their confirmed settings. Budget estimates include GPU time and model-sync
 charges across the selected quantity. Provider adjustments and storage can add
 charges; installation fleet, hourly-price and lifetime caps remain authoritative.
 Onboarding and Settings share a compact desktop/phone layout.
+
+
+Motion control starts with an editable replacement prompt, Normal / 8 steps,
+0.5 MP, portrait 9:16, five seconds and audio lock. Configure the prompt,
+replacement quality and reference preparation in **Settings → Defaults**.
+Replacement graphs include a bounded video resize stage before reference decoding:
+fit the selected output canvas without stretching, 24 fps, and the requested H3
+frame window. Originals stay intact. **Process** on a video offers a CPU preview
+and explicit Save; browser previews use MP4 while the prepared reference retains
+PCM audio. Source crop/trim settings and continuous audio are preserved.
+The inspector separates requested duration/aspect from aligned output pixels and
+frames; SAM3 tracking progress is distinct from H3 sampling steps and timing.
