@@ -67,6 +67,12 @@ available from the gear after onboarding.
   Choose an offer in Dispatcher → Rentals when you actually want paid capacity.
 - **Model access:** public, ungated weights can download without an HF token.
   Gated/private files require your authorized read token and any access approval.
+  Uploading LoRAs/models needs write access to the destination HF repository; prefer
+  a fine-grained token scoped to that repository.
+- **RunPod rental key:** enable GraphQL **Read/Write** for `api.runpod.io/graphql`
+  and Pod read/delete access for monitoring and termination. Read-only or
+  Serverless endpoint-only keys cannot create Pods. A successful connection
+  check does not prove write access. [Provider permission setup](docs/STARTUP.md#provider-token-permissions).
 - **Phone:** follow Setup / Settings → Phone access, install Tailscale on both
   devices, and use the copied private HTTPS URL. [Phone guide](docs/PHONE_ACCESS.md).
 - **AI:** optional. Rendering and deterministic workflow validation do not need
