@@ -144,3 +144,10 @@ This uploads the current supported setup and resumes the original instance;
 it cannot create another GPU or extend the deadline. Installed packages and
 model cache are retained. Package downloads use longer timeouts/retries, and
 setup can safely reuse the already checked-out pinned ComfyUI source.
+
+
+Hugging Face credentials are optional for public, ungated model downloads.
+Without a configured token workers download anonymously and retain revision,
+size and checksum verification. Gated/private files still require an authorized
+read token and any required access approval. Cached files are verified locally.
+The public worker does not require the private mobile extension status route.

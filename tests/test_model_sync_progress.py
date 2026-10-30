@@ -52,3 +52,16 @@ def test_failed_history_is_collapsed_by_default():
     markup = Path("backend/app/templates/dashboard.html").read_text(encoding="utf-8")
     assert '<details class="rental-failures">' in markup
     assert '<details class="rental-failures" open>' not in markup
+
+
+def test_public_download_uses_no_token_when_unconfigured(monkeypatch,tmp_path):
+    import huggingface_hub
+    from runtime.h3.sync_models import download_pinned_file
+    monkeypatch.delenv('HF_TOKEN',raising=False)
+    calls=[]
+    monkeypatch.setattr(huggingface_hub,'hf_hub_download',lambda **kwargs:(calls.append(kwargs) or str(tmp_path/'model.bin')))
+    item=dict(repo='public/model',file='model.bin',revision='a'*40,local_dir='models',size=1)
+    progress=SyncProgress([item],emit=lambda event:None)
+    assert download_pinned_file(item,tmp_path,progress)==tmp_path/'model.bin'
+    assert calls[0]['token'] is False
+    assert calls[0]['revision']=='a'*40

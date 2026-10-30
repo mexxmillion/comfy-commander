@@ -239,8 +239,6 @@ def preflight() -> None:
     from backend.app.credential_paths import provider_secret
     if not provider_secret("vast", configured.vast_api_key_file):
         raise RuntimeError("Missing Vast API key")
-    if not provider_secret("huggingface", configured.huggingface_token_file):
-        raise RuntimeError("Missing Hugging Face token")
     validate_ssh_key_files()
     from backend.app.cloud_ssh import vast_public_key_registered
     if not vast_public_key_registered(vast(), SSH_PUBLIC_KEY.read_text(encoding='utf-8')):

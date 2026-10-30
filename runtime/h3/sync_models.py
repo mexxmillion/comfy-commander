@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import os
 import json
 import re
 import time
@@ -127,6 +128,21 @@ def verify_artifact(path: Path, artifact: dict) -> None:
         raise RuntimeError(f"Downloaded model checksum did not match the lock file: {artifact['file']}")
 
 
+def download_pinned_file(item, models_dir, progress):
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import HfHubHTTPError
+    try:
+        return Path(hf_hub_download(repo_id=item['repo'], filename=item['file'],
+            revision=item['revision'], local_dir=(models_dir / item['local_dir']).resolve(),
+            tqdm_class=progress.tqdm_class(), token=os.environ.get('HF_TOKEN', '').strip() or False))
+    except HfHubHTTPError as error:
+        if getattr(error.response, 'status_code', None) in {401, 403}:
+            raise RuntimeError(f"Model access denied: {item['repo']}/{item['file']}. "
+                "This file may be gated/private or the configured token lacks access. "
+                "Add an authorized Hugging Face read token in Settings > Connections and retry setup on the same GPU.") from None
+        raise
+
+
 def main() -> None:
     manifest = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
     parser = argparse.ArgumentParser(description=__doc__)
@@ -155,8 +171,6 @@ def main() -> None:
             print(f"{item['repo']} -> {target_path(args.models_dir, item)}")
         return
 
-    from huggingface_hub import hf_hub_download
-
     progress = SyncProgress(artifacts)
     for item in artifacts:
         progress.begin(item)
@@ -165,15 +179,7 @@ def main() -> None:
         cached = destination.is_file() and destination.stat().st_size == item["size"]
         destination.parent.mkdir(parents=True, exist_ok=True)
         print(f"Syncing {item['repo']}/{item['file']}", flush=True)
-        downloaded = Path(
-            hf_hub_download(
-                repo_id=item["repo"],
-                filename=item["file"],
-                revision=item["revision"],
-                local_dir=(args.models_dir / item["local_dir"]).resolve(),
-                tqdm_class=progress.tqdm_class(),
-            )
-        )
+        downloaded = destination if cached else download_pinned_file(item, args.models_dir, progress)
         if downloaded.resolve() != destination:
             raise RuntimeError(f"Downloaded model did not match the lock file: {item['file']}")
         progress.report(item['size'], stage='verifying', force=True)
