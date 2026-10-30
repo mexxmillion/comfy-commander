@@ -1,0 +1,15 @@
+ComfyUI is incredibly powerful. But using it can mean managing nodes, models, machines, and queues before making anything. Comfy Commander moves that complexity out of the creative process.
+
+It gives you one focused interface for desktop, remote desktop, or private access from your phone. Generate, monitor jobs, review outputs, and manage compute without living inside a node graph.
+
+Behind it, Tensor Master runs a managed dispatcher. Every generation becomes a durable job with a queue position, priority, compatible runtime, progress, and output. Recreate a job, amend the creative direction, or reroute it without losing the original setup.
+
+Start with one GPU, or scale to many. Add machines from your local network, then expand through RunPod or Vast whenever inspiration demands more capacity. Compute is available at your fingertips and can grow as far as the capacity and budget you authorize. The dispatcher keeps workers, jobs, deadlines, and cost ceilings under control.
+
+The experience is curated: MiniMax H3, Fast H3, Qwen Image, Turbo presets, and one-shot character replacement. SAM 3 tracks the performer, builds the target guide, and sends it into H3 while source timing and audio stay attached.
+
+Comfy Commander is agent-friendly, with an MCP server and controller API. An authorized tool such as Codex can inspect workers, prepare and submit jobs, monitor progress, and help manage a larger shot list. Safety rules remain in the dispatcher, not in the prompt.
+
+The goal is low friction, elastic capacity, and less technical setup, so a creator can move from an idea to one shot, or a complete short film, from almost anywhere.
+
+This is Comfy Commander by Tensor Master. Creativity first. Scalable compute at your fingertips.
