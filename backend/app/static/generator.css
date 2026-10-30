@@ -497,6 +497,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline:2px solid v
 @scope (#generator) { :scope{min-height:0} }
 @scope (#generator) {
  .topbar,#draft-status{padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right))}
+ :scope.motion-input-only .hero-panel{display:none}
 }
 @scope (#generator) {
  @media(min-width:1000px){

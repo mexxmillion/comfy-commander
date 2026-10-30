@@ -106,13 +106,15 @@
         <div id="motion-reference-inputs" class="frame-inputs" hidden>
           <label class="frame-slot" for="motion-video"><span>Motion video</span><input id="motion-video" type="file" accept="video/*"><strong id="motion-video-label">Add motion to copy</strong><small>Exactly one source video</small></label>
           <label class="frame-slot" for="motion-image"><span>Character image</span><input id="motion-image" type="file" accept="image/*"><strong id="motion-image-label">Add your character</strong><small>Exactly one image</small></label>
+          <label class="frame-slot" for="motion-location"><span>Location image · optional</span><input id="motion-location" type="file" accept="image/*"><strong id="motion-location-label">Keep original location</strong><small>Add a scene to replace the background</small></label>
         </div>
         <div id="reference-list" class="reference-list" aria-live="polite"></div>
         <div id="replacement-settings" class="h3-only reference-mode-only" hidden>
+          <select id="replacement-mode" hidden aria-label="Automatic replacement mode"><option value="person">Person</option><option value="all">Person + scene</option></select>
           <label class="field"><span>Person to replace · SAM3 tracking prompt</span><input id="replacement-target" type="text" minlength="3" maxlength="300" value="person" placeholder="The person in the red shirt"></label>
           <label class="switch-row"><input id="character-swap-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"><i></i></span><span><strong>Character Swap v1.5 LoRA</strong><small>Optional identity support · strength 1.0 · off by default</small></span></label>
           <button id="use-character-swap-profile" class="text-button" type="button">Use v1.5 starter profile</button><button id="copy-character-swap-profile" class="text-button" type="button">Copy profile JSON</button>
-          <p class="hint">Requires exactly one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
+          <p id="replacement-mode-help" class="hint">Requires exactly one video and one image. One job runs SAM3 tracking → target-only color inversion → H3. Audio lock starts on. The first video supplies motion; images supply replacement identity.</p>
         </div>
 
         <label id="h3-audio-lock-row" class="switch-row h3-only reference-mode-only">

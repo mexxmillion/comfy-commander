@@ -946,8 +946,8 @@ function buildH3Workflow(references, seed, creative = null, options = {}) {
   const megapixels = Number($("#megapixels").value);
   const duration = singleFrame ? 5 / 24 : Number($("#duration").value);
   const aspect = $("#aspect-ratio").value;
-  const enhancePrompt = options.enhanceOverride ?? (state.runPrompt ? false : (creative ? false : $("#ai-enhance").checked));
-  const promptText = options.promptOverride ?? state.runPrompt ?? $("#direction").value.trim();
+  const enhancePrompt = motionModeSelected() ? false : options.enhanceOverride ?? (state.runPrompt ? false : (creative ? false : $("#ai-enhance").checked));
+  const promptText = motionModeSelected() ? replacementInstructions() : options.promptOverride ?? state.runPrompt ?? $("#direction").value.trim();
   const workflow = {
     "119": { inputs: { vae_name: "minimax_h3_video_vae_int8_convrot.safetensors" }, class_type: "VAELoader" },
     "120": { inputs: { vae_name: "minimax_h3_audio_vae_fp32.safetensors" }, class_type: "VAELoader" },
@@ -1541,9 +1541,9 @@ function captureH3Recipe(references, seed) {
     ...(state.restoredCreative ? {creative: state.restoredCreative} : {}),
     mode: "h3",
     h3Type: state.h3Type,
-    direction: $("#direction").value.trim(),
-    sourceDirection: $("#direction").value.trim(),
-    aiPrompt: $("#ai-generated-prompt").value.trim(),
+    direction: motionModeSelected()?replacementInstructions():$("#direction").value.trim(),
+    sourceDirection: motionModeSelected()?replacementInstructions():$("#direction").value.trim(),
+    aiPrompt: motionModeSelected()?replacementInstructions():$("#ai-generated-prompt").value.trim(),
     references,
     turbo: Number(studioRoot.querySelector('input[name="turbo"]:checked').value),
     turboEnabled: $("#turbo-enabled").checked && (state.h3Type === "frames" ? $("#frame-h3-model").value : $("#h3-model").value) !== EROSMAX_MODEL,
@@ -1558,9 +1558,10 @@ function captureH3Recipe(references, seed) {
     duration: Number($("#duration").value),
     aspect: $("#aspect-ratio").value,
     seed,
-    enhancePrompt: $("#ai-enhance").checked,
+    enhancePrompt: motionModeSelected()?false:$("#ai-enhance").checked,
     aiModel: enhancementModel('h3'),
     jobType: h3JobType(),
+    replacementMode: motionModeSelected() ? $('#replacement-mode').value : null,
     replacementTarget: $('#replacement-target').value.trim(),
     videoPreparation: replacementDefaults.preparation,
     characterSwapEnabled: $('#character-swap-enabled').checked,
@@ -1709,8 +1710,9 @@ function loadRecipe(recipe) {
   $("#ai-model").value = recipe.aiModel || $("#ai-model").value;
   const turbo = studioRoot.querySelector(`input[name="turbo"][value="${recipe.turbo || 4}"]`);
   if (turbo) turbo.checked = true;
-  const jobType = studioRoot.querySelector(`input[name="h3-mode"][value="${recipe.h3Type === "frames" ? "frames" : recipe.jobType === "replacement" ? "replacement" : "standard"}"]`);
+  const jobType = studioRoot.querySelector(`input[name="h3-mode"][value="${recipe.h3Type === "frames" ? "frames" : recipe.replacementMode || recipe.jobType === "replacement" ? "replacement" : "standard"}"]`);
   if (jobType) jobType.checked = true;
+  $('#replacement-mode').value=recipe.replacementMode || 'person';
   $('#replacement-target').value=recipe.replacementTarget || 'person';
   replacementDefaults.preparation=recipe.videoPreparation || replacementDefaults.preparation;
   $('#character-swap-enabled').checked=recipe.characterSwapEnabled===true;
@@ -1989,6 +1991,7 @@ async function showGallery() {
 }
 
 function enhancementEnabled(mode = state.mode) {
+  if(mode==='h3' && motionModeSelected())return false;
   return mode === "h3" ? $("#ai-enhance").checked : mode === "qwen" ? $("#qwen-enhance").checked : false;
 }
 
@@ -2089,7 +2092,7 @@ async function run(event) {
     const kinds = [...state.savedReferences.map((ref) => ref.kind), ...state.files.map((file) => file.type.startsWith("video/") ? "video" : "image")];
     if (!kinds.includes("video") || !kinds.includes("image")) return toast("Add one video and one face photo.");
   }
-  const direction = state.mode === "faces" ? "Face Refine" : $("#direction").value.trim();
+  const direction = state.mode==='h3' && motionModeSelected() ? replacementInstructions() : state.mode === "faces" ? "Face Refine" : $("#direction").value.trim();
   if (!direction && (enhancementEnabled() || !$("#ai-generated-prompt").value.trim())) return toast("Enter a user prompt to enhance, or turn enhancement off to reuse the saved AI prompt.");
   const jobMode = state.mode;
   const enhance = enhancementEnabled(jobMode);
@@ -2108,7 +2111,7 @@ async function run(event) {
       throw new Error("Qwen Image 2.1 nodes are not loaded. Check the worker status in Tensor Master.");
     }
     const references = frameMode ? await uploadFrameReferences() : await uploadReferences();
-    if(jobMode==='h3' && !frameMode && h3JobType()==='replacement') {
+    if(jobMode==='h3' && !frameMode && motionModeSelected()) {
       validateReplacementReferences(references);
       if($('#h3-single-frame').checked)throw new Error('Replacement requires video output. Turn off single-frame mode.');
     }
@@ -2127,7 +2130,7 @@ async function run(event) {
       : jobMode === "h3" && Number.isSafeInteger(requestedSeed) && requestedSeed >= 0
       ? requestedSeed
       : Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-    const existing = ["h3", "qwen"].includes(jobMode) ? $("#ai-generated-prompt").value.trim() : "";
+    const existing = ["h3", "qwen"].includes(jobMode) && !motionModeSelected() ? $("#ai-generated-prompt").value.trim() : "";
     const writer = enhance ? prepareWriter(jobMode, references, seed) : null;
     state.runPrompt = writer ? PROMPT_SLOT : existing || direction;
     const graph = buildWorkflow(references, seed);
@@ -2155,7 +2158,7 @@ async function run(event) {
       addLog(`${runLabel}: AI prompt ready. Original prompt preserved.`, "success");
     }
     const workflow = writer ? withPrompt(graph, finalPrompt) : graph;
-    if (recipe) recipe.aiPrompt = enhance ? finalPrompt : existing;
+    if (recipe) recipe.aiPrompt = motionModeSelected()?direction:enhance ? finalPrompt : existing;
 
     if (["h3", "qwen", "faces", "krea", "ltx", "voice"].includes(jobMode)) {
       const forceLocal = (localQwenLoras || localFaceModel) && target === "tensor-master-any";
@@ -2347,7 +2350,7 @@ function setH3Type(type) {
     $("#frame-turbo-strength").value = 0.5;
   }
   if (!frameMode && previousType !== state.h3Type && state.mode === "h3") $("#turbo-enabled").checked = $("#h3-model").value !== EROSMAX_MODEL;
-  const selected = studioRoot.querySelector(`input[name="h3-mode"][value="${state.h3Type==='frames'?'frames':h3JobType()}"]`);
+  const selected = studioRoot.querySelector(`input[name="h3-mode"][value="${state.h3Type==='frames'?'frames':motionModeSelected()?'replacement':'standard'}"]`);
   if (selected) selected.checked = true;
   if (state.mode === "h3") {
     $("#studio-subtitle").textContent = frameMode ? "MiniMax first / last frame video" : "MiniMax reference video";
@@ -2414,7 +2417,7 @@ function syncAiPromptPanel() {
   const visible = supported && (enhancementEnabled() || generated) && !(state.mode === "h3" && window.creativeMaster?.enabled());
   $("#ai-generated-panel").hidden = !visible;
   $("#ai-prompt-only").disabled = !supported || !enhancementEnabled();
-  $("#direction").required = !["ltx", "faces"].includes(state.mode) && !(supported && !enhancementEnabled() && generated);
+  $("#direction").required = !(state.mode==='h3' && motionModeSelected()) && !["ltx", "faces"].includes(state.mode) && !(supported && !enhancementEnabled() && generated);
   if (!visible) return;
   $("#ai-generated-status").textContent = !generated
     ? "No AI prompt yet. Run, choose Prompt only, or click Generate again. Your original prompt is never replaced."
@@ -2703,46 +2706,66 @@ $("#h3-single-frame").addEventListener("change", () => {
 for (const id of ["duration", "aspect-ratio", "megapixels", "ai-model", "qwen-ai-model", "qwen-reference-resolution", "qwen-edit-canvas"]) {
   $(`#${id}`).addEventListener("change", markAiPromptStale);
 }
+function motionModeSelected() { return state.mode==='h3' && state.h3Type!=='frames' && studioRoot.querySelector('input[name="h3-mode"]:checked')?.value==='replacement'; }
+function replacementInstructions(){return $('#replacement-mode').value==='all'?CommanderReplacementModes.prompts.all:replacementDefaults.prompt;}
 function h3JobType() {
-  return studioRoot.querySelector('input[name="h3-mode"]:checked')?.value==='replacement'?'replacement':'standard';
+  return motionModeSelected()?CommanderReplacementModes.jobType($('#replacement-mode').value):'standard';
 }
 function renderMotionSlots() {
   const references=[...(state.savedReferences||[]),...(state.files||[]).map(file=>({kind:file.type.startsWith('video/')?'video':isAudioFile(file)?'audio':'image',name:file.name}))];
+  const images=references.filter(ref=>ref.kind==='image');
+  $('#replacement-mode').value=CommanderReplacementModes.mode(references);
+  $('#motion-location-label').textContent=images[1]?.name||images[1]?.file?.split('/').pop()||'Keep original location';
   for(const kind of ['video','image']) {
     const matches=references.filter(ref=>ref.kind===kind);
-    $('#motion-'+kind+'-label').textContent=matches.length>1?`${matches.length} ${kind}s · choose one`:matches[0]?.name||matches[0]?.file?.split('/').pop()||(kind==='video'?'Add motion to copy':'Add your character');
+    $('#motion-'+kind+'-label').textContent=matches[0]?.name||matches[0]?.file?.split('/').pop()||(kind==='video'?'Add motion to copy':'Add your character');
   }
+  if(motionModeSelected())syncReplacementMode();
 }
-for(const kind of ['video','image'])$('#motion-'+kind).addEventListener('change',event=>{
+for(const kind of ['video','image','location'])$('#motion-'+kind).addEventListener('change',async event=>{
   const file=event.target.files[0];if(!file)return;
-  state.savedReferences=state.savedReferences.filter(ref=>ref.kind!==kind);
-  state.files=state.files.filter(item=>(item.type.startsWith('video/')?'video':isAudioFile(item)?'audio':'image')!==kind);
-  state.files.push(file);event.target.value='';renderReferences();markAiPromptStale();
+  const slots=['video','image','location'].map(name=>$('#motion-'+name));slots.forEach(input=>input.disabled=true);
+  try {
+    const refs=await uploadReferences(),images=refs.filter(ref=>ref.kind==='image');
+    if(kind==='location' && !images.length)throw new Error('Choose the character image before the optional location.');
+    const saved=await uploadReferenceFile(file,'motion-'+kind),ref={kind:kind==='video'?'video':'image',file:[saved.subfolder,saved.name].filter(Boolean).join('/'),...(kind==='video'?{use_soundtrack:true}:{})};
+    state.savedReferences=CommanderReplacementModes.replaceSlot(refs,kind,ref);
+    state.files=[];renderReferences();markAiPromptStale();
+  }catch(error){showError(error.message);}
+  finally{slots.forEach(input=>input.disabled=false);event.target.value='';}
 });
 function validateReplacementReferences(references) {
-  if(references.length!==2 || references.filter(ref=>ref.kind==='video').length!==1 || references.filter(ref=>ref.kind==='image').length!==1)throw new Error('Replacement requires exactly one source video and one replacement image. Remove any extra references.');
+  CommanderReplacementModes.validate($('#replacement-mode').value,references);
 }
 function syncReplacementMode(enableAudioDefault=false) {
-  const replacement=state.mode==='h3' && state.h3Type!=='frames' && h3JobType()==='replacement';
+  const replacement=state.mode==='h3' && state.h3Type!=='frames' && motionModeSelected();
+  const scope=$('#replacement-mode').value,person=scope==='person';
+  studioRoot.classList.toggle('motion-input-only',replacement);
+  $('#direction').required=!replacement;
   $('#replacement-settings').hidden=!replacement;
-  $('#replacement-target').required=replacement;
-  $('#character-swap-enabled').disabled=!replacement;
-  if(!replacement)$('#character-swap-enabled').checked=false;
+  $('#replacement-target').required=replacement && person;
+  $('#replacement-target').closest('label').hidden=!person;
+  $('#character-swap-enabled').disabled=!replacement || !person;
+  if(!replacement || !person)$('#character-swap-enabled').checked=false;
+  $('#use-character-swap-profile').hidden=!person;$('#copy-character-swap-profile').hidden=!person;
+  $('#replacement-mode-help').textContent=person?'Character image + source video. SAM3 tracks your selected target; the original location is retained. Instructions are automatic. Add a location image to change the scene too.':'Character image + location image + source video. Instructions are automatic. Scene replacement is experimental; this route does not apply the person-only SAM3 mask or guarantee preservation of other people.';
   if(replacement && enableAudioDefault) {
     $('#h3-audio-lock').checked=true;
     $('#duration').value=5;$('#megapixels').value=0.5;$('#aspect-ratio').value='9:16 (Portrait Widescreen)';
     applyQualityPreset(replacementDefaults.quality);
-    if(!$('#direction').value.trim())$('#direction').value=replacementDefaults.prompt;
   }
   if(state.mode==='h3') {
-    $('#reference-section-title').textContent=replacement?'One video + one image':'References · optional';
-    $('#reference-help').textContent=replacement?'Add exactly one source video and one replacement image.':'No reference: text-to-video. Add an image or clip to guide the result. Ask in your prompt if an image should be the opening frame.';
+    $('#reference-section-title').textContent=replacement?'Person + video · location optional':'References · optional';
+    $('#reference-help').textContent=replacement?$('#replacement-mode-help').textContent:'No reference: text-to-video. Add an image or clip to guide the result. Ask in your prompt if an image should be the opening frame.';
     $('#studio-subtitle').textContent=replacement?'H3 Motion control':state.h3Type==='frames'?'H3 Start / end frames':'H3 References';
     $('#general-reference-upload').hidden=replacement;
     $('#motion-reference-inputs').hidden=!replacement;
   }
 }
-studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>input.addEventListener('change',()=>{const preset=$('#h3-quality').value;setH3Type(input.value==='frames'?'frames':'reference');applyQualityPreset(preset);syncReplacementMode(true);markAiPromptStale();}));
+studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>input.addEventListener('change',()=>{
+  if($('#creative-enabled').checked){$('#creative-enabled').checked=false;$('#creative-enabled').dispatchEvent(new Event('change'));}
+  const preset=$('#h3-quality').value;setH3Type(input.value==='frames'?'frames':'reference');applyQualityPreset(preset);syncReplacementMode(true);markAiPromptStale();
+}));
 async function characterSwapProfile() {
   const response=await fetch('/api/v1/community/workflows/character-swap-v15');
   if(!response.ok)throw new Error('Could not load the Character Swap profile.');
@@ -2991,7 +3014,7 @@ initialize().then(restoreInitialView);
     const enabled=state.mode==='h3' && $('#creative-enabled').checked;
     studioRoot.classList.toggle('creative-active',enabled);
     $('#creative-controls').hidden = !enabled;
-    const noPrompt=enabled || ['faces','ltx'].includes(state.mode);
+    const noPrompt=enabled || motionModeSelected() || ['faces','ltx'].includes(state.mode);
     $('#single-prompt').hidden=noPrompt;
     $('#direction').disabled=noPrompt;
     $('#direction').required=!noPrompt;
@@ -2999,7 +3022,7 @@ initialize().then(restoreInitialView);
     $('#creative-brief').required=enabled;
     $('#ai-enhance').disabled=enabled;
     $('#ai-model').disabled=enabled;
-    studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>{input.disabled=enabled;});
+    studioRoot.querySelectorAll('input[name="h3-mode"]').forEach(input=>{input.disabled=busy;});
     if(enabled && !$('#creative-brief').value)$('#creative-brief').value=$('#direction').value;
     syncPromptEnhancement();
     if (state.mode === 'h3') $('#run-button span').textContent = enabled ? ($('#creative-review').checked ? 'Generate ideas · review first' : 'Generate & queue') : 'Run H3';
@@ -3142,7 +3165,7 @@ initialize().then(restoreInitialView);
       const previous=controls.map(c=>c.disabled); controls.forEach(c=>c.disabled=true);
       try {
         const references=frames?await uploadFrameReferences():await uploadReferences();
-        if(!frames && h3JobType()==='replacement')validateReplacementReferences(references);
+        if(!frames && motionModeSelected())validateReplacementReferences(references);
         snapshot.recipe={...captureH3Recipe(references,0),direction:brief,aiPrompt:'',enhancePrompt:false};
         snapshot.graph=buildH3Workflow(references,0,{});
       } finally {controls.forEach((c,i)=>c.disabled=previous[i]);}
