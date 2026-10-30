@@ -46,6 +46,14 @@ enhancement off to render without an LLM. Prompts/references are sent to the
 chosen endpoint only when AI assistance is requested. A local endpoint keeps
 that AI processing local; a hosted endpoint receives those inputs.
 
+Motion-control video enhancement sends a compressed preview at the requested
+render dimensions and duration, starting at the selected trim start. A shorter
+selected interval is honored. The AI preview uses 8 fps to bound payload size;
+rendering retains its normal frame rate and the source file is unchanged.
+Use the video's **Process** button to scrub the source, set start/end seconds
+or mark them at the playhead, then **Process & preview** and **Save reference**.
+Changing the interval invalidates the old preview so it cannot be saved by mistake.
+
 Commander accepts **32k context or larger**, and recommends **128k** for workflows
 and media. Enter the context actually configured on your server. The output
 limit defaults to 24,000 tokens; eight Creative variations may request 20,400.
@@ -63,3 +71,8 @@ support that exact request format.
 The [official Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
 documents model-dependent text/image/audio inputs and parameter support. An API
 being described as compatible does not guarantee every model accepts every field.
+
+Drag the two handles on the video timeline to select the start and end. **Preview
+selected range** plays only that interval immediately; **Process & preview**
+creates the resized clip for review before **Save reference**. Exact time fields
+and playhead buttons remain available for precise adjustments.

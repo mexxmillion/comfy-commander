@@ -2,7 +2,6 @@
 import asyncio
 import base64
 import io
-import math
 import mimetypes
 import re
 import tempfile
@@ -71,9 +70,9 @@ def reference_path(name: str) -> Path:
     return path
 
 
-async def convert_media(path: Path, kind: str, crop=None, trim=None):
+async def convert_media(path: Path, kind: str, crop=None, trim=None, preview=False, target_size=None):
     """Preserve the reference crop/trim and its audio when sending media to the writer."""
-    if not crop and not trim and kind == 'video':
+    if not preview and not crop and not trim and kind == 'video':
         if path.stat().st_size > 64 * 1024**2:
             raise HTTPException(413, 'Prompt reference video exceeds 64 MiB; trim the reference first')
         return path.read_bytes(), mimetypes.guess_type(path.name)[0] or 'video/mp4'
@@ -91,8 +90,14 @@ async def convert_media(path: Path, kind: str, crop=None, trim=None):
             if crop:
                 x, y, w, h = crop
                 filters.append(f'crop=trunc(iw*{w}/2)*2:trunc(ih*{h}/2)*2:iw*{x}:ih*{y}')
-            filters.append('scale=trunc(iw/2)*2:trunc(ih/2)*2')
-            command += ['-vf', ','.join(filters), '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac']
+            if preview and target_size:
+                width, height = target_size
+                filters.append(f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=8')
+            else:
+                filters.append('scale=trunc(iw/2)*2:trunc(ih/2)*2')
+            command += ['-vf', ','.join(filters), '-c:v', 'libx264', '-preset', 'fast', '-crf', '28' if preview else '23', '-c:a', 'aac']
+            if preview:
+                command += ['-maxrate', '1M', '-bufsize', '2M', '-ac', '1', '-b:a', '64k', '-movflags', '+faststart']
         else:
             command += ['-vn', '-ac', '1', '-ar', '24000', '-c:a', 'pcm_s16le']
         command += ['-y', str(output)]
@@ -105,12 +110,13 @@ async def convert_media(path: Path, kind: str, crop=None, trim=None):
             raise HTTPException(422, 'Prompt reference conversion timed out')
         if process.returncode or not output.is_file():
             raise HTTPException(422, 'Cannot prepare prompt reference')
-        if output.stat().st_size > 64 * 1024**2:
-            raise HTTPException(413, 'Prompt reference exceeds 64 MiB; trim the reference first')
+        limit = 8 if preview else 64
+        if output.stat().st_size > limit * 1024**2:
+            raise HTTPException(413, f'AI reference preview exceeds {limit} MiB; shorten the selected interval or turn off AI enhancement')
         return output.read_bytes(), 'video/mp4' if kind == 'video' else 'audio/wav'
 
 
-async def reference_content(references: ReferenceSet):
+async def reference_content(references: ReferenceSet, motion_seconds=None, motion_size=None):
     parts, manifest = [], []
     total = 0
     for tagged in references.assign_tags():
@@ -133,7 +139,14 @@ async def reference_content(references: ReferenceSet):
                 raise HTTPException(422, 'Cannot prepare reference image')
             parts.append({'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,'+base64.b64encode(data).decode()}})
         else:
-            data, mime = await convert_media(path, tagged.kind, tagged.ref.crop, tagged.ref.trim)
+            trim = tagged.ref.trim
+            preview = tagged.kind == 'video' and motion_seconds is not None
+            if preview:
+                start = trim[0] if trim else 0
+                end = min(trim[1], start + motion_seconds) if trim else start + motion_seconds
+                trim = [start, end]
+                manifest.append(f'{label}: AI preview uses {start:g}–{end:g} seconds at target dimensions and 8 fps; original source is unchanged.')
+            data, mime = await convert_media(path, tagged.kind, tagged.ref.crop, trim, preview=preview, target_size=motion_size)
             encoded = base64.b64encode(data).decode()
             if tagged.kind == 'video':
                 parts.append({'type': 'video_url', 'video_url': {'url': f'data:{mime};base64,{encoded}'}})
@@ -155,15 +168,21 @@ async def enhance(payload: EnhanceRequest):
         references.validate()
     except ReferenceError as error:
         raise HTTPException(400, str(error))
-    parts, manifest = await reference_content(references)
+    from .job_spec import _resolution
+    try:
+        size = _resolution(payload.aspect_ratio, payload.megapixels)
+    except (ValueError, TypeError, ZeroDivisionError, OverflowError):
+        size = None
+    if not size or min(size) <= 0:
+        raise HTTPException(400, 'Invalid output aspect ratio or resolution')
+    parts, manifest = await reference_content(references, payload.duration if payload.motion_mode else None, size if payload.motion_mode else None)
     provider.body({'model': payload.model, 'max_tokens': 6000,
                    'messages': [{'role': 'user', 'content': parts}]})
     counts = references.counts()
     aspect = payload.aspect_ratio.split()[0]
     try:
         a, b = (float(value) for value in aspect.split(':'))
-        width = round(math.sqrt(payload.megapixels * 1_000_000 * a / b) / 16) * 16
-        height = round(width * b / a / 16) * 16
+        width, height = size
     except (ValueError, ZeroDivisionError):
         raise HTTPException(400, 'Invalid output aspect ratio')
     try:
@@ -197,6 +216,8 @@ async def enhance(payload: EnhanceRequest):
                       'messages': [{'role': 'system', 'content': system},
                                    {'role': 'user', 'content': [{'type': 'text', 'text': user}, *parts]}]})
             result = await client.post(provider.url, headers=headers, json=request_body)
+        if result.status_code == 413:
+            raise HTTPException(413, 'The AI provider rejected the reference payload as too large. Shorten the reference interval or turn off AI enhance motion prompt. No render was submitted.')
         if result.status_code != 200:
             raise HTTPException(502, f'Prompt provider returned HTTP {result.status_code}')
         prompt = director.clean_output(result.json()['choices'][0]['message']['content'])
