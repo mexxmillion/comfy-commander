@@ -171,7 +171,7 @@ async def _develop_ideas(payload: Brief) -> list[dict]:
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt in range(2):
             try:
-                response = await client.post(provider.url,
+                response = await provider.apost(client,
                     headers=provider.headers, json=provider.body(request_json))
                 if response.status_code == 400 and attempt == 0 and any(
                         marker in response.text.lower() for marker in ('json_schema', 'response_format', 'structured output')):

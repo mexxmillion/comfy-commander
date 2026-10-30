@@ -152,8 +152,7 @@ async def agent_chat(payload: AgentChat, request: Request) -> dict:
     messages += [message.model_dump() for message in payload.messages]
     try:
         with httpx.Client(timeout=90) as client:
-            response = client.post(
-                provider.url,
+            response = provider.post(client,
                 headers={**provider.headers, "Content-Type": "application/json"},
                 json=provider.body({"model": payload.model, "messages": messages, "response_format": RESPONSE_SCHEMA,
                       "temperature": 0.2, "max_tokens": 1200}),
@@ -165,5 +164,5 @@ async def agent_chat(payload: AgentChat, request: Request) -> dict:
     except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError, RuntimeError) as exc:
         raise HTTPException(502, "The selected LLM could not complete this request. Check its JSON support, context window and endpoint configuration.") from exc
     return {"message": str(reply.get("message") or "I could not form a response."),
-            "model": provider.settings.model if provider.settings.provider == 'compatible' else payload.model, "workflow_analysis": analysis,
+            "model": provider.settings.model if provider.settings.provider != 'openrouter' else payload.model, "workflow_analysis": analysis,
             "action": _proposal(reply, payload.workflow) if reply.get("action") == "open_setup" else None}

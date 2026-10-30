@@ -54,8 +54,7 @@ async def enhance(payload: EnhanceRequest) -> dict:
     )
     try:
         async with httpx.AsyncClient(timeout=90) as client:
-            response = await client.post(
-                provider.url,
+            response = await provider.apost(client,
                 headers=provider.headers,
                 json=provider.body({
                     "model": payload.model,
@@ -70,7 +69,7 @@ async def enhance(payload: EnhanceRequest) -> dict:
         if response.status_code != 200:
             raise HTTPException(502, f"Prompt provider returned HTTP {response.status_code}")
         rewritten = clean_result(response.json()["choices"][0]["message"]["content"])
-        return {"prompt": rewritten, "model": provider.settings.model if provider.settings.provider == 'compatible' else payload.model, "mode": payload.mode}
+        return {"prompt": rewritten, "model": provider.settings.model if provider.settings.provider != 'openrouter' else payload.model, "mode": payload.mode}
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, TypeError, ValueError):

@@ -7,12 +7,12 @@
       const response=await fetch('/api/v1/settings/llm',{credentials:'same-origin'});
       if(!response.ok)return;
       const data=await response.json(),config=data.settings;
-      window.tensorLLMModel=config.provider==='compatible'?config.model:null;
+      window.tensorLLMModel=config.provider!=='openrouter'?config.model:null;
       for(const selector of selectors) {
         const select=document.querySelector(selector);if(!select)continue;
         if(!original.has(select))original.set(select,select.innerHTML);
-        if(config.provider==='compatible') {
-          select.replaceChildren(new Option(`${config.model} · configured endpoint`,config.model));
+        if(config.provider!=='openrouter') {
+          select.replaceChildren(new Option(`${config.model} · ${config.provider==='comfyui_qwenvl'?'local ComfyUI':'configured endpoint'}`,config.model));
           const label=select.closest('label')?.querySelector('span');if(label)label.textContent='AI endpoint model';
         }else {select.innerHTML=original.get(select);const label=select.closest('label')?.querySelector('span');if(label)label.textContent='OpenRouter model';}
       }
@@ -20,7 +20,12 @@
   }
   if(form) {
     const status=document.querySelector('#llm-status');
-    function showProvider(){form.querySelectorAll('[data-llm-custom]').forEach(field=>field.hidden=form.elements.provider.value!=='compatible');}
+    function showProvider(){
+      const provider=form.elements.provider.value,local=provider==='comfyui_qwenvl';
+      form.querySelectorAll('[data-llm-custom]').forEach(field=>field.hidden=provider!=='compatible');
+      form.querySelectorAll('[data-llm-model]').forEach(field=>field.hidden=provider==='openrouter');
+      form.querySelectorAll('[data-llm-local]').forEach(field=>field.hidden=!local);
+    }
     async function load() {
       try {
         const response=await fetch('/api/v1/settings/llm',{credentials:'same-origin'});
@@ -28,7 +33,7 @@
         const data=await response.json();
         for(const [name,value] of Object.entries(data.settings)) {const field=form.elements[name];if(field)field.type==='checkbox'?field.checked=value:field.value=value;}
         document.querySelector('#compatible-llm-key').value='';showProvider();
-        status.textContent=data.settings.provider==='openrouter'?'OpenRouter selected. Connect its key using the service card above.':`Compatible endpoint selected. ${data.custom_key_saved?'Key saved for this endpoint.':'No matching saved key; localhost endpoints may be keyless.'} Capabilities must match the actual model.`;
+        status.textContent=data.settings.provider==='comfyui_qwenvl'?'Local QwenVL selected. Validate checks installed nodes, not inference or weights.':data.settings.provider==='openrouter'?'OpenRouter selected. Connect its key using the service card above.':`Compatible endpoint selected. ${data.custom_key_saved?'Key saved for this endpoint.':'No matching saved key; localhost endpoints may be keyless.'} Capabilities must match the actual model.`;
       }catch(error){status.textContent=error.message;}
     }
     async function submit(save) {
@@ -45,7 +50,14 @@
       finally{buttons.forEach(button=>button.disabled=false);}
     }
     form.addEventListener('submit',event=>{event.preventDefault();void submit(true);});
-    form.elements.provider.addEventListener('change',showProvider);
+    form.elements.provider.addEventListener('change',()=>{
+      if(form.elements.provider.value==='comfyui_qwenvl'){
+        form.elements.model.value='Qwen3-VL-4B-Instruct';form.elements.max_output_tokens.value=4096;
+        form.elements.vision.checked=true;form.elements.audio.checked=false;form.elements.video.checked=false;
+        form.elements.json_format.value='prompt';form.elements.token_parameter.value='max_tokens';
+      }
+      showProvider();
+    });
     document.querySelector('#validate-llm').addEventListener('click',()=>void submit(false));
     document.querySelector('#remove-compatible-llm-key').addEventListener('click',async()=>{try{const r=await fetch('/api/v1/settings/llm/key',{method:'DELETE',credentials:'same-origin'});if(!r.ok)throw new Error('Sign in before removing the key.');document.querySelector('#compatible-llm-key').value='';status.textContent='Compatible-endpoint key removed. OpenRouter key unchanged.';}catch(error){status.textContent=error.message;}});
     window.addEventListener('commander-local-auth-ready',()=>void load());

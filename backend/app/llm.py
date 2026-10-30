@@ -1,4 +1,5 @@
 """Controller-owned LLM routing. Endpoint changes and keys are human Setup actions."""
+import asyncio
 import json
 import math
 from dataclasses import dataclass
@@ -20,9 +21,10 @@ OPENROUTER_MODELS = {"google/gemini-3-flash-preview", "google/gemini-2.5-flash-l
 
 class LLMSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["openrouter", "compatible"] = "openrouter"
+    provider: Literal["openrouter", "compatible", "comfyui_qwenvl"] = "openrouter"
     base_url: str = "http://127.0.0.1:1234/v1"
     model: str = Field(default="", max_length=200)
+    local_quantization: Literal["4-bit (VRAM-friendly)", "8-bit (Balanced)", "None (FP16)"] = "4-bit (VRAM-friendly)"
     context_window: int = Field(default=131072, ge=32768, le=2097152)
     max_output_tokens: int = Field(default=24000, ge=1200, le=65536)
     vision: bool = False
@@ -55,8 +57,13 @@ class LLMSettings(BaseModel):
 
     @model_validator(mode="after")
     def usable(self):
-        if self.provider == "compatible" and not self.model:
+        if self.provider != "openrouter" and not self.model:
             raise ValueError("Enter the model ID served by your endpoint.")
+        if self.provider == "comfyui_qwenvl":
+            if self.audio or self.video:
+                raise ValueError("Local QwenVL currently supports text and one image, not native audio/video.")
+            if self.max_output_tokens > 4096:
+                raise ValueError("Experimental QwenVL output limit must be at most 4096 tokens.")
         if self.max_output_tokens >= self.context_window:
             raise ValueError("Output token limit must leave room for input in the context window.")
         return self
@@ -101,6 +108,18 @@ class Connection:
     settings: LLMSettings
     key: str | None
 
+    async def apost(self, client, **kwargs):
+        if self.settings.provider == 'comfyui_qwenvl':
+            from .local_qwenvl import complete
+            return await asyncio.to_thread(complete, self.settings, kwargs['json'])
+        return await client.post(self.url, headers=kwargs.get('headers', self.headers), json=kwargs['json'])
+
+    def post(self, client, **kwargs):
+        if self.settings.provider == 'comfyui_qwenvl':
+            from .local_qwenvl import complete
+            return complete(self.settings, kwargs['json'])
+        return client.post(self.url, headers=kwargs.get('headers', self.headers), json=kwargs['json'])
+
     @property
     def base_url(self):
         return OPENROUTER if self.settings.provider == "openrouter" else self.settings.base_url
@@ -116,7 +135,7 @@ class Connection:
     def body(self, payload):
         body = dict(payload)
         config = self.settings
-        custom = config.provider == "compatible"
+        custom = config.provider != "openrouter"
         if custom:
             body["model"] = config.model
             body.pop("reasoning", None)  # OpenRouter extension, not a portable parameter
@@ -147,6 +166,10 @@ class Connection:
                     if custom and not getattr(config, capability):
                         raise HTTPException(409, f"The configured LLM is not declared to support {capability} input. Choose a capable model in Settings > Connections, use supported references, or turn prompt enhancement off. Nothing was sent.")
                     media_budget += budget
+        if config.provider == "comfyui_qwenvl":
+            from .local_qwenvl import messages
+            messages(body)  # Fail unsupported media before any graph or upload.
+            body["max_tokens"] = min(body.get("max_tokens", 1200), config.max_output_tokens)
         output = body.get("max_tokens", body.get("max_completion_tokens", 1200))
         if output > config.max_output_tokens:
             raise HTTPException(409, "This request needs a larger LLM output limit. Reduce the Creative Engine variation count or increase the limit in Settings > Connections. Nothing was sent.")
@@ -159,6 +182,8 @@ class Connection:
 
 def connection(reader=None):
     config = read_settings()
+    if config.provider == "comfyui_qwenvl":
+        return Connection(config, None)
     if config.provider == "openrouter":
         if reader is None:
             from .prompt_secret import read_key
@@ -178,6 +203,14 @@ def connection(reader=None):
 
 def check_connection(payload):
     config = payload.settings
+    if config.provider == 'comfyui_qwenvl':
+        from .local_qwenvl import inspect
+        try:
+            with httpx.Client(timeout=15, follow_redirects=False, trust_env=False) as client:
+                inspect(client, config)
+        except (httpx.HTTPError, KeyError, TypeError, ValueError):
+            raise HTTPException(409, 'Cannot inspect local QwenVL. Start ComfyUI and check the installed node version.') from None
+        return Connection(config, None), {'message': 'Local QwenVL node/model option found. No inference or download performed. Weights, context and JSON quality still need testing.'}
     if config.provider == "openrouter":
         from .prompt_secret import read_key
         try:

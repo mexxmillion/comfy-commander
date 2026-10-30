@@ -146,7 +146,7 @@ async def enhance(payload: EnhanceRequest):
             if not payload.frame_mode and mode == 'auto':
                 mode = 'standard'
                 if counts['video'] and counts['image']:
-                    classification = await client.post(provider.url, headers=headers,
+                    classification = await provider.apost(client, headers=headers,
                         json=provider.body({'model': 'google/gemini-2.5-flash-lite', 'max_tokens': 6, 'temperature': 0,
                               'messages': [{'role': 'system', 'content': (PROMPTS/'classifier.txt').read_text(encoding='utf-8')},
                                            {'role': 'user', 'content': payload.prompt}]}))
@@ -169,7 +169,7 @@ async def enhance(payload: EnhanceRequest):
                       'reasoning': {'effort': 'none'},
                       'messages': [{'role': 'system', 'content': system},
                                    {'role': 'user', 'content': [{'type': 'text', 'text': user}, *parts]}]})
-            result = await client.post(provider.url, headers=headers, json=request_body)
+            result = await provider.apost(client, headers=headers, json=request_body)
         if result.status_code != 200:
             raise HTTPException(502, f'Prompt provider returned HTTP {result.status_code}')
         prompt = director.clean_output(result.json()['choices'][0]['message']['content'])
