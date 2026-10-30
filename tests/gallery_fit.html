@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gallery full-frame regression</title>
+<link rel="stylesheet" href="../backend/app/static/generator.css">
+<div id="generator" style="padding:20px"><h1>Gallery full-frame check</h1>
+<p>All four colored edges and both labels must remain visible on every thumbnail.</p>
+<div class="gallery-grid" id="cases"></div><p id="result" role="status">Checking…</p></div>
+<script>
+(async()=>{
+  for(const [width,height] of [[180,320],[320,180],[240,240]]){
+    const card=document.createElement('article');card.className='gallery-card';
+    const image=new Image();image.alt=`${width} × ${height} full-frame fixture`;
+    image.src='data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#354054"/><path d="M4 4H${width-4}" stroke="red" stroke-width="8"/><path d="M4 ${height-4}H${width-4}" stroke="lime" stroke-width="8"/><path d="M4 4V${height-4}" stroke="cyan" stroke-width="8"/><path d="M${width-4} 4V${height-4}" stroke="yellow" stroke-width="8"/><g fill="white" font-size="20" text-anchor="middle"><text x="${width/2}" y="30">TOP</text><text x="${width/2}" y="${height-15}">BOTTOM</text></g></svg>`);
+    card.append(image);document.querySelector('#cases').append(card);await image.decode();
+    if(getComputedStyle(image).objectFit!=='contain')throw new Error(`${width}×${height}: thumbnail crops its source`);
+  }
+  document.querySelector('#result').textContent='PASS · portrait, landscape and square thumbnails preserve the full frame.';
+})().catch(error=>{document.querySelector('#result').textContent='FAIL · '+error.message;throw error;});
+</script></html>

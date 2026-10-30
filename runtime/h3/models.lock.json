@@ -9,22 +9,23 @@
     "ref2v-int8": [
       "common",
       "ref2v-int8",
-      "ref2v-turbo",
       "sam3",
       "vsa",
       "face-refine",
       "reference-isolate",
-      "veda-r2va"
+      "veda-r2va",
+      "lightx2v-ref2v",
+      "character-swap-v15"
     ],
     "ref2v-singularity": [
       "common",
       "ref2v-singularity",
-      "ref2v-turbo",
       "sam3",
       "vsa",
       "face-refine",
       "reference-isolate",
-      "veda-r2va"
+      "veda-r2va",
+      "lightx2v-ref2v"
     ],
     "fasth3-omni": [
       "common",
@@ -32,6 +33,13 @@
       "sam3",
       "reference-isolate",
       "veda-r2va"
+    ],
+    "flf2v-int8": [
+      "common",
+      "flf2v-int8",
+      "lightx2v-fl2v",
+      "reference-isolate",
+      "face-refine"
     ]
   },
   "artifacts": [
@@ -115,15 +123,6 @@
       "local_dir": ".",
       "size": 20970379616,
       "sha256": "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779"
-    },
-    {
-      "group": "ref2v-turbo",
-      "repo": "Kijai/MiniMax-H3-experimental",
-      "revision": "a32d8b8b86bf649eb949db63727e5456d1af8611",
-      "file": "loras/MiniMax-H3-Ref2VA-Acc-8Step_pruned_comfy.safetensors",
-      "local_dir": ".",
-      "size": 1725921392,
-      "sha256": "6f18e1c2eccb14b37322607730f26b16bf1169b56cd098ea006cffaec43d1e39"
     },
     {
       "group": "face-refine",
@@ -295,6 +294,60 @@
       "local_dir": "veda",
       "size": 275415752,
       "sha256": "23edace948693772be33d5cc945d302d2b037a29bd44bd57071bfbdd8b02517d"
+    },
+    {
+      "group": "lightx2v-ref2v",
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "30f485ed874aa44c8183348ad361c5eabad318da",
+      "file": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+      "local_dir": "loras",
+      "size": 1956193000,
+      "sha256": "5b9ab5ade15d0775676d01a907268a69a1468dc6033b3b0d3ded5502f3ebb84c"
+    },
+    {
+      "group": "lightx2v-ref2v",
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "30f485ed874aa44c8183348ad361c5eabad318da",
+      "file": "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
+      "local_dir": "loras",
+      "size": 1956193000,
+      "sha256": "6a56f41ab4229c9dd845b9501bbd475ee57e112d846cf2e819d534a1ae928c5a"
+    },
+    {
+      "group": "flf2v-int8",
+      "repo": "Comfy-Org/MiniMax-H3",
+      "revision": "7e75982b97cd5a41d2dcfa1904ee88d0686d6fd1",
+      "file": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "local_dir": ".",
+      "size": 20970379616,
+      "sha256": "e889202c41dafb67b10d67b97f0d8541508036a6090af23425a5c2615d03c47a"
+    },
+    {
+      "group": "lightx2v-fl2v",
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "30f485ed874aa44c8183348ad361c5eabad318da",
+      "file": "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
+      "local_dir": "loras",
+      "size": 1956192992,
+      "sha256": "c396a9a06f58399e9df9754b18299818d84a2ddd371724ba48fe4a41221437dc"
+    },
+    {
+      "group": "lightx2v-fl2v",
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "30f485ed874aa44c8183348ad361c5eabad318da",
+      "file": "minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
+      "local_dir": "loras",
+      "size": 1956193000,
+      "sha256": "08cfe946033af7d27719b964b6e0a0e50c32138daabbd6ce4137e23df6bf9980"
+    },
+    {
+      "group": "character-swap-v15",
+      "repo": "akatz-ai/MiniMax-H3-Character-Swap-LoRA",
+      "revision": "96ea3407b230b6f7df71c58c70e31df96bd7e533",
+      "file": "h3_character_swap_v1.5.safetensors",
+      "local_dir": "loras",
+      "size": 155110792,
+      "sha256": "8f2c3c3eba161df8d0c6099598b4730f641f5ce01e04cd16d2427cff8a35218f"
     }
   ]
 }

@@ -1,17 +1,45 @@
 <!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Welcome · Comfy Commander</title>
+  <title>{{ 'Settings' if settings_mode else 'Welcome' }} · Comfy Commander</title>
   <link rel="icon" href="/static/community-mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=1"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
-  <script defer src="/static/community.js?v=2"></script><script defer src="/static/agent-widget.js?v=1"></script>
-</head><body data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
-  <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p><h1>Your ComfyUI.<br><em>Ready to command.</em></h1></div><a href="/">Skip to studio →</a></header>
-  <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>
+  <link rel="stylesheet" href="/static/community.css?v=2"><link rel="stylesheet" href="/static/community-models.css?v=2"><link rel="stylesheet" href="/static/wizard.css?v=local-model-setup-20261029"><link rel="stylesheet" href="/static/agent-widget.css?v=1">
+  <script defer src="/static/community.js?v=compatible-llm-20261029"></script><script defer src="/static/local-models.js?v=managed-windows-runtime-20261029"></script><script defer src="/static/llm-ui.js?v=1"></script><script defer src="/static/agent-widget.js?v=compatible-llm-20261029"></script>
+</head><body data-settings-mode="{{ 'true' if settings_mode else 'false' }}" data-first-run="{{ 'true' if not status.password else 'false' }}"><main class="setup-shell">
+  <header class="setup-hero"><span class="mark">CC</span><div><p>COMFY COMMANDER <span>BY TENSOR MASTER</span></p>{% if settings_mode %}<h1>Settings</h1><p>Manage your studio whenever you need.</p>{% else %}<h1>Set up your workspace</h1><p>Connect compute, models and private access.</p>{% endif %}</div><a href="/">Back to Generate →</a></header>
+  {% if settings_mode %}
+  <nav class="wizard-rail settings-tabs" aria-label="Settings sections">{% for index, label in [(7,'Defaults'),(1,'Compute'),(9,'Rentals'),(2,'Connections'),(4,'Phone access'),(5,'Profiles'),(8,'Models & LoRAs'),(0,'Password & sign in')] %}<button type="button" data-step-target="{{ index }}">{{ label }}</button>{% endfor %}</nav>
+  <p class="settings-intro">Changes are saved only when you use each section's update or confirmation button. <a href="/setup">Revisit guided onboarding →</a></p>
+  {% else %}  <nav class="wizard-rail" aria-label="Setup progress">{% for number, label in [('01','Protect'),('02','Compute'),('03','Connect'),('04','Create'),('05','Phone'),('06','Profiles'),('07','Launch')] %}<button type="button" data-step-target="{{ loop.index0 }}"><span>{{ number }}</span>{{ label }}</button>{% endfor %}</nav>{% endif %}
 
   <section class="wizard-panel active" data-wizard-step="0">
-    <div class="welcome-copy"><span class="step">01 · YOUR CONTROL PLANE</span><h2>One password.<br>No mystery setup.</h2><p>Comfy Commander coordinates your own ComfyUI workers. It does not bundle provider keys, rent hardware, or upload a model until you ask.</p><div class="trust-grid"><span>✓ Credentials stay on this machine</span><span>✓ Empty-state safe</span><span>✓ Agent-readable API</span><span>✓ Open-source profiles</span></div></div>
+    <div class="welcome-copy"><span class="step">01 · YOUR CONTROL PLANE</span><h2>Protect your workspace</h2><p>Comfy Commander coordinates your own ComfyUI workers. It does not bundle provider keys, rent hardware, or upload a model until you ask.</p><div class="trust-grid"><span>✓ Credentials stay on this machine</span><span>✓ Empty-state safe</span><span>✓ Agent-readable API</span><span>✓ Open-source profiles</span></div></div>
     <div class="intro-card compact"><div><span class="step">LOCAL ADMIN</span><h2>{{ 'Unlock settings' if status.password else 'Protect your studio' }}</h2><p>{{ 'Sign in to manage credentials and models.' if status.password else 'Create the password used for rentals and configuration. First-time creation is localhost-only.' }}</p></div><form id="password-form" data-mode="{{ 'login' if status.password else 'setup' }}"><label>Admin password<input id="password" type="password" minlength="12" autocomplete="{{ 'current-password' if status.password else 'new-password' }}" required></label>{% if not status.password %}<label>Confirm password<input id="password-confirm" type="password" minlength="12" autocomplete="new-password" required></label>{% endif %}<button type="submit">{{ 'Sign in' if status.password else 'Create password' }}</button></form></div>
+    {% if status.password %}
+    <div class="management-card password-management">
+      <h3>Password &amp; recovery</h3>
+      <div class="launch-actions"><button type="button" id="show-password-change">Change password</button><button type="button" id="show-password-recovery" class="quiet">Forgot password?</button></div>
+      <form id="change-password-form" hidden>
+        <p>Sign in above first. Changing your password signs out every device.</p>
+        <label>Current password<input name="current_password" type="password" autocomplete="current-password" maxlength="256" required></label>
+        <label>New password<input name="new_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+        <label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+        <button type="submit">Update password &amp; sign out devices</button><p role="status"></p>
+      </form>
+      <section id="password-recovery-panel" hidden>
+        <h3>Recover a forgotten password</h3>
+        <p id="password-recovery-help" role="status">Checking recovery options…</p>
+        <form id="recover-password-form" hidden>
+          <p>On this computer, open the recovery key file below and paste its contents. Keep this key private; never send it in chat.</p>
+          <pre id="recovery-key-file"></pre>
+          <label>Recovery key<input name="recovery_key" type="password" autocomplete="off" maxlength="256" required></label>
+          <label>New password<input name="new_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+          <label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+          <button type="submit">Reset password &amp; sign out devices</button><p role="status"></p>
+        </form>
+      </section>
+    </div>
+    {% endif %}
     <div class="wizard-actions"><span>Password setup changes no cloud resources.</span><button type="button" data-next disabled id="protect-next">Continue →</button></div>
   </section>
 
@@ -19,13 +47,45 @@
     <div class="section-title"><span class="step">02</span><div><h2>Where should work run?</h2><p>Start with what you have. Change this later without rebuilding the app.</p></div></div>
     <div class="compute-grid"><button class="choice-card" type="button" data-compute="local"><span>ON THIS MACHINE</span><h3>Local GPU</h3><p>16 GB VRAM is a tested, usable floor. No rental key required.</p></button><button class="choice-card recommended" type="button" data-compute="hybrid"><span>RECOMMENDED</span><h3>Local + cloud</h3><p>Stay local for ordinary work; rent more headroom only for unusually heavy jobs.</p></button><button class="choice-card" type="button" data-compute="cloud"><span>NO LOCAL GPU NEEDED</span><h3>Cloud only</h3><p>Run curated workers through RunPod or Vast.ai.</p></button></div>
     <div id="diagnostics" class="diagnostics"><span>Checking this machine…</span></div><p class="hardware-note"><strong>Tested:</strong> RTX 5070 Ti and RTX 5080-class 16 GB GPUs with 32 GB system RAM. Long 15–20 second, ~1.2 MP video jobs may exhaust memory; reduce duration/resolution or choose a roomier GPU.</p>
+    <section class="management-card" id="local-model-setup">
+      <div><h3>Local GPU · ComfyUI &amp; models</h3><p>Choose a profile and install only what you need. Shared files are reused; nothing downloads automatically.</p></div>
+      <p>After restarting the GPU computer: open <strong>Start Commander.cmd</strong>, start your configured ComfyUI, then open <strong>Start Local Worker.cmd</strong> from the Commander folder. Confirm its heartbeat in Dispatcher → Workers.</p>
+      <p>No ComfyUI yet? <a href="https://comfy.org/download/" target="_blank" rel="noopener">Download ComfyUI</a>, install it on this GPU computer, then select its folder below. This path is on the Commander host, not your phone.</p>
+      <details id="managed-runtime-setup"><summary>Prepare / update a separate Commander runtime on Windows</summary><p>Recommended for a fresh GPU machine. Install the reviewed ComfyUI core, patches, custom nodes and Python packages in a separate folder. Personal ComfyUI installations are never overwritten. Use the profile selector below to choose a base profile first. Model downloads remain separate.</p><label>Managed runtime destination<input id="runtime-destination" placeholder="Choose an empty folder on the GPU host"></label><button type="button" class="quiet" id="review-local-runtime">Check &amp; review installation</button><div id="local-runtime-plan" hidden><pre id="local-runtime-plan-text"></pre><label class="check"><input type="checkbox" id="runtime-consent">I reviewed these sources and dependency changes. Install/update only this managed runtime.</label><button type="button" id="apply-local-runtime" disabled>Install / update managed runtime</button></div><p id="local-runtime-status" role="status">Sign in to review local runtime setup.</p></details>
+      <form id="local-model-form"><label>ComfyUI folder<input id="local-comfy-root" placeholder="Full path to ComfyUI (main.py + custom_nodes)" required></label><label>What do you want to run?<select id="local-model-set"><option value="h3">H3 References · starter</option></select></label><button type="submit">Check &amp; remember folder</button></form>
+      <p id="local-model-status" role="status">Sign in to check your local installation.</p>
+      <div id="local-model-report" hidden>
+        <p id="local-model-summary"></p><div id="local-model-files"></div>
+        <label class="check"><input id="local-download-consent" type="checkbox">Download the missing files listed above to these folders. I have reviewed their sizes and repository licenses.</label>
+        <button id="download-local-models" type="button" disabled>Download missing models</button>
+        <details><summary>Custom nodes &amp; worker connection</summary><p id="local-node-status"></p><div id="local-node-list"></div><p>Install the listed nodes and their dependencies using the pinned runtime sources. Some need Commander's bundled patches or overlays; a plain upstream clone may not be enough. Restart ComfyUI and check again. Commander does not install or execute custom-node code from this page.</p><p>Models alone do not connect a worker. Follow the <a href="https://github.com/mexxmillion/tensor-master-community/blob/main/docs/local-setup.md" target="_blank" rel="noopener">local setup guide</a> for runtime preparation and worker connection. Keep ComfyUI on localhost.</p></details>
+      </div>
+    </section>
     <div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next id="compute-next" disabled>Continue →</button></div>
+    <div class="management-card" id="cloud-ssh-setup"><h3>Cloud access</h3><p>Connecting your Vast.ai or RunPod key automatically prepares a private worker SSH key on the computer running Commander. Both providers share it. Vast.ai also registers only the public half with your account. Nothing is rented during setup.</p><p id="cloud-ssh-status" role="status">Sign in to check cloud access.</p><button id="create-cloud-ssh" type="button" hidden>Prepare cloud access</button><button id="refresh-cloud-ssh" type="button" class="quiet">Check cloud access</button><details><summary>Advanced SSH setup</summary><pre id="cloud-ssh-command"></pre><p>A dedicated private key stays on this controller. Existing keys are never overwritten. To use another pair, set <code>CLOUD_SSH_KEY_FILE</code> in the private <code>.env</code> and restart Commander. OpenSSH Client must be installed on this computer.</p></details></div>
   </section>
 
   <section class="wizard-panel" data-wizard-step="2">
-    <div class="section-title"><span class="step">03</span><div><h2>Connect only what you use</h2><p>Hugging Face unlocks gated/private models; OpenRouter powers the optional copilot.</p></div></div>
-    <div class="service-grid">{% for id, label, detail, optional in [('runpod','RunPod','Launch compatible Secure Cloud GPU workers.','Choose RunPod or Vast'),('vast','Vast.ai','Search and rent compatible marketplace workers.','Choose RunPod or Vast'),('huggingface','Hugging Face','Download gated models and your private model repositories.','Recommended for SAM3'),('openrouter','OpenRouter','Optional agent planning with Gemini or DeepSeek.','Optional')] %}<article class="service-card" data-service="{{ id }}"><div><span class="status {{ 'connected' if status[id] else '' }}">{{ 'Connected' if status[id] else optional }}</span><h3>{{ label }}</h3><p>{{ detail }}</p></div><form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste new credential" autocomplete="off"><button type="submit">{{ 'Replace & test' if status[id] else 'Connect & test' }}</button></form><button class="quiet remove-secret" type="button" {% if not status[id] %}hidden{% endif %}>Remove local credential</button><small role="status"></small></article>{% endfor %}</div>
-    <p class="callout">Skip credentials and explore first. Connecting a provider never starts a rental.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Continue →</button></div>
+    <div class="section-title"><span class="step">03</span><div><h2>Connect only what you use</h2><p>Hugging Face unlocks gated/private models; optional AI supports prompt tools and workflow review.</p></div></div>
+    <div class="service-grid">{% for id, label, detail, optional in [('runpod','RunPod','Launch compatible Secure Cloud GPU workers.','Choose RunPod or Vast'),('vast','Vast.ai','Search and rent compatible marketplace workers.','Choose RunPod or Vast'),('huggingface','Hugging Face','Download gated models and your private model repositories.','Recommended for SAM3'),('openrouter','OpenRouter','Optional prompt enhancement and workflow review.','Optional')] %}<article class="service-card" data-service="{{ id }}"><div><span class="status {{ 'connected' if status[id] else '' }}">{{ 'Connected' if status[id] else optional }}</span><h3>{{ label }}</h3><p>{{ detail }}</p></div><form class="secret-form"><input type="password" aria-label="{{ label }} credential" placeholder="Paste new credential" autocomplete="off"><button type="submit">{% if id in ['vast','runpod'] %}{{ 'Reconnect & prepare' if status[id] else 'Connect & prepare' }}{% else %}{{ 'Replace & test' if status[id] else 'Connect & test' }}{% endif %}</button></form>{% if id in ['vast','runpod'] %}<button class="quiet verify-cloud-connection" type="button" {% if not status[id] %}hidden{% endif %}>Validate &amp; prepare cloud access</button>{% endif %}<button class="quiet remove-secret" type="button" {% if not status[id] %}hidden{% endif %}>Remove local credential</button><small role="status"></small></article>{% endfor %}</div>
+    <section class="management-card" id="llm-configuration"><h3>Optional AI · OpenRouter or compatible endpoint</h3><p>Rendering and workflow validation work without an LLM. Prompt enhancement, Creative Engine ideas and optional workflow review use the provider selected here.</p>
+      <form id="llm-settings-form"><div class="preferences-grid">
+        <label>Provider<select name="provider"><option value="openrouter">OpenRouter · existing key</option><option value="compatible">OpenAI-compatible endpoint · separate key</option></select></label>
+        <label data-llm-custom>API base URL<input name="base_url" type="url" placeholder="http://127.0.0.1:1234/v1"></label>
+        <label data-llm-custom>Model ID<input name="model" placeholder="Exact ID returned by /models" maxlength="200"></label>
+        <label data-llm-custom>API key<input id="compatible-llm-key" type="password" autocomplete="off" placeholder="Blank keeps the key saved for this endpoint"></label>
+        <label>Actual context window · tokens<input name="context_window" type="number" min="32768" max="2097152" required></label>
+        <label>Maximum output · tokens<input name="max_output_tokens" type="number" min="1200" max="65536" required></label>
+        <label data-llm-custom>JSON response format<select name="json_format"><option value="json_object">JSON object</option><option value="json_schema">Strict JSON schema</option><option value="prompt">Prompt-only JSON · no response_format parameter</option></select></label>
+        <label data-llm-custom>Output token parameter<select name="token_parameter"><option value="max_tokens">max_tokens · most compatible servers</option><option value="max_completion_tokens">max_completion_tokens</option></select></label>
+        <label class="check" data-llm-custom><input name="temperature" type="checkbox">Endpoint accepts temperature</label>
+        <label class="check" data-llm-custom><input name="vision" type="checkbox">Vision · image_url input</label>
+        <label class="check" data-llm-custom><input name="audio" type="checkbox">Audio · input_audio WAV</label>
+        <label class="check" data-llm-custom><input name="video" type="checkbox">Native video · video_url extension</label>
+      </div><p>Use at least a 32k context window; 128k is recommended for workflows and media. Enter the context actually configured on the server, which may be lower than the model's advertised maximum. Creative batches can need up to 20,400 output tokens. These are Commander sizing recommendations, not universal model limits.</p><p>H3 enhancement with image references and Creative Engine image references require vision. H3 video/audio references additionally require the checked native media formats; ordinary OpenAI-compatible servers often do not accept video_url. Qwen rewriting and workflow review are text-only. Workflow review and Creative Engine need reliable JSON output. Unsupported media is blocked before transmission.</p><p>Prompts and supported references go to the chosen endpoint when you request AI assistance. OpenRouter and compatible-endpoint keys are separate and never forwarded to each other's endpoint. HTTP is allowed only on localhost; remote endpoints require valid HTTPS. Validation checks /models, not a paid completion or vision test.</p>
+      <div class="launch-actions"><button type="button" id="validate-llm" class="quiet">Validate only</button><button type="submit">Validate &amp; save AI configuration</button><button type="button" id="remove-compatible-llm-key" class="quiet">Remove compatible-endpoint key</button></div><p id="llm-status" role="status">Sign in to configure AI.</p></form>
+    </section>
+    <p class="callout">Skip credentials and explore first. Connecting Vast.ai or RunPod also prepares the shared SSH key on this controller and registers its public half with Vast when needed. It never starts a rental.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Continue →</button></div>
   </section>
 
   <section class="wizard-panel" data-wizard-step="3">
@@ -34,12 +94,81 @@
     <div class="replacement-card compact"><div><span class="step">FEATURED</span><h2>Character replacement</h2><p>Qwen references → reviewed SAM3 target mask → H3 Ref2VA → visual QC.</p></div><ol><li>Keep identity and wardrobe consistent.</li><li>Track only the performer being replaced.</li><li>Preserve choreography and continuous audio.</li></ol></div><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Review setup →</button></div>
   </section>
 
-  <section class="wizard-panel launch-panel" data-wizard-step="4">
-    <span class="step">05 · READY WHEN YOU ARE</span><h2>Your command center is staged.</h2><p>Open with zero workers and zero cloud spend. Add a worker now, or let the copilot/Codex guide the next step.</p><div id="readiness" class="readiness-grid"></div><div class="launch-actions"><a class="primary-link" href="/">Open Comfy Commander →</a><button type="button" class="quiet" id="manage-models">Manage LoRAs</button></div><p class="note">For phone access, install Tailscale on both devices and privately serve <code>http://127.0.0.1:8000</code>. Use Serve—not Telnet and not public Funnel.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" class="quiet" data-step-target="1">Change setup</button></div>
+  <section id="phone-access" class="wizard-panel" data-wizard-step="4" aria-labelledby="phone-access-title">
+    <div class="section-title"><span class="step">05</span><div><h2 id="phone-access-title">Open Commander on your phone</h2><p>Install Tailscale on your phone and sign into the same tailnet as this computer.</p></div></div>
+    <ol><li>Install Tailscale on this computer and your phone.</li><li>Sign into the same tailnet on both devices.</li><li>Enable private phone access, copy the full URL below, and open it on your phone.</li></ol>
+    <a class="primary-link" href="https://tailscale.com/download" target="_blank" rel="noopener">Download Tailscale ↗</a>
+    <p id="phone-access-status" role="status">Checking private access…</p>
+    <label>Private phone URL<input id="phone-access-url" type="url" readonly aria-label="Private phone URL"></label>
+    <div class="launch-actions"><button type="button" id="enable-phone-access" hidden>Enable private phone access</button><button type="button" id="copy-phone-url" disabled>Copy URL</button><button type="button" id="refresh-phone-access" class="quiet">Refresh phone access</button></div>
+    <div id="phone-access-setup" hidden><p>Click Enable private phone access, or run this command on the controller computer and refresh:</p><pre><code>.\tools\share_phone.ps1</code></pre></div>
+    <p class="note">Open the copied HTTPS address in your phone browser and sign in with your Commander password. Keep Tailscale connected on both devices.</p>
+    <div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Continue / skip for now →</button></div>
   </section>
 
-  <section id="lora-management" class="advanced-section" hidden><div class="section-title"><span class="step">MODELS</span><div><h2>Your LoRAs, on your workers</h2><p>Upload a local LoRA to Hugging Face or register an existing immutable repository file.</p></div></div><p class="callout">Nothing uploads automatically. Running workers are unchanged.</p>
+  <section id="profile-import" class="wizard-panel" data-wizard-step="5">
+    <div class="section-title"><span class="step">06</span><div><h2>Import an H3 rental profile</h2><p>Inspect a local ComfyUI API JSON workflow without executing it.</p></div></div>
+    <label>Profile name<input id="import-profile-name" maxlength="80" placeholder="My H3 setup"></label>
+    <label>Base rental runtime<select id="import-profile-base"><option value="ref2v-int8">H3 Ref2V</option><option value="ref2v-singularity">Singularity Ref2VA</option><option value="fasth3-omni">FastH3 Omni</option><option value="flf2v-int8">H3 First / Last Frame</option></select></label>
+    <label>Local workflow JSON<input id="import-profile-file" type="file" accept="application/json,.json"></label>
+    <div class="launch-actions"><button id="inspect-profile" type="button">Validate JSON &amp; dependencies</button><button id="save-import-profile" type="button" disabled>Save profile</button></div>
+    <pre id="import-profile-report" role="status">Choose an API-format JSON file to inspect.</pre>
+    <div id="import-model-help" hidden><p>Do you need to upload the missing models to Hugging Face, or do they already have licensed sources?</p><button id="import-open-models" type="button" class="quiet">Open model upload / registration</button><p>LoRA uploads are performed by you in Setup. Other model types and custom nodes stay unresolved until their deployment sources are reviewed.</p></div>
+    <div id="import-saved-profiles"></div>
+    <div id="profile-agent"></div>
+    <div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" data-next>Continue / skip for now →</button></div>
+  </section>
+
+  <section class="wizard-panel launch-panel" data-wizard-step="6">
+    <span class="step">07 · READY WHEN YOU ARE</span><h2>Your command center is staged.</h2><p>Open with zero workers and zero cloud spend. Add a worker when ready; setup starts no paid capacity.</p><div id="readiness" class="readiness-grid"></div><div class="launch-actions"><a class="primary-link" href="/">Open Comfy Commander →</a><button type="button" class="quiet" id="manage-models">Manage LoRAs</button><button type="button" class="quiet" data-step-target="5">Import H3 profile</button><button type="button" class="quiet" data-step-target="4">Phone access</button></div><p class="note">For phone access, install Tailscale on both devices and privately serve <code>http://127.0.0.1:8000</code>. Use Serve—not Telnet and not public Funnel.</p><div class="wizard-actions"><button type="button" class="quiet" data-back>← Back</button><button type="button" class="quiet" data-step-target="1">Change setup</button></div>
+  </section>
+
+
+
+  {% if settings_mode %}
+  <section class="wizard-panel" data-wizard-step="7">
+    <div class="section-title"><div><h2>Generation defaults</h2><p>Saved on this server for desktop and phone. Existing drafts and job settings are preserved.</p></div></div>
+    <form id="preferences-form" class="management-card">
+      <div class="preferences-grid">
+        <p>H3 Video uses text and optional references. Choose Replacement in Generate for one image and one video.</p>
+        <label>Quality preset<select name="quality_preset"><option value="preview">Preview · 4-step Turbo</option><option value="normal">Normal · 8-step Turbo</option><option value="hq">HQ · 20 steps, no Turbo</option></select></label>
+        <label>Format<select name="aspect_ratio">{% for ratio in ['9:16','16:9','1:1','2:3','3:4','3:2','4:3'] %}<option>{{ ratio }}</option>{% endfor %}</select></label>
+        <label>Resolution · megapixels<input name="megapixels" type="number" min="0.1" max="16" step="any" required></label>
+        <label>Length · seconds<input name="duration" type="number" min="0.25" max="60" step="0.25" required></label>
+        <label>Render target<select name="render_target"><option value="any">Any online worker · local + cloud</option><option value="local">Local worker pool</option><option value="cloud">Cloud worker pool · existing worker</option></select></label>
+        <label>Bitrate / encoding<select name="video_encoding"><option value="standard">Standard · smaller files</option><option value="high">High · more detail</option></select></label>
+        <label>Sparse attention<select name="sparse_attention"><option value="auto">Model default · Ref2V off / Omni VSA</option><option value="off">Off</option><option>SLA</option><option>VSA</option><option>SOL</option></select></label>
+        <label>Replacement video preparation<select name="replacement_video_preparation"><option value="target">Resize to output · 24 fps · requested length</option><option value="original">Original reference resolution · slower</option></select></label>
+        <label>Replacement quality<select name="replacement_quality"><option value="preview">Preview · 4 steps</option><option value="normal">Normal · 8 steps</option><option value="hq">HQ · 20 steps</option></select></label>
+        <label class="wide-field">Replacement default prompt<textarea name="replacement_prompt" rows="3" minlength="1" maxlength="4000" required></textarea></label>
+        <label class="check"><input name="ai_enhance" type="checkbox">AI enhance prompt</label>
+        <label class="check"><input name="audio_lock" type="checkbox">Audio lock / lip-sync</label>
+      </div>
+      <div class="launch-actions"><button type="button" class="quiet" id="validate-preferences">Validate</button><button type="submit">Validate &amp; save defaults</button><button type="button" id="reload-preferences" class="quiet">Reload saved values</button></div>
+      <p id="preferences-status" role="status">Sign in to load and update defaults.</p>
+      <a class="primary-link" href="/?defaults=1#generator">Start a fresh form with saved defaults →</a>
+    </form>
+  </section>
+  {% endif %}
+  <section id="lora-management" class="advanced-section{% if settings_mode %} wizard-panel{% endif %}" {% if settings_mode %}data-wizard-step="8"{% else %}hidden{% endif %}><div class="section-title"><span class="step">MODELS</span><div><h2>Your LoRAs, on your workers</h2><p>Upload a local LoRA to Hugging Face or register an existing immutable repository file.</p></div></div><p class="callout">Nothing uploads automatically. Running workers are unchanged.</p>
     <div class="lora-grid"><form id="lora-upload-form" class="management-card"><div><span class="status">LOCAL → HUGGING FACE</span><h3>Upload a local LoRA</h3></div><label>Local LoRA<select id="local-lora" required><option value="">Loading local LoRAs…</option></select></label><label>Hugging Face repository<input id="upload-repo" placeholder="your-name/your-model" required></label><label>Path in repository<input id="upload-path" placeholder="my-style.safetensors" required></label><label class="check"><input id="upload-private" type="checkbox" checked> Keep repository private</label><fieldset data-profile-picker="upload"><legend>Use with profiles</legend></fieldset><button type="submit">Upload & pin for workers</button><small role="status"></small></form><form id="lora-register-form" class="management-card"><div><span class="status">EXISTING HUGGING FACE FILE</span><h3>Register an existing LoRA</h3></div><label>Repository<input id="register-repo" placeholder="owner/model" required></label><label>Commit SHA<input id="register-revision" minlength="40" maxlength="64" placeholder="40-character commit SHA" required></label><label>File in repository<input id="register-file" placeholder="my-style.safetensors" required></label><fieldset data-profile-picker="register"><legend>Use with profiles</legend></fieldset><button type="submit">Verify & register</button><small role="status"></small></form></div><div class="registered-card"><div><h3>Registered for future workers</h3><p>Unregistering deletes no files.</p></div><div id="registered-loras" class="registered-list"><p>Sign in to load your LoRAs.</p></div></div>
   </section>
+  {% if settings_mode %}
+  <section class="wizard-panel" data-wizard-step="9" id="rental-settings">
+    <div class="section-title"><div><h2>Rental limits</h2><p>Filter offers and set limits for new rentals. Existing rentals retain their confirmed limits.</p></div></div>
+    <form id="rental-preferences-form" class="management-card">
+      <div class="preferences-grid">
+        <label>GPU class<select name="gpu_class"><option value="any">Any supported GPU</option><option value="consumer">Consumer · RTX 4090 / 5090</option><option value="professional">Professional · RTX 6000</option><option value="4090">RTX 4090</option><option value="5090">RTX 5090</option><option value="6000">RTX 6000 family</option></select></label>
+        <label>Minimum VRAM · GB<input name="minimum_vram_gb" type="number" min="16" max="192" required></label>
+        <label>Maximum duration · minutes<input name="max_minutes" type="number" min="15" max="180" required></label>
+        <label>Maximum GPU price · USD / hour<input name="max_price_per_hour" type="number" min="0.01" step="0.001" required></label>
+        <label>Total launch budget · USD<input name="max_budget_usd" type="number" min="0.01" max="10000" step="0.01" required></label>
+      </div>
+      <p id="rental-hard-caps" class="note"></p><p class="note">Budget filtering estimates GPU time plus model download charges across the selected quantity. Provider adjustments and storage can add charges. Installation fleet, price and lifetime safeguards still apply.</p>
+      <div class="launch-actions"><button type="button" class="quiet" id="validate-rental-preferences">Validate</button><button type="submit">Validate &amp; save limits</button><button type="button" class="quiet" id="reload-rental-preferences">Reload saved values</button></div>
+      <p id="rental-preferences-status" role="status">Sign in to load rental limits.</p>
+    </form>
+  </section>
+  {% endif %}
   <footer class="source-notice">Comfy Commander Community · <a href="https://github.com/mexxmillion/tensor-master-community" target="_blank" rel="noopener">Corresponding source</a> · <a href="https://github.com/mexxmillion/tensor-master-community/blob/main/LICENSE" target="_blank" rel="noopener">AGPL-3.0-or-later</a></footer>
 </main></body></html>

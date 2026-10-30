@@ -23,6 +23,7 @@ def now() -> datetime:
 # Flip HIGHER_PRIORITY_FIRST to False to make 1 the top priority instead.
 # Ties always fall back to submission order (oldest job first).
 DEFAULT_PRIORITY = 100
+DEFAULT_MIN_VRAM_GB = 16
 MIN_PRIORITY = 1
 MAX_PRIORITY = 10000
 HIGHER_PRIORITY_FIRST = True
@@ -199,7 +200,7 @@ class QueueStore:
         graph: dict,
         workflow: str = "pocket-h3",
         policy: str = "local",
-        min_vram_gb: int = 24,
+        min_vram_gb: int = DEFAULT_MIN_VRAM_GB,
         architecture: str = "any",
         runtime: str = "pocket-h3-local",
         recipe: dict | None = None,
@@ -406,7 +407,7 @@ class QueueStore:
                 'pocket-voice-local',
             } or (route["policy"] == "any" and runtime in {
                 "pocket-h3-cloud-ref2v-int8", "pocket-h3-cloud-qwen-image-21",
-                'pocket-h3-cloud-ref2v-singularity', 'pocket-h3-cloud-fasth3-omni',
+                'pocket-h3-cloud-ref2v-singularity', 'pocket-h3-cloud-fasth3-omni', 'pocket-h3-cloud-flf2v-int8',
             })
         return runtime == worker.runtime
 
@@ -528,6 +529,23 @@ class QueueStore:
                 return None
             return {"status": task.status, "worker_id": task.worker_id,
                     "prompt_id": task.prompt_id}
+
+    def task_wait_reason(self, task_id: str) -> str | None:
+        """Explain queue waiting using the same compatibility rules as pickup."""
+        with Session(self.engine) as db:
+            task = db.get(TaskRow, task_id)
+            job = db.get(JobRow, task.job_id) if task else None
+            if task is None or job is None or task.status != "queued":
+                return None
+            route = self._route(task, job)
+            compatible = [worker for worker in db.scalars(select(WorkerRow))
+                          if (now() - datetime.fromisoformat(worker.last_seen)).total_seconds() < 60
+                          and self._worker_matches(worker, route)]
+            if not compatible:
+                return "no_worker"
+            if not any(worker.status in {"ready", "busy"} for worker in compatible):
+                return "workers_paused"
+            return "queue"
 
     def claim(self, worker_id: str) -> dict | None:
         with Session(self.engine) as db, db.begin():
@@ -684,13 +702,13 @@ class QueueStore:
             }
 
     def output_records(self, limit: int = 1000) -> list[dict]:
-        """Return durable completed artifacts with their reusable Pocket recipes."""
+        """Return gallery jobs immediately, retaining identity through completion."""
         with Session(self.engine) as db:
             rows = db.execute(
                 select(TaskRow, JobRow, JobRecipeRow)
                 .join(JobRow, TaskRow.job_id == JobRow.id)
                 .outerjoin(JobRecipeRow, JobRecipeRow.job_id == JobRow.id)
-                .where(TaskRow.status == "completed", TaskRow.artifact_json.is_not(None))
+                .where((TaskRow.status != "completed") | TaskRow.artifact_json.is_not(None))
                 .order_by(JobRow.created_at.desc(), TaskRow.number)
                 .limit(limit)
             ).all()
@@ -703,7 +721,10 @@ class QueueStore:
                     "job_name": job.name,
                     "worker_id": task.worker_id,
                     "created_at": job.created_at,
-                    "artifact": json.loads(task.artifact_json),
+                    "artifact": json.loads(task.artifact_json) if task.status == "completed" and task.artifact_json else {},
+                    "status": task.status,
+                    "progress": task.progress,
+                    "message": task.message,
                     "recipe": json.loads(saved.recipe_json) if saved else None,
                 }
                 for task, job, saved in rows

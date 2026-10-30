@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import shutil
@@ -30,7 +31,7 @@ from .config import get_settings
 from .credential_paths import openrouter_secret_file, provider_secret, provider_secret_source
 from .identity import authority
 from .providers.runpod import RunpodProvider
-from .rental_ui import require_admin
+from .rental_ui import _local_setup, require_admin
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
@@ -48,7 +49,7 @@ COMMUNITY_PROFILES = {
     "ref2v-int8": {
         "name": "MiniMax H3 Ref2V Community",
         "kind": "video",
-        "summary": "Public INT8 Ref2VA with native, Turbo and ACC recipe choices.",
+        "summary": "Public INT8 Ref2VA with LightX2V 4/8-step Ref2V LoRAs by default, with optional sparse attention.",
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
         "gated": False,
@@ -64,10 +65,16 @@ COMMUNITY_PROFILES = {
     "fasth3-omni": {
         "name": "FastH3 Omni",
         "kind": "video",
-        "summary": "Fast H3 Omni INT8, native eight-step profile.",
+        "summary": "Fast H3 Omni INT8, native eight-step profile with VSA sparse attention by default.",
         "minimum_vram_gb": 16,
         "recommended_vram_gb": 24,
         "gated": True,
+    },
+    "flf2v-int8": {
+        "name": "H3 First / Last Frame",
+        "kind": "video",
+        "summary": "Public FL2VA INT8 for first-frame, last-frame, both-keyframe or text-only video with matching LightX2V FL2V LoRAs.",
+        "minimum_vram_gb": 16, "recommended_vram_gb": 24, "gated": True,
     },
     "h3-character-replacement": {
         "name": "H3 Character Replacement",
@@ -159,11 +166,13 @@ def _secret_path(service: str) -> Path:
 
 
 @router.get("/setup", response_class=HTMLResponse)
+@router.get("/settings", response_class=HTMLResponse)
 async def setup_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="setup.html",
-        context={"status": setup_status(), "profiles": COMMUNITY_PROFILES},
+        context={"status": setup_status(), "profiles": COMMUNITY_PROFILES,
+                 "settings_mode": request.url.path == "/settings"},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -221,6 +230,73 @@ async def diagnostics() -> dict:
     return _local_diagnostics()
 
 
+@router.get("/api/v1/setup/phone-access")
+def setup_phone_access(request: Request) -> dict:
+    require_admin(request)
+    from .phone_access import phone_access
+    port = (request.scope.get("server") or (None, 8000))[1] or 8000
+    return phone_access(port)
+
+
+@router.get("/api/v1/setup/cloud-ssh")
+def cloud_ssh_status(request: Request) -> dict:
+    require_admin(request)
+    key = get_settings().cloud_ssh_key_file
+    # Paths and public readiness only. Private key contents never leave the host.
+    command = "ssh-keygen -t ed25519 -f '" + str(key).replace("'", "''") + "' -C comfy-commander"
+    public = Path(str(key) + ".pub")
+    return {"ready": key.is_file() and public.is_file(), "command": command,
+            "directory": str(key.parent),
+            "can_create": _local_setup(request) and not key.exists() and not public.exists()}
+
+
+class CreateCloudSSH(BaseModel):
+    confirm: Literal[True]
+
+
+def prepare_cloud_ssh() -> bool:
+    """Called only by a human-confirmed credential/setup action."""
+    from .cloud_ssh import create_cloud_key
+    key = get_settings().cloud_ssh_key_file
+    public = Path(str(key) + '.pub')
+    if key.is_file() and public.is_file():
+        return True
+    create_cloud_key(key)
+    return key.is_file() and public.is_file()
+
+
+def prepare_provider_ssh(service: str, api_key: str) -> bool:
+    ready = prepare_cloud_ssh()
+    if ready and service == 'vast':
+        from .cloud_ssh import register_vast_public_key
+        register_vast_public_key(api_key, get_settings().cloud_ssh_key_file)
+    return ready
+
+
+@router.post("/api/v1/setup/cloud-ssh")
+def create_cloud_ssh(payload: CreateCloudSSH, request: Request) -> dict:
+    require_admin(request, mutation=True)
+    if not _local_setup(request):
+        raise HTTPException(403, "Create the cloud SSH key on the host PC at http://127.0.0.1:8000/settings")
+    from .cloud_ssh import create_cloud_key
+    try:
+        create_cloud_key(get_settings().cloud_ssh_key_file)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(409, "Cloud SSH key could not be created safely. Check OpenSSH and file permissions; existing keys are never replaced.") from exc
+    return cloud_ssh_status(request)
+
+
+@router.post("/api/v1/setup/phone-access")
+def enable_setup_phone_access(request: Request) -> dict:
+    require_admin(request, mutation=True)
+    from .phone_access import enable_phone_access
+    port = (request.scope.get("server") or (None, 8000))[1] or 8000
+    try:
+        return enable_phone_access(port)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise HTTPException(409, "Private phone access could not be enabled. Sign into Tailscale and check existing Serve routes on this computer.") from exc
+
+
 @router.post("/api/v1/setup/secret")
 async def save_secret(payload: SecretSetup, request: Request) -> dict:
     require_admin(request, mutation=True)
@@ -235,7 +311,33 @@ async def save_secret(payload: SecretSetup, request: Request) -> dict:
         # of overwriting an existing Windows DPAPI credential managed by ComfyUI.
         path = get_settings().token_file.parent / "openrouter_api_key"
     _write_secret(path, key)
-    return {"ok": True, "service": payload.service, "message": message}
+    ssh_ready = None
+    if payload.service in {"vast", "runpod"}:
+        try:
+            ssh_ready = await asyncio.to_thread(prepare_provider_ssh, payload.service, key)
+        except (ValueError, OSError, RuntimeError, httpx.HTTPError, subprocess.SubprocessError):
+            ssh_ready = False
+        message += (" Cloud access prepared; the shared worker SSH key is ready." if ssh_ready else
+                    " Provider saved. Check OpenSSH Client and provider SSH-key permissions, then retry Validate & prepare cloud access in Connections.")
+    return {"ok": True, "service": payload.service, "message": message, "cloud_ssh_ready": ssh_ready}
+
+
+@router.post("/api/v1/setup/secret/{service}/verify")
+async def verify_cloud_connection(service: Literal["vast", "runpod"], payload: CreateCloudSSH, request: Request) -> dict:
+    """Human retry for connections saved before automatic worker-key setup."""
+    require_admin(request, mutation=True)
+    key = provider_secret(service, _secret_path(service))
+    if not key:
+        raise HTTPException(409, "Add this provider key first")
+    try:
+        message = await asyncio.to_thread(_test_secret, service, key)
+    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+        raise HTTPException(422, "Provider verification failed. Check the saved key in Connections.") from exc
+    try:
+        ready = await asyncio.to_thread(prepare_provider_ssh, service, key)
+    except (ValueError, OSError, RuntimeError, httpx.HTTPError, subprocess.SubprocessError) as exc:
+        raise HTTPException(409, "Provider verified, but worker SSH setup or provider registration failed. Check SSH-key API permissions and retry Validate & prepare.") from exc
+    return {"ok": True, "cloud_ssh_ready": ready, "message": message + " Cloud access prepared. No GPU rented."}
 
 
 @router.delete("/api/v1/setup/secret/{service}")
@@ -336,14 +438,14 @@ async def agent_manifest() -> dict:
 def character_replacement_recipe() -> dict:
     return {
         "id": "h3-character-replacement-v1",
-        "status": "guided",
+        "status": "one-shot-or-guided",
         "stages": [
             "Prepare scene-matched identity and wardrobe references with Qwen Image 2.1",
             "Normalize the source once and plan exclusive frame intervals",
-            "Track the intended performer with a reviewed SAM3 initial mask and SAM3_VideoTrack",
+            "Track the intended performer from the target description using SAM3_Detect and SAM3_VideoTrack",
             "Invert only the tracked target pixels and retain normal partner/background colors",
             "Use that aligned video as the H3 Ref2VA video reference",
-            "Render exact intervals, trim model padding, review motion and seams, then mux original continuous audio",
+            "Render H3 in the same job, preserve source audio with audio lock, then review motion, identity and seams",
         ],
         "default_graph_rule": "No MiniMaxH3AddGuide image nodes; the tracked target-only inverted VIDEO is the motion guide.",
         "limitations": [
@@ -357,6 +459,12 @@ def character_replacement_recipe() -> dict:
 @router.get("/api/v1/community/workflows/character-replacement")
 async def replacement_workflow() -> dict:
     return character_replacement_recipe()
+
+
+@router.get("/api/v1/community/workflows/character-swap-v15")
+async def character_swap_workflow() -> dict:
+    from .character_replacement import character_swap_profile
+    return character_swap_profile()
 
 
 @router.post("/api/v1/community/character-replacement/prepare")

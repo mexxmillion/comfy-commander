@@ -46,8 +46,9 @@ https://tensor-master.example-tailnet.ts.net
 ```
 
 Open that URL in the phone browser while the Tailscale app is connected. Sign
-in with the Tensor Master admin password. The dashboard, outputs, Setup & Models
-and studio copilot are responsive on mobile.
+in with the Commander admin password. Video, Image, Sources, Gallery,
+Dispatcher and Settings share the same responsive navigation on desktop and
+phone. Optional workflow review lives only in profile import.
 
 No inbound router/firewall port is normally required. Both devices do need
 outbound network access, and the host computer, Tensor Master and Tailscale must

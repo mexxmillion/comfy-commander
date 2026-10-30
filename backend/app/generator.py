@@ -2,6 +2,7 @@
 import asyncio
 import json
 import math
+import shutil
 import time
 from fractions import Fraction
 from functools import lru_cache
@@ -15,7 +16,7 @@ from PIL import Image, UnidentifiedImageError
 
 from .config import get_settings
 from .generator_prompt import EnhanceRequest, enhance
-from .media import AUDIO, IMAGES, VIDEOS, media_path
+from .media import AUDIO, IMAGES, VIDEOS, ffmpeg_executable, ffmpeg_metadata, media_path
 from .rental_ui import require_admin
 from .store import QueueStore
 from . import reference_preprocess as isolation
@@ -118,16 +119,26 @@ async def probe(request: Request, file: str):
                         'duration': None, 'fps': None, 'has_audio': False}
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
             raise HTTPException(422, 'Cannot decode reference image')
-    process = await asyncio.create_subprocess_exec('ffprobe', '-v', 'error', '-show_streams',
-        '-show_format', '-of', 'json', str(path), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    ffprobe = shutil.which('ffprobe')
+    command = ([ffprobe, '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)] if ffprobe else
+               [ffmpeg_executable(), '-hide_banner', '-i', str(path), '-t', '0', '-f', 'null', '-'])
     try:
-        output, _ = await asyncio.wait_for(process.communicate(), 30)
+        process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    except OSError as exc:
+        raise HTTPException(503, 'Media inspection is unavailable; check the FFmpeg installation') from exc
+    try:
+        output, errors = await asyncio.wait_for(process.communicate(), 30)
     except TimeoutError:
         process.kill()
         await process.wait()
         raise HTTPException(422, 'Reference inspection timed out')
     if process.returncode:
         raise HTTPException(422, 'Cannot decode reference media')
+    if not ffprobe:
+        try:
+            return ffmpeg_metadata(errors.decode('utf-8', errors='replace'))
+        except ValueError as exc:
+            raise HTTPException(422, 'Cannot decode reference media') from exc
     data = json.loads(output)
     video = next((item for item in data.get('streams', []) if item['codec_type'] == 'video'), None)
     return {'kind': 'video' if video else 'audio', 'width': video.get('width') if video else None,
@@ -174,6 +185,8 @@ def isolation_status(job_id: str, request: Request, store: QueueStore = STORE):
         raise HTTPException(404, 'Isolation job not found')
     task = job['tasks'][0]
     result = {'status': task['status'], 'message': task['message'], 'progress': task['progress']}
+    if task['status'] == 'queued':
+        result.update(wait_reason=store.task_wait_reason(task['id']), queue_position=task.get('rank'))
     if task['status'] == 'completed' and task.get('artifact'):
         result['reference'] = isolation.promote_artifact(get_settings().comfyui_input_dir, recipe,
                                                        task['artifact'], task['id'])

@@ -6,7 +6,8 @@ changes, LoRA uploads, node installation, or destructive queue administration.
 
 ## Local stdio setup
 
-Run `tools/first_run.ps1` once and complete the password wizard. Then point an
+Follow [installation and startup](STARTUP.md), complete the password wizard, and
+start Commander. Then point an
 MCP-capable client at the Python executable inside this clone:
 
 ```json
@@ -21,7 +22,10 @@ MCP-capable client at the Python executable inside this clone:
 }
 ```
 
-Read, analysis, profile, and preparation tools work immediately. To permit job
+Read, analysis, profile, and preparation tools work immediately against this
+installation's local database. Set the client's working directory to the clone
+and restart the MCP subprocess after changing configuration. An LLM/OpenRouter
+key is not required for these tools. To permit job
 queueing, add this environment entry to that MCP server configuration:
 
 ```json
@@ -31,6 +35,20 @@ queueing, add this environment entry to that MCP server configuration:
 The queue tool still requires the exact confirmation phrase shown in its schema.
 Submitting a job never rents a GPU. A timed-out submission must be reconciled by
 job ID before retrying.
+
+## Verify the advertised transport
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest tests/test_mcp.py tests/test_mcp_stdio.py -q
+```
+
+The stdio regression starts the real MCP subprocess with an isolated empty
+database, initializes a client session, discovers all six tools, reads status,
+profiles and the profiles resource, then verifies a submission is rejected
+without local opt-in. It creates no jobs, credentials or GPU rentals. A client
+with submission enabled still needs an authorized render and an online worker;
+transport discovery alone is not a render smoke test.
 
 ## Private Streamable HTTP
 

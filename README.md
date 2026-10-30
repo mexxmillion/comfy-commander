@@ -3,315 +3,155 @@
 [![License: AGPL v3 or later](https://img.shields.io/badge/License-AGPL_v3_or_later-663399.svg)](LICENSE)
 [![Tests](https://github.com/mexxmillion/tensor-master-community/actions/workflows/ci.yml/badge.svg)](https://github.com/mexxmillion/tensor-master-community/actions/workflows/ci.yml)
 
-**Run ComfyUI work locally or on rented GPUs from one polished web app—and let
-Codex, Claude, or another agent drive the safe parts through MCP.**
+**Create on your own GPU. Scale to a worker fleet. Control it from your phone.**
 
-Comfy Commander is a self-hosted control plane for ComfyUI. It keeps jobs,
-workers, curated model profiles, provider credentials, cost limits, and render
-receipts behind one interface that works on desktop or phone.
+Comfy Commander is a self-hosted workspace for ComfyUI image and video generation.
+One interface brings together prompts, references, a persistent gallery, the job
+queue, local workers and rented GPUs. It is an independent community project,
+not an official Comfy.org product. Tensor Master remains the execution-engine name.
 
-It is an independent community project built on ComfyUI, not an official
-Comfy.org product. The Tensor Master name remains on the execution engine and
-API internals so existing workers and integrations do not break.
+![Desktop video workspace](docs/images/generate-desktop.png)
 
-The Community Edition intentionally stays focused:
+## What it does
 
-- Qwen Image 2.1 image generation and reference editing
-- MiniMax H3 Ref2VA INT8, Singularity and FastH3 Omni profiles
-- native, public ACC and bring-your-own 4/8-step Turbo recipes
-- RunPod and Vast.ai worker launch controls with explicit cost limits
-- optional Hugging Face credentials plus pinned personal-LoRA deployment
-- a BYOK OpenRouter studio copilot with Gemini and DeepSeek Flash choices
-- a reviewed SAM3 to H3 character-replacement workflow
-- a bundled MCP server for status, workflow analysis, preparation, submission,
-  and job monitoring
+| Feature | What you get |
+|---|---|
+| **One clear workspace** | Video, Image, Sources, Gallery and Dispatcher in one persistent navigation bar; queue, running-job and worker counts stay visible. |
+| **Local and multi-GPU orchestration** | Route jobs across registered local/cloud workers by pool, VRAM, architecture and runtime profile. Scale from one GPU to a configured fleet; fleet and spending limits remain in force. |
+| **GPU rentals** | Search Vast.ai / RunPod, review an offer and selected model profile, then explicitly confirm price, budget and lifetime. Cloud-only operation needs no local ComfyUI. |
+| **Phone-ready UI** | The same responsive workspace through private Tailscale HTTPS. Setup shows the complete phone URL, including its port, with Copy. |
+| **Image and video creation** | Qwen Image 2.1; H3 References, Start/End Frames and Motion control; Ref2V INT8, Singularity and FastH3 Omni profiles. |
+| **Motion and character replacement** | One character image plus one source video; approved SAM3 tracking → target-only inversion → H3, with audio lock and retained guide/mask evidence. Optional Character Swap v1.5 LoRA is off by default. |
+| **Your media stays organized** | Controller-owned inputs, gallery/database and returned cloud outputs; full-frame thumbnails, playback, edit/rerun and traceable job/settings data. |
+| **Profile-based setup** | Check ComfyUI, nodes and models; download only the chosen model set. Windows can prepare a separate managed runtime after a source/dependency review. |
+| **Optional AI assistance** | Prompt enhancement, Creative Engine variations and workflow-import review through OpenRouter or an OpenAI-compatible endpoint, including a local LLM. AI assistance stays in prompt tools and workflow import. |
+| **MCP integration** | Read status/profiles, analyze workflows and prepare graphs from an MCP client. Job submission is separately opt-in and confirmation-gated. |
 
-Private identities, Eros, Dolores and other studio-only assets are not part of
-this repository. A user's own LoRAs can be registered at runtime without being
-committed to the project.
+The supported public scope is Qwen Image 2.1, MiniMax H3 Ref2VA, Singularity,
+FastH3 and SAM3 replacement. Model licenses apply separately. Private identities,
+credentials and model weights are not included in Git.
 
-## Run it in five minutes
+## Install once
 
-Requirements: Windows 10/11, Git, and Python 3.12. A GPU is **not** required to
-open the controller or complete onboarding.
+Requirements: Windows 10/11, Git and Python 3.12. No GPU or provider key is needed
+to open Commander. Local generation additionally needs a compatible NVIDIA GPU,
+ComfyUI runtime, custom nodes and the selected profile's models.
+
+From PowerShell:
 
 ```powershell
 git clone https://github.com/mexxmillion/tensor-master-community.git
 cd tensor-master-community
-powershell -ExecutionPolicy Bypass -File .\tools\first_run.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m backend.service_start
 ```
 
-Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
-five screens:
+Open [Setup](http://127.0.0.1:8000/setup), create your local admin password, and
+choose **Local GPU**, **Local + cloud**, or **Cloud only**. Settings remains
+available from the gear after onboarding.
 
-1. Create the local admin password.
-2. Choose local, cloud, or hybrid compute.
-3. Connect only the providers you want.
-4. Review the Qwen Image and MiniMax H3 starter profiles.
-5. Open the command center.
+- **Local:** select your ComfyUI folder and a starter profile. Review missing
+  nodes/models and explicit downloads. For a fresh Windows machine, review the
+  separate managed-runtime option. [Local setup](docs/local-setup.md).
+- **Cloud:** connect a provider key through Connections. That human action also
+  prepares the dedicated worker SSH pair; Vast registers only its public half.
+  Choose an offer in Dispatcher → Rentals when you actually want paid capacity.
+- **Phone:** follow Setup / Settings → Phone access, install Tailscale on both
+  devices, and use the copied private HTTPS URL. [Phone guide](docs/PHONE_ACCESS.md).
+- **AI:** optional. Rendering and deterministic workflow validation do not need
+  an LLM. [Endpoint configuration and model requirements](docs/LLM.md).
 
-First run starts with **no credentials, no jobs, no workers, no private models,
-and no cloud spend**. Connecting RunPod or Vast.ai validates a credential; it
-does not rent anything. GPU rental always has a separate offer, price, lifetime,
-and confirmation step.
+Connecting services, installing software or importing JSON does **not** rent a
+GPU or submit a render. New installations start with an empty gallery and no
+bundled credentials or weights.
 
-### Tested hardware floor
+## Start again after a reboot
 
-The curated profiles are usable on tested 16 GB GPUs, including RTX 5070 Ti and
-RTX 5080-class cards with 32 GB system RAM. A 24 GB GPU is recommended for more
-headroom, not required. Long 15–20 second video jobs around 1.2 MP may exhaust
-memory on a 16 GB/32 GB machine; shorten the clip, reduce resolution, or choose
-a roomier worker.
+1. Double-click **[Start Commander.cmd](Start%20Commander.cmd)** in this folder.
+2. For local generation, start your configured ComfyUI.
+3. Double-click **[Start Local Worker.cmd](Start%20Local%20Worker.cmd)**.
+4. Confirm a fresh heartbeat in **Dispatcher → Workers**.
 
-### Docker controller demo
+The launchers reuse saved configuration and avoid duplicate processes. A worker
+retains its task checkpoint; it refuses to compete with another dispatcher
+worker using the same ComfyUI. They do not reinstall packages, migrate keys or
+launch paid capacity. [Startup, reconnection and troubleshooting](docs/STARTUP.md).
 
-Docker is an alternative controller-only launch:
+## Use it on your phone
 
-```bash
-cp .env.example .env
-docker compose up --build
-```
+<img src="docs/images/generate-phone.png" alt="The same Generate controls on a phone-width screen" width="360">
 
-The published port remains localhost-only. Do not expose it directly through a
-router.
+Keep Commander bound to localhost. Tailscale Serve supplies private HTTPS;
+ComfyUI stays behind the worker rather than being exposed to the phone. The PC,
+Commander and Tailscale must remain running. Use the full URL shown in Settings
+rather than guessing a hostname or port. [Complete phone setup](docs/PHONE_ACCESS.md).
 
-## Test it as a completely new user
+## Generation and deployment
 
-Use a fresh clone on another computer and run `tools/first_run.ps1`. Do not copy
-the first machine's `state/`, `.env`, `.venv`, or `models/` directories. This
-tests the real onboarding path:
+H3 offers **References**, **Frames** and **Motion control**. Main controls are
+duration, aspect, megapixels and quality. Preview uses the matching fast Turbo
+recipe, Normal uses the eight-step recipe, and HQ uses 20 RES-multistep steps
+without the automatic Turbo LoRA. Ref2V sparse attention is off by default;
+FastH3 Omni uses VSA by default. Advanced controls retain seed, model, LoRAs and
+SLA/VSA/SOL selection. Recipes preserve explicit selections.
 
-- hardware and local ComfyUI detection;
-- password creation and reconnect;
-- provider-key validation or environment-variable discovery;
-- empty worker/model/job states;
-- mobile access through that machine's own Tailscale hostname;
-- MCP discovery from an agent running on that machine.
+Motion control defaults to five seconds, portrait 9:16, 0.5 MP, Normal/eight
+steps and audio lock. Reference processing previews CPU preparation before Save;
+replacement graphs resize/resample the source to the requested output window.
+A completed render still needs visual/audio QC, including its SAM3 evidence.
 
-After completing the local password screen, add provider credentials only if
-you want to test those paths. Existing provider keys can be reused; they do not
-need to be regenerated.
+Tested short local workflows run on RTX 5070 Ti / RTX 5080-class **16 GB GPUs**
+with 32 GB system RAM. Longer or larger jobs can require more memory. New job
+requirements default to 16 GB; existing explicit requirements are retained.
 
-## Open it securely on a phone
+Cloud runtimes use pinned public sources and model manifests. The selected
+profile determines downloaded weights; shared models are reused. Controller
+storage is independent of ComfyUI and survives removal of a rental worker.
+User-owned LoRAs can be explicitly uploaded/registered through Models & LoRAs;
+unknown workflow dependencies remain unresolved until reviewed.
 
-The recommended personal deployment uses
-[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve). Keep the
-controller bound to `127.0.0.1:8000`; Serve adds a private HTTPS `*.ts.net` URL
-that is reachable only through the tailnet and remains subject to its access
-rules.
+## Guides and integrations
 
-Install Tailscale on the controller and phone, sign both into the same tailnet,
-create the Tensor Master password once on the host, then run:
-
-```powershell
-.\tools\share_phone.ps1
-```
-
-The equivalent direct command is:
-
-```powershell
-tailscale serve --bg --yes http://127.0.0.1:8000
-tailscale serve status
-```
-
-Open the printed HTTPS URL on the phone and sign in. Do not use Telnet, expose
-port 8000 on a router, change the Compose binding to all interfaces, or use
-Tailscale Funnel for normal private access. Funnel makes the service public.
-See [the complete phone-access and troubleshooting guide](docs/PHONE_ACCESS.md).
-
-## First-run onboarding
-
-The setup page handles four independent credentials:
-
-| Service | Why it is used | Required? |
-|---|---|---|
-| RunPod | launch compatible GPU workers | one provider is optional |
-| Vast.ai | search and launch compatible marketplace workers | one provider is optional |
-| Hugging Face | gated SAM3/model downloads and the user's own repos | recommended for character replacement |
-| OpenRouter | prompt enhancement on the controller | optional |
-
-Keys are validated server-side, written to the configured private credential
-directory with restrictive permissions, and never returned by the API. Do not
-put credentials in prompts, Comfy graphs, recipes or agent instructions.
-
-Keys may instead come from system or container environment variables. These
-are read at process startup and take precedence over private files:
-
-| Service | Environment variable |
+| Guide | Covers |
 |---|---|
-| RunPod | `RUNPOD_API_KEY` |
-| Vast.ai | `VAST_API_KEY` |
-| Hugging Face | `HF_TOKEN` (or `HUGGINGFACE_TOKEN`) |
-| OpenRouter | `OPENROUTER_API_KEY` |
+| [Daily startup](docs/STARTUP.md) | Restarting, local worker reconnection, two GPUs, configuration and logs |
+| [Local GPU setup](docs/local-setup.md) | ComfyUI, pinned nodes, model downloads and managed Windows preparation |
+| [Optional LLM](docs/LLM.md) | OpenRouter / compatible endpoints, vision, native media, JSON and context sizing |
+| [Phone access](docs/PHONE_ACCESS.md) | Tailscale, the complete URL, sign-in and troubleshooting |
+| [MCP](docs/MCP.md) | Client configuration, tool boundaries, read-only smoke test and submission opt-in |
 
-The setup API reports only `environment` or `private file` as the source; it
-never returns the value. Removing a saved local credential cannot remove a
-system-provided variable. Restart the controller after changing its environment.
+MCP uses `python -m backend.app.mcp_server` from this clone. It has no rental,
+credential-change, upload, node-installation or destructive queue tools.
+Submission requires both `COMMANDER_MCP_ALLOW_SUBMIT=1` and the exact tool
+confirmation phrase; retain the returned job ID before retrying a timeout.
 
-`/setup` remains available after onboarding as **Setup & Models**. An admin can
-replace or remove locally stored credentials there. Provider-side revocation is
-still performed at the provider.
-
-## Personal LoRAs and cloud workers
-
-Setup & Models supports two explicit routes:
-
-- choose a LoRA already under a configured ComfyUI `models/loras` directory,
-  upload it to the user's Hugging Face repository, verify the remote copy, and
-  pin it for selected community profiles;
-- register an existing Hugging Face LoRA by repository, file and immutable
-  commit SHA.
-
-The private runtime manifest stores only repository coordinates, immutable
-revision, size, SHA-256 and selected profiles. Tokens and model bytes are never
-stored in Git. New runtime bundles include the manifest; workers download the
-LoRA into their own `models/loras` tree. Already-running workers do not change.
-Unregistering removes the entry from future workers but deletes neither local
-nor Hugging Face files.
-
-For Docker, set `COMFYUI_MODELS_DIR` in `.env` to a host models directory. It is
-mounted read-only; an upload is a deliberate copy to Hugging Face, not a local
-move or deletion.
-
-## Built-in studio copilot
-
-The **AI** button opens the same copilot on the dashboard and Setup & Models.
-It uses the controller-owned OpenRouter credential and lets the user choose:
-
-- `google/gemini-3.8-flash` for a broad multimodal studio planner;
-- `deepseek/deepseek-v4.1-flash-1017` for an economical agent workflow.
-
-The model never receives the OpenRouter key. It can inspect an attached ComfyUI
-JSON workflow, identify node classes and model references, and draft a custom
-deployment profile. Unknown custom-node repositories, licenses, model sources,
-checksums and download paths stay marked `unresolved`; they are not guessed.
-
-The copilot can propose queueing the attached graph, open the correct rental
-profile, or navigate to setup. Proposals appear as confirmation cards. Graphs
-still pass the normal node/model allowlists, and rentals still require a live
-offer plus the existing price, fleet and lifetime confirmations. There is no
-shell tool and no automatic credential, LoRA-upload or rental action.
-
-## Character replacement
-
-The public workflow uses the source performance without asking H3 to infer the
-actor from image anchors:
-
-1. Prepare scene-matched identity and wardrobe references with Qwen Image.
-2. Normalize the source once and plan non-overlapping frame intervals.
-3. Upload an interval, then call
-   `POST /api/v1/community/character-replacement/prepare` with its
-   `h3_mobile/...` filename and a precise description of the performer.
-4. Submit the returned graph to `POST /api/v1/jobs`.
-5. Visually review both the SAM3 mask and target-only inverted guide. Check
-   ownership at occlusions, limbs, exits, returns and nearby people.
-6. Use the accepted guide as the aligned H3 Ref2VA video reference. The default
-   path uses no `MiniMaxH3AddGuide` image nodes.
-7. Render exact intervals, trim padding, inspect expressions, choreography and
-   seams, concatenate, and mux the original continuous audio.
-
-The stop after SAM3 is intentional: a completed track is not automatically an
-accepted track. SAM3 weights require accepting their upstream license on
-Hugging Face.
-
-## Drive it with Codex, Claude, or another MCP agent
-
-The repository includes a real MCP server. After the controller is installed,
-add this local stdio server to your MCP client, replacing the path:
-
-```json
-{
-  "mcpServers": {
-    "comfy-commander": {
-      "command": "C:\\path\\to\\tensor-master-community\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "backend.app.mcp_server"],
-      "cwd": "C:\\path\\to\\tensor-master-community"
-    }
-  }
-}
-```
-
-The agent can inspect readiness and profiles, analyze untrusted workflow JSON,
-prepare the character-replacement graph, and monitor known jobs. Queue mutation
-is disabled by default. To enable it, add
-`"env": {"COMMANDER_MCP_ALLOW_SUBMIT": "1"}` to that server entry; every
-submission still requires the exact confirmation phrase exposed by the tool and
-still passes the controller's graph/model/path validation.
-
-MCP cannot rent GPUs, change credentials, upload LoRAs, install custom nodes, or
-delete queue entries in this release. Those remain authenticated human actions
-in the web UI. See [the complete MCP setup and security guide](docs/MCP.md).
-
-Repository behavior is in [AGENTS.md](AGENTS.md). A reusable operational skill
-lives in [.agents/skills/tensor-master-community/SKILL.md](.agents/skills/tensor-master-community/SKILL.md).
-An agent can discover the narrow API at:
-
-- `GET /api/v1/community/agent-manifest`
-- `GET /api/v1/community/profiles`
-- `GET /api/v1/community/workflows/character-replacement`
-- `GET /api/v1/agent/models`
-- `GET /health`
-
-The normal submission loop is: inspect profiles, prepare or supply an
-allowlisted graph, submit once, retain the returned job ID, poll that job, then
-review outputs. A timed-out submission may have succeeded, so reconcile before
-retrying. Rentals always require an authenticated human session and explicit
-price and lifetime limits.
-
-The included local CLI reads the controller credential without printing it:
+## Validation and community testing
 
 ```powershell
-python scripts/tensor_master_client.py profiles
-python scripts/tensor_master_client.py prepare-replacement --source h3_mobile/shot.mkv --target "performer in the red jacket" --output prepared.json
-python scripts/tensor_master_client.py submit job.json
-python scripts/tensor_master_client.py status job-123
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-## Architecture
+Tests cover routing, guarded APIs, profiles, media preparation, local setup and
+MCP. The stdio test initializes the real MCP subprocess, discovers tools, reads
+status/profiles/resources and confirms submission is disabled without creating
+jobs. LLM integration tests use mocked transports, not billable completions.
 
-```text
-Browser / agent
-      |
-      v
-Tensor Master (FastAPI + SQLite)
-  | queue, receipts, allowlists, credentials
-  +---- local worker ----> local ComfyUI
-  +---- rented worker ---> pinned ComfyUI + profile models
-```
+This is a community preview. Short local H3 runs and checkpoint reconnection have
+been exercised. **A real fresh Windows GPU installation and full cloud
+boot/render still need end-to-end user testing.** An authorized rental reached
+runtime preparation, then the host reboot interrupted it; the test instance was
+destroyed. Automated tests are not a substitute for driver/wheel compatibility
+checks or visual acceptance of generated media.
 
-Workers register, heartbeat, claim compatible leased tasks, submit the graph to
-their own ComfyUI API and return output receipts. Tensor Master never exposes a
-rented ComfyUI port as the product UI. Arbitrary user graphs are rejected; each
-supported workflow has an allowlist and bounded inputs.
+For a true fresh-install test, clone into a new folder without copying `.env`,
+`state/`, `.venv`, credentials, gallery data or model weights from another
+installation. Do not wipe a working installation to test a new checkout.
 
-The base runtime inventory is pinned by repository revision, size and SHA-256
-in `runtime/h3/models.lock.json`. User entries live in the private
-`state/community-loras.json` manifest and use the same immutable fields. The
-public profile list is intentionally smaller than the production studio.
+## Project and license
 
-## Development
-
-```powershell
-$env:TEMP="$PWD\.test-tmp"
-$env:TMP=$env:TEMP
-.\.venv\Scripts\python.exe -m pytest --basetemp .test-tmp\pytest -q
-```
-
-Never run production experiments by weakening a ComfyUI node allowlist or by
-replacing a secure launcher. Rendering, renting GPUs and posting competition
-entries are separate explicit actions.
-
-## License, commercial use and upstream terms
-
-Comfy Commander Community code is **AGPL-3.0-or-later**; see
-[LICENSE](LICENSE) and [LICENSING.md](LICENSING.md). You may use it commercially
-under the AGPL, but modified network services and distributed derivatives must
-provide their corresponding source under the AGPL. Organizations that want to
-build a proprietary or closed-source product should contact the copyright
-holder about a separate commercial license.
-
-The AGPL covers this project's original code, not its name, logo, downloaded
-models or third-party components. See [TRADEMARKS.md](TRADEMARKS.md) and
-[NOTICE.md](NOTICE.md). Models and runtime dependencies retain their own terms.
-In particular, the SAM3 checkpoint has upstream terms that each user must
-review and accept.
+Source is licensed under [AGPL-3.0-or-later](LICENSE). See [NOTICE.md](NOTICE.md) and
+[LICENSING.md](LICENSING.md) for attribution and component
+licenses. The repository's default branch blocks force pushes and deletion;
+review changes through pull requests.

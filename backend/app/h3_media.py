@@ -19,7 +19,7 @@ def h3_input_paths(graph: dict[str, dict[str, Any]]) -> set[str]:
             if not isinstance(references, list) or len(references) > 15:
                 raise ValueError("Invalid reference count")
             candidates = [ref.get("file") if isinstance(ref, dict) else None for ref in references]
-        elif node.get('class_type') == 'TMPrepareReference':
+        elif node.get('class_type') in {'TMPrepareReference', 'TMPrepareVideo'}:
             candidates = [inputs.get('source_file')]
             candidates += [inputs[key] for key in ('cached_isolation', 'cached_depth') if inputs.get(key)]
         elif node.get("class_type") == "LoadImage":

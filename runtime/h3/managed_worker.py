@@ -19,18 +19,28 @@ from vastai import VastAI
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "managed-rental.json"
 LOG = ROOT / "state" / "managed-rental.log"
-KEY = ROOT / "vast.txt"
-SSH_KEY = ROOT / "state" / "h3-vast-smoke"
-SSH_PUBLIC_KEY = Path(str(SSH_KEY) + ".pub")
 BUNDLE = ROOT / "state" / "h3-cloud-runtime.tar.gz"
 IMAGE = "pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime"
-PROFILES = {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "qwen-image-21"}
+PROFILES = {"ref2v-int8", "ref2v-singularity", "fasth3-omni", "flf2v-int8", "qwen-image-21"}
 
 
 def settings():
     sys.path.insert(0, str(ROOT))
     from backend.app.config import get_settings
     return get_settings()
+
+
+KEY = settings().vast_api_key_file
+SSH_KEY = settings().cloud_ssh_key_file
+SSH_PUBLIC_KEY = Path(str(SSH_KEY) + ".pub")
+
+
+def validate_ssh_key_files() -> None:
+    if not SSH_KEY.is_file() or not SSH_PUBLIC_KEY.is_file():
+        raise RuntimeError(
+            "Cloud worker SSH key is not configured. Open Setup & Models â†’ Compute â†’ "
+            "Cloud SSH access and create or configure your key pair. No GPU rental was started."
+        )
 
 
 def configure_state(path: str | Path) -> None:
@@ -74,9 +84,13 @@ def log(message: str) -> None:
         stream.write(line)
 
 
-def vast() -> VastAI:
+def vast_api_key() -> str:
     from backend.app.credential_paths import provider_secret
-    return VastAI(api_key=provider_secret("vast", settings().vast_api_key_file), raw=True)
+    return provider_secret("vast", settings().vast_api_key_file)
+
+
+def vast() -> VastAI:
+    return VastAI(api_key=vast_api_key(), raw=True)
 
 
 MAX_DOWNLOAD_COST_PER_GB = 0.01   # default for callers without settings; see Settings.max_download_cost_per_gb
@@ -209,7 +223,11 @@ def preflight() -> None:
         raise RuntimeError("Missing Vast API key")
     if not provider_secret("huggingface", configured.huggingface_token_file):
         raise RuntimeError("Missing Hugging Face token")
-    for path in (SSH_KEY, SSH_PUBLIC_KEY, BUNDLE):
+    validate_ssh_key_files()
+    from backend.app.cloud_ssh import vast_public_key_registered
+    if not vast_public_key_registered(vast(), SSH_PUBLIC_KEY.read_text(encoding='utf-8')):
+        raise RuntimeError('Worker SSH key is not registered with Vast. Open Settings → Connections → Vast Validate & prepare cloud access. No GPU rental was started.')
+    for path in (BUNDLE,):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
     validate_bundle_manifest(community_path=configured.community_lora_manifest)
@@ -406,7 +424,7 @@ def launch(record: dict) -> None:
         settings = get_settings()
         maximum = min(float(record["max_price_per_hour"]), settings.max_gpu_price_per_hour)
         from backend.app.rental_cost import MIN_CLOUD_VRAM_GB, VAST_GPUS
-        candidates = VastProvider(KEY.read_text(encoding="utf-8").strip()).search_offers(
+        candidates = VastProvider(vast_api_key()).search_offers(
             OfferSearch(VAST_GPUS, MIN_CLOUD_VRAM_GB, maximum, 0.98, 150,
                         # Vast ignores id= filters; narrow by the picking filters instead so the picked host is on the page
                         extra_query=(f"inet_down>={float(record.get('min_inet_down', 2000)):g} direct_port_count>=1 cuda_max_good>=13"
@@ -422,6 +440,12 @@ def launch(record: dict) -> None:
                                        profile=record["profile"],
                                        require_datacenter=not record.get("allow_non_datacenter", False),
                                        min_inet_down=float(record.get("min_inet_down", 2000)))
+        from backend.app.rental_cost import vast_estimate
+        from backend.app.rental_preferences import offer_allowed, record_preferences
+        preferences = record_preferences(record)
+        choices = [offer for offer in choices if offer_allowed(
+            {"gpu": offer.gpu_name, "vram_gb": offer.vram_gb, "price_per_hour": offer.price_per_hour,
+             **vast_estimate(offer.raw, record["profile"])}, preferences)]
         if record.get("exact_offer"):               # operator picked this host (e.g. for its bandwidth): no substitutes
             choices = [offer for offer in choices if offer.id == requested_offer_id]
         if not choices:
@@ -502,7 +526,7 @@ def launch(record: dict) -> None:
         ] + credential_files(record):
             transfer(record, path, remote_name)
         from backend.app.credential_paths import provider_secret
-        transfer_secret(record, provider_secret("huggingface", settings().huggingface_token_file), "hf_read.txt")
+        transfer_secret(record, provider_secret("huggingface", settings.huggingface_token_file), "hf_read.txt")
         run_ssh(record, "chmod 600 /workspace/hf_read.txt /workspace/tensor-master-token /workspace/tensor-pocket-token",
                 timeout=60, logfile=LOG)
         provision_prompt_key(record)

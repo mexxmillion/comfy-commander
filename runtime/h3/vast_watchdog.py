@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,7 +22,9 @@ def main() -> None:
     if not 1 <= args.minutes <= 180:
         raise ValueError("Watchdog deadline must be between 1 and 180 minutes")
     time.sleep(args.minutes * 60)
-    client = VastAI(api_key=args.key_file.read_text(encoding="utf-8").strip(), raw=True)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from backend.app.credential_paths import provider_secret
+    client = VastAI(api_key=provider_secret("vast", args.key_file), raw=True)
     destroyed = False
     for attempt in range(5):
         try:

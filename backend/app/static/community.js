@@ -1,7 +1,7 @@
 const jsonRequest = async (url, options = {}) => {
   const response = await fetch(url, {credentials: 'same-origin', headers: {'Content-Type': 'application/json', ...(options.headers || {})}, ...options});
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Request failed');
+  if (!response.ok) throw new Error(Array.isArray(data.detail) ? data.detail.map(item=>`${item.loc?.slice(1).join('.') || 'Value'}: ${item.msg}`).join('; ') : data.detail || 'Request failed');
   return data;
 };
 
@@ -16,6 +16,8 @@ const selectedProfiles = name => [...document.querySelectorAll(`input[name="${na
 
 const wizardPanels = [...document.querySelectorAll('[data-wizard-step]')];
 const railButtons = [...document.querySelectorAll('.wizard-rail [data-step-target]')];
+const settingsMode = document.body.dataset.settingsMode === 'true';
+const settingsSections={defaults:7,compute:1,connections:2,phone:4,profiles:5,models:8,rentals:9,access:0};
 let currentStep = 0;
 let computeMode = localStorage.getItem('commander-compute-mode') || '';
 let diagnostics = {};
@@ -29,8 +31,11 @@ const renderReadiness = () => {
 const showStep = index => {
   currentStep = Math.max(0, Math.min(index, wizardPanels.length - 1));
   wizardPanels.forEach((panel, i) => panel.classList.toggle('active', i === currentStep));
-  railButtons.forEach((button, i) => { button.classList.toggle('active', i === currentStep); button.classList.toggle('complete', i < currentStep); });
-  if (currentStep === 4) renderReadiness();
+  railButtons.forEach((button, i) => { button.classList.toggle('active', Number(button.dataset.stepTarget) === currentStep); button.classList.toggle('complete', !settingsMode && i < currentStep); });
+  if (currentStep === 9) void loadRentalPreferences();
+  if (currentStep === 6) renderReadiness();
+  if (currentStep === 5) void loadImportedProfiles();
+  if (currentStep === 4) void loadPhoneAccess();
   window.scrollTo({top: 0, behavior: 'smooth'});
 };
 document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', () => showStep(currentStep + 1)));
@@ -43,11 +48,13 @@ document.querySelectorAll('[data-compute]').forEach(card => {
     localStorage.setItem('commander-compute-mode', computeMode);
     document.querySelectorAll('[data-compute]').forEach(item => item.classList.toggle('selected', item === card));
     document.querySelector('#compute-next').disabled = false;
+    if (computeMode !== 'cloud') window.dispatchEvent(new Event('commander-local-setup'));
   });
 });
 if (computeMode) document.querySelector('#compute-next').disabled = false;
 fetch('/api/v1/setup/diagnostics').then(response => response.json()).then(data => {
   diagnostics = data;
+  void loadPhoneAccess();
   const gpuText = data.gpus.length ? data.gpus.map(gpu => `${gpu.name} · ${gpu.vram_gb} GB`).join(' · ') : 'No NVIDIA GPU detected';
   document.querySelector('#diagnostics').innerHTML = `<span class="${data.gpus.length ? 'good' : ''}">${escapeHtml(gpuText)}</span><span class="${data.comfyui_reachable ? 'good' : ''}">${data.comfyui_reachable ? 'ComfyUI is responding' : 'No local ComfyUI running'}</span><span class="${data.tailscale_available ? 'good' : ''}">${data.tailscale_available ? 'Tailscale available' : 'Tailscale optional'}</span>`;
 }).catch(() => { document.querySelector('#diagnostics').textContent = 'Local checks unavailable; cloud-only setup still works.'; });
@@ -66,6 +73,10 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
     button.textContent = 'Settings unlocked ✓';
     document.querySelector('#protect-next').disabled = false;
     await loadLoras();
+    await loadPhoneAccess();
+    await loadCloudSsh();
+    if(settingsMode) await loadPreferences();
+    window.dispatchEvent(new Event('commander-local-auth-ready'));
   } catch (error) {
     alert(error.message);
     button.disabled = false;
@@ -74,10 +85,11 @@ document.querySelector('#password-form')?.addEventListener('submit', async event
 
 if (document.body.dataset.firstRun === 'false') document.querySelector('#protect-next').disabled = false;
 document.querySelector('#manage-models')?.addEventListener('click', () => {
-  document.querySelectorAll('.advanced-section').forEach(section => section.hidden = false);
+  if(settingsMode) showStep(8);
+  document.querySelector('#lora-management').hidden = false;
   document.querySelector('#lora-management').scrollIntoView({behavior: 'smooth'});
 });
-showStep(0);
+showStep(settingsMode ? (settingsSections[location.hash.slice(1)] ?? 7) : 0);
 
 document.querySelectorAll('.service-card').forEach(card => {
   card.querySelector('form').addEventListener('submit', async event => {
@@ -91,11 +103,13 @@ document.querySelectorAll('.service-card').forEach(card => {
     try {
       const data = await jsonRequest('/api/v1/setup/secret', {method: 'POST', body: JSON.stringify({service: card.dataset.service, key: input.value})});
       input.value = '';
-      status.textContent = `${data.message} ✓`;
+      status.textContent = `${data.message}${data.cloud_ssh_ready===false?'':' ✓'}`;
       card.querySelector('.status').textContent = 'Connected';
       card.querySelector('.status').classList.add('connected');
       card.querySelector('.remove-secret').hidden = false;
+      const verify=card.querySelector('.verify-cloud-connection');if(verify)verify.hidden=false;
       if (card.dataset.service === 'huggingface') await loadLoras();
+      if(['vast','runpod'].includes(card.dataset.service)){await loadCloudSsh();status.classList.toggle('error',data.cloud_ssh_ready===false);}
     } catch (error) {
       status.textContent = error.message;
       status.classList.add('error');
@@ -204,3 +218,202 @@ document.querySelector('#lora-register-form')?.addEventListener('submit', async 
 });
 
 loadLoras();
+
+async function loadPhoneAccess() {
+  const section = document.querySelector('#phone-access');
+  const status = document.querySelector('#phone-access-status');
+  const input = document.querySelector('#phone-access-url');
+  const copy = document.querySelector('#copy-phone-url');
+  try {
+    const data = await jsonRequest('/api/v1/setup/phone-access');
+    section.hidden = false;
+    input.value = data.url || '';
+    document.querySelector('#enable-phone-access').hidden = !data.can_enable || !!data.url;
+    copy.disabled = !data.url;
+    document.querySelector('#phone-access-setup').hidden = data.state !== 'not_shared';
+    status.textContent = data.url ? `Ready for phone · private HTTPS port ${data.https_port}` :
+      !data.available ? 'Install Tailscale using the download button, sign in on both devices, then refresh.' :
+      data.state === 'not_shared' ? 'Tailscale is connected. Enable private sharing to get your phone URL.' :
+      data.state === 'disconnected' ? 'Open Tailscale on this computer and sign in, then refresh.' :
+      'Could not read Tailscale sharing status. Check Tailscale on this computer, then refresh.';
+  } catch {
+    section.hidden = false;
+    input.value = '';copy.disabled = true;
+    document.querySelector('#enable-phone-access').hidden = true;
+    status.textContent = 'Sign in to Commander settings to view the private phone URL.';
+  }
+}
+document.querySelector('#refresh-phone-access').addEventListener('click', loadPhoneAccess);
+document.querySelector('#copy-phone-url').addEventListener('click', async () => {
+  const input = document.querySelector('#phone-access-url');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    document.querySelector('#phone-access-status').textContent = 'URL copied. Open it on your phone with Tailscale connected.';
+  } catch {
+    input.focus();input.select();
+    document.querySelector('#phone-access-status').textContent = 'Select and copy the URL above.';
+  }
+});
+loadPhoneAccess();
+
+document.querySelector('#enable-phone-access').addEventListener('click', async event => {
+  if (!confirm('Enable private HTTPS access to this Commander through your Tailscale network? Devices allowed by your tailnet can reach the sign-in page.')) return;
+  const button = event.currentTarget;button.disabled = true;
+  try {
+    await jsonRequest('/api/v1/setup/phone-access', {method: 'POST'});
+    await loadPhoneAccess();
+  } catch (error) {
+    document.querySelector('#phone-access-status').textContent = error.message;
+  } finally { button.disabled = false; }
+});
+
+let importedWorkflow = null;
+const importPayload = () => ({name: document.querySelector('#import-profile-name').value.trim() || 'Imported H3 profile', base_profile: document.querySelector('#import-profile-base').value, workflow: importedWorkflow});
+const importReport = text => { document.querySelector('#import-profile-report').textContent = text; };
+for (const selector of ['#import-profile-name','#import-profile-base']) document.querySelector(selector).addEventListener('input', () => {document.querySelector('#save-import-profile').disabled=true;});
+document.querySelector('#import-profile-file').addEventListener('change', async event => {
+  importedWorkflow = null;window.dispatchEvent(new CustomEvent('commander:profile-workflow',{detail:null}));document.querySelector('#save-import-profile').disabled = true;
+  const file = event.target.files[0];if (!file) return;
+  if (file.size > 4000000) return importReport('Invalid: workflow must be 4 MB or smaller.');
+  try {
+    importedWorkflow = JSON.parse(await file.text());
+    if (!importedWorkflow || Array.isArray(importedWorkflow) || typeof importedWorkflow !== 'object') throw Error('Choose a workflow JSON object.');
+    importReport('JSON syntax valid. Click Validate to check the H3 graph and rental dependencies.');
+  } catch (error) { importedWorkflow=null;importReport(`Invalid JSON: ${error.message}`); }
+});
+document.querySelector('#inspect-profile').addEventListener('click', async () => {
+  if (!importedWorkflow) return importReport('Choose a valid JSON file first.');
+  document.querySelector('#save-import-profile').disabled=true;
+  try {
+    const result=await jsonRequest('/api/v1/setup/profiles/inspect',{method:'POST',body:JSON.stringify(importPayload())});
+    importReport(JSON.stringify({valid:result.valid,rental_ready:result.ready,errors:result.errors,missing_models:result.unresolved_models,model_sources:result.analysis?.profile_draft,note:result.note},null,2));
+    document.querySelector('#save-import-profile').disabled=!result.valid;
+    document.querySelector('#import-model-help').hidden=!result.unresolved_models?.length;
+    if(result.valid)window.dispatchEvent(new CustomEvent('commander:profile-workflow',{detail:importedWorkflow}));
+  } catch(error){importReport(error.message);}
+});
+document.querySelector('#save-import-profile').addEventListener('click',async event=>{
+  if(!importedWorkflow||!confirm('Save this reviewed H3 profile? Unresolved dependencies keep it as a draft; this does not rent a GPU or run the workflow.'))return;
+  event.currentTarget.disabled=true;
+  try{const result=await jsonRequest('/api/v1/setup/profiles',{method:'POST',body:JSON.stringify(importPayload())});importReport(result.ready?'Profile saved and available in rental profile choices.':'Draft saved. Resolve missing model sources and validate again before renting.');await loadImportedProfiles();}catch(error){importReport(error.message);}
+});
+async function loadImportedProfiles(){
+  try{const data=await jsonRequest('/api/v1/setup/profiles');const root=document.querySelector('#import-saved-profiles');root.replaceChildren();for(const profile of data.profiles){const line=document.createElement('p');line.textContent=`${profile.name} · ${profile.ready?'Rental dependencies resolved':'Draft · dependencies unresolved'}`;root.append(line);}}catch{}
+}
+document.querySelector('#import-open-models').addEventListener('click',()=>{if(settingsMode)showStep(8);const panel=document.querySelector('#lora-management');panel.hidden=false;panel.scrollIntoView({behavior:'smooth'});});
+
+async function loadCloudSsh(){
+  try {
+    const data=await jsonRequest('/api/v1/setup/cloud-ssh');
+    document.querySelector('#cloud-ssh-status').textContent=data.ready?'Cloud access ready. Your shared worker SSH key is prepared.':'Connect Vast.ai or RunPod to prepare cloud access automatically.';
+    document.querySelector('#cloud-ssh-command').textContent=data.ready?'':data.command;
+    document.querySelector('#create-cloud-ssh').hidden=!data.can_create;
+  } catch {document.querySelector('#cloud-ssh-status').textContent='Sign in to view SSH setup instructions.';}
+}
+document.querySelector('#refresh-cloud-ssh').addEventListener('click',loadCloudSsh);
+loadCloudSsh();
+
+async function loadPreferences() {
+  const form=document.querySelector('#preferences-form');
+  if(!form)return;
+  const status=document.querySelector('#preferences-status');
+  try {
+    const data=await jsonRequest('/api/v1/settings/preferences');
+    for(const [name,value] of Object.entries(data)) {
+      const input=form.elements.namedItem(name);
+      if(!input)continue;
+      if(input.type==='checkbox')input.checked=value;else input.value=name==='quality_preset'&&value===null?(data.turbo_steps===8?'normal':'preview'):value;
+    }
+    status.textContent='Saved defaults loaded. Changes apply to fresh forms; existing drafts are kept.';
+  } catch(error){status.textContent=error.message+' · Use the Sign in tab to unlock Settings.';}
+}
+async function submitPreferences(save) {
+  const form=document.querySelector('#preferences-form'),status=document.querySelector('#preferences-status');
+  if(!form.reportValidity())return;
+  const payload={};
+  for(const input of form.elements)if(input.name)payload[input.name]=input.type==='checkbox'?input.checked:['megapixels','duration','turbo_steps'].includes(input.name)?Number(input.value):input.value;
+  const buttons=[...form.querySelectorAll('button')];buttons.forEach(button=>button.disabled=true);
+  try {
+    await jsonRequest('/api/v1/settings/preferences'+(save?'':'/validate'),{method:save?'PUT':'POST',body:JSON.stringify(payload)});
+    status.textContent=save?'Defaults validated and saved on this server. Open a fresh form to use them.':'Values are valid. Nothing has been saved.';
+  } catch(error){status.textContent=typeof error.message==='string'?error.message:'Defaults could not be saved.';}
+  finally{buttons.forEach(button=>button.disabled=false);}
+}
+document.querySelector('#preferences-form')?.addEventListener('submit',event=>{event.preventDefault();void submitPreferences(true);});
+document.querySelector('#validate-preferences')?.addEventListener('click',()=>void submitPreferences(false));
+document.querySelector('#reload-preferences')?.addEventListener('click',()=>void loadPreferences());
+if(settingsMode)void loadPreferences();
+
+document.querySelector('#show-password-change')?.addEventListener('click',()=>{
+  document.querySelector('#change-password-form').hidden=false;
+  document.querySelector('#password-recovery-panel').hidden=true;
+});
+document.querySelector('#show-password-recovery')?.addEventListener('click',async()=>{
+  document.querySelector('#change-password-form').hidden=true;
+  document.querySelector('#password-recovery-panel').hidden=false;
+  const help=document.querySelector('#password-recovery-help');
+  try {
+    const data=await jsonRequest('/api/v1/cloud/password-recovery');
+    document.querySelector('#recover-password-form').hidden=!data.available;
+    document.querySelector('#recovery-key-file').textContent=data.recovery_key_file||'';
+    help.textContent=data.available?'Use the recovery key stored on this host PC. Your password and recovery key are never displayed.':'On the computer running Commander, open http://127.0.0.1:8000/settings#access and choose Forgot password. Recovery is unavailable over phone/tailnet connections.';
+  } catch(error){help.textContent=error.message;}
+});
+for(const [id,endpoint,credential] of [['change-password-form','password-change','current_password'],['recover-password-form','password-recover','recovery_key']]) {
+  document.querySelector('#'+id)?.addEventListener('submit',async event=>{
+    event.preventDefault();const form=event.currentTarget,status=form.querySelector('[role="status"]'),button=event.submitter;
+    if(form.elements.new_password.value!==form.elements.confirm_password.value){status.textContent='The new passwords do not match. Nothing changed.';return;}
+    button.disabled=true;status.textContent='Updating password…';
+    try {
+      const data=await jsonRequest('/api/v1/cloud/'+endpoint,{method:'POST',body:JSON.stringify({[credential]:form.elements[credential].value,new_password:form.elements.new_password.value})});
+      form.reset();status.textContent=data.message;
+      const signIn=document.querySelector('#password-form');signIn.reset();signIn.querySelector('button').disabled=false;signIn.querySelector('button').textContent='Sign in';
+    } catch(error){status.textContent=error.message;}
+    finally{button.disabled=false;}
+  });
+}
+
+document.querySelector('#create-cloud-ssh')?.addEventListener('click',async event=>{
+  if(!confirm('Prepare cloud access on this computer? Commander creates one private worker SSH key for Vast.ai and RunPod, restricted to this local account. No GPU is rented and existing keys are never replaced.'))return;
+  const button=event.currentTarget;button.disabled=true;
+  try{await jsonRequest('/api/v1/setup/cloud-ssh',{method:'POST',body:JSON.stringify({confirm:true})});await loadCloudSsh();}
+  catch(error){document.querySelector('#cloud-ssh-status').textContent=error.message;}
+  finally{button.disabled=false;}
+});
+
+document.querySelectorAll('.verify-cloud-connection').forEach(button=>button.addEventListener('click',async()=>{
+  const card=button.closest('.service-card'),status=card.querySelector('small[role="status"]');
+  button.disabled=true;status.textContent='Validating provider and preparing cloud access…';
+  try {
+    const data=await jsonRequest('/api/v1/setup/secret/'+card.dataset.service+'/verify',{method:'POST',body:JSON.stringify({confirm:true})});
+    status.textContent=data.message;status.classList.remove('error');await loadCloudSsh();
+  }catch(error){status.textContent=error.message;status.classList.add('error');}
+  finally{button.disabled=false;}
+}));
+
+
+async function loadRentalPreferences() {
+  const form=document.querySelector('#rental-preferences-form');
+  if(!form) return;
+  const status=document.querySelector('#rental-preferences-status');
+  try {
+    const {preferences,caps}=await jsonRequest('/api/v1/settings/rentals');
+    for(const [key,value] of Object.entries(preferences)) if(form.elements[key]) form.elements[key].value=value;
+    form.elements.max_minutes.max=caps.max_minutes;
+    form.elements.max_price_per_hour.max=caps.max_price_per_hour;
+    document.querySelector('#rental-hard-caps').textContent=`Installation caps: $${caps.max_price_per_hour}/GPU-hour · ${caps.max_minutes} minutes · ${caps.max_active_gpus} GPUs · $${caps.fleet_hourly_cap}/fleet-hour.`;
+    status.textContent='Saved rental limits loaded.';
+  } catch(error) {status.textContent=error.message;}
+}
+async function submitRentalPreferences(save) {
+  const form=document.querySelector('#rental-preferences-form'),status=document.querySelector('#rental-preferences-status');
+  if(!form.reportValidity()) return;
+  const payload=Object.fromEntries([...new FormData(form)].map(([key,value])=>[key,key==='gpu_class'?value:Number(value)]));
+  try {
+    await jsonRequest('/api/v1/settings/rentals'+(save?'':'/validate'),{method:save?'PUT':'POST',body:JSON.stringify(payload)});
+    status.textContent=save?'Rental limits saved for new rentals.':'Valid. No changes saved.';
+  } catch(error) {status.textContent=error.message;}
+}
+document.querySelector('#rental-preferences-form')?.addEventListener('submit',event=>{event.preventDefault();void submitRentalPreferences(true);});
+document.querySelector('#validate-rental-preferences')?.addEventListener('click',()=>void submitRentalPreferences(false));
+document.querySelector('#reload-rental-preferences')?.addEventListener('click',()=>void loadRentalPreferences());

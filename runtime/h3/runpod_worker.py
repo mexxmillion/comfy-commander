@@ -24,7 +24,8 @@ def preflight():
     from backend.app.credential_paths import provider_secret
     if not provider_secret("huggingface", get_settings().huggingface_token_file):
         raise RuntimeError("Missing Hugging Face token")
-    for path in (shared.SSH_KEY, Path(str(shared.SSH_KEY) + ".pub"), shared.BUNDLE,
+    shared.validate_ssh_key_files()
+    for path in (shared.BUNDLE,
                  get_settings().token_file):
         if not path.is_file():
             raise RuntimeError(f"Missing required private file: {path.name}")
@@ -82,10 +83,13 @@ def launch(record):
                          if item["id"] == record["offer_id"]), None)
         if not selected:
             raise RuntimeError("Selected Secure Cloud GPU is no longer available within the price ceiling")
+        from backend.app.rental_preferences import offer_allowed, record_preferences
+        if not offer_allowed(selected, record_preferences(record)):
+            raise RuntimeError("Selected GPU exceeds confirmed class, VRAM or budget limits")
         existing = provider.list_instances()
         # Fail closed on unknown account costs, including stopped Pods with storage charges.
         rates = [float(item["costPerHr"]) for item in existing]
-        if shared.KEY.is_file():
+        if shared.vast_api_key():
             vast_instances = shared.vast().show_instances() or []
             rates += [float(item["dph_total"]) for item in vast_instances]
         if len(rates) >= settings.max_active_gpus or sum(rates) + maximum > settings.max_total_price_per_hour:

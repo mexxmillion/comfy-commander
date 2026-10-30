@@ -28,6 +28,9 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import character_replacement, creative, krea, ltx, qwen_prompt, reference_preprocess
 from .community import router as community_router
+from .local_models import router as local_models_router
+from .local_runtime import router as local_runtime_router
+from .llm import router as llm_router
 from .community import setup_status
 from .community_loras import entries_for_profile
 from .config import get_settings
@@ -38,10 +41,14 @@ from .identity import authority
 from .job_edit import edit_setup
 from .job_spec import job_spec
 from .media import router as media_router
+from .preferences import router as preferences_router
+from .profile_import import router as profile_import_router
 from .prompt_secret import configured as prompt_secret_configured
 from .providers.base import OfferSearch
 from .providers.vast import VastProvider
 from .recipes import normalize_recipe
+from .rental_preferences import router as rental_preferences_router
+from .video_processing import router as video_processing_router
 from .rental_ui import (
     TERMINAL as TERMINAL_RENTAL_STATES,
 )
@@ -77,7 +84,14 @@ app.include_router(rental_router)
 app.include_router(generator_router)
 app.include_router(media_router)
 app.include_router(community_router)
+app.include_router(local_models_router)
+app.include_router(local_runtime_router)
+app.include_router(llm_router)
 app.include_router(studio_agent_router)
+app.include_router(profile_import_router)
+app.include_router(preferences_router)
+app.include_router(rental_preferences_router)
+app.include_router(video_processing_router)
 app.add_middleware(GalleryCompression, minimum_size=1000)
 
 
@@ -266,7 +280,7 @@ class JobSubmission(BaseModel):
     graph: dict[str, dict[str, Any]]
     recipe: dict | None = None
     policy: Literal["local", "standard", "any"] = "local"
-    min_vram_gb: int = Field(default=24, ge=1, le=192)
+    min_vram_gb: int = Field(default=16, ge=1, le=192)
     architecture: Literal["any", "ampere", "ada", "blackwell"] = "any"
     # Higher number = picked up sooner; 100 is medium, 1 is the lowest.
     priority: int = Field(default=DEFAULT_PRIORITY, ge=MIN_PRIORITY, le=MAX_PRIORITY)
@@ -512,7 +526,9 @@ def validate_rife_graph(graph: dict[str, dict[str, Any]]) -> None:
 
 def validate_pocket_graph(graph: dict[str, dict[str, Any]]) -> None:
     reference_preprocess.validate_nodes(graph)
-    if reference_preprocess.is_graph(graph):
+    if character_replacement.is_chain(graph):
+        validate_h3_graph(character_replacement.validate_chain(graph))
+    elif reference_preprocess.is_graph(graph):
         reference_preprocess.validate_graph(graph)
     elif character_replacement.is_graph(graph):
         character_replacement.validate_graph(graph)
@@ -591,6 +607,8 @@ def cloud_profile_for_graph(graph: dict[str, dict[str, Any]]) -> str:
               if node.get("class_type") == "UNETLoader"}
     if models == {"minimax_h3_ref2va_pruned_int8_convrot.safetensors"}:
         profile = "ref2v-int8"
+    elif models == {"minimax_h3_fl2va_pruned_int8_convrot.safetensors"}:
+        profile = "flf2v-int8"
     elif models == {'Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors'}:
         profile = 'ref2v-singularity'
     elif models == {'fasth3_omniref_8step_pruned_int8_convrot.safetensors'}:
@@ -663,7 +681,7 @@ async def dashboard(request: Request, store: QueueStore = STORE) -> Response:
     rental_history = [item for item in managed_rentals if item not in active_rentals]
     for rental in managed_rentals:
         rental.setdefault("estimated_cost", 0)
-        rental["ssh_command"] =(f'ssh -i "{TRIAL_DIR / "h3-vast-smoke"}" -p {rental["ssh_port"]} '
+        rental["ssh_command"] =(f'ssh -i "{settings.cloud_ssh_key_file}" -p {rental["ssh_port"]} '
                                  f'root@{rental["ssh_host"]}' if rental.get("ssh_host") else None)
     cloud_trials = cloud_trial_history()
     # Lifetime estimate: every managed rental plus the earlier benchmark trials.
@@ -730,6 +748,16 @@ async def submit_job(payload: JobSubmission, store: QueueStore = STORE) -> dict[
     """Queue a Pocket graph. Optional ``priority`` (default 100 = medium):
     a higher number is claimed sooner (1000 before 100; 1 is the lowest),
     ties run oldest first."""
+    replacement = any(node.get("class_type") == "MiniMaxH3ReferencePack"
+                      and node.get("inputs", {}).get("job_type") == "replacement"
+                      for node in payload.graph.values())
+    if replacement and not character_replacement.is_chain(payload.graph):
+        validate_h3_graph(payload.graph)
+        recipe = payload.recipe or {}
+        if recipe.get("singleFrame"):
+            raise HTTPException(422, "Replacement requires video output")
+        payload.graph = character_replacement.compose_chain(payload.graph, recipe.get("replacementTarget", "person"),
+            prepare_video=recipe.get("videoPreparation", "target") != "original")
     reference_preprocess.prepare_graph(payload.graph, get_settings().comfyui_input_dir)
     validate_pocket_graph(payload.graph)
     job_id = store.submit(
@@ -789,7 +817,7 @@ async def creative_batch_status(batch_id: str, store: QueueStore = STORE) -> dic
 
 @app.post("/api/v1/creative/{batch_id}/queue", dependencies=[POCKET_AUTH])
 async def queue_creative_batch(batch_id: str, payload: creative.Selection, store: QueueStore = STORE) -> dict:
-    return creative.queue_batch(store, batch_id, payload, validate_h3_graph)
+    return creative.queue_batch(store, batch_id, payload, validate_pocket_graph)
 
 
 @app.get("/api/v1/jobs/{job_id}", dependencies=[POCKET_AUTH])
@@ -804,7 +832,7 @@ async def job_status(job_id: str, store: QueueStore = STORE) -> dict:
 @app.get("/api/v1/outputs")
 async def completed_outputs(request: Request, store: QueueStore = STORE,
                             limit: Annotated[int, Query(ge=1, le=1000)] = 1000) -> list[dict]:
-    """Authoritative gallery feed; artifacts are already stored by Tensor Master."""
+    """Authoritative gallery feed for queued, running and finished jobs."""
     records = store.output_records(limit=limit)
     missing = {record["job_id"] for record in records if record["recipe"] is None}
     historic = creative.historic_recipe_index(store, missing)
@@ -816,9 +844,7 @@ async def completed_outputs(request: Request, store: QueueStore = STORE,
             if recipe:   # rebuilt from the graph: keep it, so the next gallery load is instant
                 store.save_recipe_if_missing(record["job_id"], recipe)
         artifact = record["artifact"]
-        if not artifact.get("filename"):
-            continue
-        if not artifact.get("url"):
+        if artifact.get("filename") and not artifact.get("url"):
             view_url = str(request.url.replace(path='/api/v1/media/file', query=''))
             artifact["url"] = view_url + "?" + urlencode({
                 "filename": artifact["filename"],
@@ -839,7 +865,11 @@ async def completed_outputs(request: Request, store: QueueStore = STORE,
             "worker_id": record["worker_id"],
             "recipe": recipe,
             "modified": modified,
-            "status": "Finished",
+            "status": {"completed": "Finished", "queued": "Queued", "running": "Running",
+                       "cancel_requested": "Cancelling", "failed": "Failed",
+                       "cancelled": "Cancelled"}.get(record["status"], record["status"]),
+            "progress": record["progress"],
+            "message": record["message"],
         })
     return results
 
@@ -1112,7 +1142,7 @@ async def operator_route_task(
     if graph is None:
         raise HTTPException(status_code=404, detail="Task not found")
     runtime = runtime_for_graph(graph, payload.pool)
-    default_vram = 24
+    default_vram = 16
     try:
         route = store.route_task(
             task_id,
