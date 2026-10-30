@@ -155,3 +155,27 @@ Without a configured token workers download anonymously and retain revision,
 size and checksum verification. Gated/private files still require an authorized
 read token and any required access approval. Cached files are verified locally.
 The public worker does not require the private mobile extension status route.
+
+
+## Provider token permissions
+
+Before pasting a token in **Setup → Connections** or **Settings → Connections**:
+
+- **RunPod:** in the console's API Keys settings, enable **GraphQL Read/Write**
+  for `api.runpod.io/graphql`. Commander creates Pods through GraphQL and uses
+  Pod read/delete access for lifecycle checks and termination. Serverless
+  endpoint permissions are separate; endpoint-only or read-only access is
+  insufficient. If creation reports `UNAUTHORIZED` while reads work, review
+  these scopes. Check the provider console before retrying an uncertain creation.
+  [RunPod permission guide](https://www.runpod.io/blog/scoped-api-keys-runpod).
+- **Hugging Face downloads:** public, ungated models need no token. Gated/private
+  models need read access plus any required model access approval.
+- **Hugging Face LoRA/model uploads:** the token needs **write access to the
+  destination repository**, and the account must be allowed to write there.
+  Prefer a fine-grained token scoped to that repository; organization policy
+  may also require approval. Read-only tokens cannot upload.
+  [HF token guide](https://huggingface.co/docs/hub/security-tokens).
+
+Connection checks perform read-only validation. They do not prove permission to
+create a paid Pod or upload a file, and do not perform either operation as a test.
+Keep tokens in the setup form, never in workflow graphs, screenshots or Git.

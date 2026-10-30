@@ -85,6 +85,9 @@ and the existing Tailscale Serve route must match the controller being recorded.
    connect its worker. If an existing runtime or cached weights are reused, label
    that reuse; it is not a blank-machine installation test.
 4. **Connections:** provider keys are needed only for the chosen rental service.
+   RunPod needs GraphQL Read/Write and Pod lifecycle access; read-only connection
+   checks do not prove creation permission. HF LoRA/model uploads need write access
+   to the destination repository. See [token permissions](STARTUP.md#provider-token-permissions).
    Public, ungated weights support anonymous download. Gated/private models need
    an authorized HF token and access approval. AI prompt tools/Creative Engine
    need an optional configured LLM; basic rendering does not.
