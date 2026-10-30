@@ -45,7 +45,10 @@ After a reboot, double-click **Start Commander.cmd** in the project folder.
 It reuses the existing environment, settings and credentials, checks whether
 the server is already running, and opens Generate. No dependency reinstall,
 rental or render is started. ComfyUI and workers start separately. For a status
-check, run `"Start Commander.cmd" --status`.
+check, run `.\.venv\Scripts\python.exe -m backend.service_start --status`.
+To reconnect your GPU, start the configured ComfyUI and double-click
+**Start Local Worker.cmd**. It targets this local controller, preserves task
+checkpoints, and refuses to start alongside a competing dispatcher worker.
 
 Open [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup), then follow the
 seven screens:
@@ -54,6 +57,9 @@ seven screens:
 2. Choose local, cloud, or hybrid compute. Local choices open a ComfyUI, model
    and custom-node checklist. Pick a starter profile and explicitly download
    missing pinned weights into its models folders; see the [local setup guide](docs/local-setup.md).
+   Windows users can also review and prepare an isolated Commander runtime
+   with the pinned core, custom nodes, patches and Python dependencies. This is
+   an explicit installation action, separate from model downloads or rendering.
 3. Connect only the providers you want.
 4. Review the Qwen Image and MiniMax H3 starter profiles.
 5. Connect your phone through Tailscale, or skip for now.

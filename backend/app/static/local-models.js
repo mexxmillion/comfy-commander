@@ -4,6 +4,7 @@
   const form = $('#local-model-form');
   if (!form) return;
   let inventory = null, selection = null, timer = null, busy = false, checkVersion = 0;
+  let runtimePlan = null, runtimeTimer = null;
   const status = message => { $('#local-model-status').textContent = message; };
   const payload = () => ({root: $('#local-comfy-root').value.trim(), model_set: $('#local-model-set').value});
   const enable = () => {
@@ -57,6 +58,7 @@
       const select = $('#local-model-set'); select.replaceChildren();
       for (const item of data.sets) { const option = document.createElement('option'); option.value=item.id; option.textContent=item.label; select.append(option); }
       select.value = data.model_set;
+      void loadRuntime();
       if (data.download.status === 'downloading') { clearTimeout(timer); await poll(); }
       else if (data.root) await check();
       else status('Select your ComfyUI folder to check models and custom nodes. If it is not installed, use Download ComfyUI above.');
@@ -73,5 +75,40 @@
   });
   window.addEventListener('commander-local-setup',()=>{ $('#local-model-setup').scrollIntoView({behavior:'smooth',block:'start'});void load(); });
   window.addEventListener('commander-local-auth-ready',()=>void load());
+  function clearPlan() {runtimePlan=null;$('#local-runtime-plan').hidden=true;$('#runtime-consent').checked=false;$('#apply-local-runtime').disabled=true;}
+  async function loadRuntime() {
+    try {
+      const data=await jsonRequest('/api/v1/setup/local-runtime');
+      $('#managed-runtime-setup').hidden=!data.supported;
+      if(!$('#runtime-destination').value)$('#runtime-destination').value=data.default_destination;
+      const operation=data.operation;
+      $('#local-runtime-status').textContent=operation.phase||'Review first. No software installs until you confirm.';
+      $('#review-local-runtime').disabled=operation.status==='preparing';
+      if(operation.status==='preparing') {$('#apply-local-runtime').disabled=true;clearTimeout(runtimeTimer);runtimeTimer=setTimeout(loadRuntime,2000);}
+      if(operation.status==='prepared' && $('#local-comfy-root').value!==operation.destination) {
+        $('#local-comfy-root').value=operation.destination;
+        $('#local-model-set').value=operation.model_set;
+        await check();
+      }
+    }catch(error){$('#local-runtime-status').textContent=error.message;}
+  }
+  $('#runtime-destination').addEventListener('input',clearPlan);
+  $('#local-model-set').addEventListener('change',clearPlan);
+  $('#runtime-consent').addEventListener('change',()=>{$('#apply-local-runtime').disabled=!runtimePlan||!$('#runtime-consent').checked;});
+  $('#review-local-runtime').addEventListener('click',async()=>{
+    clearPlan();
+    try {
+      runtimePlan=await jsonRequest('/api/v1/setup/local-runtime/plan',{method:'POST',body:JSON.stringify({destination:$('#runtime-destination').value,model_set:$('#local-model-set').value})});
+      $('#local-runtime-plan-text').textContent=runtimePlan.notice+'\n\nDestination: '+runtimePlan.destination+'\n\n'+runtimePlan.components.map(item=>`${item.name} · ${item.revision}\n${item.url}`).join('\n')+'\n\nPython packages:\n'+Object.entries(runtimePlan.packages).map(([name,version])=>`${name}==${version}`).join('\n');
+      $('#local-runtime-plan').hidden=false;
+      $('#local-runtime-status').textContent='Review the plan and confirm to install. Nothing changed.';
+    }catch(error){$('#local-runtime-status').textContent=error.message;}
+  });
+  $('#apply-local-runtime').addEventListener('click',async()=>{
+    if(!runtimePlan||!$('#runtime-consent').checked)return;
+    $('#apply-local-runtime').disabled=true;
+    try {await jsonRequest('/api/v1/setup/local-runtime/apply',{method:'POST',body:JSON.stringify({destination:runtimePlan.destination,model_set:runtimePlan.model_set,confirmation:runtimePlan.confirmation})});clearPlan();await loadRuntime();}
+    catch(error){$('#local-runtime-status').textContent=error.message;}
+  });
   void load();
 })();

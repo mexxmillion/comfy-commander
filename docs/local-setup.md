@@ -6,6 +6,19 @@ starts a download, GPU rental or render.
 
 1. If needed, install [ComfyUI](https://comfy.org/download/) on the GPU computer.
    Commander is the controller; it does not include a local ComfyUI runtime.
+   Alternatively, expand **Prepare / update a separate Commander runtime on
+   Windows**. Choose an empty destination and a base profile, review the pinned
+   core/node/Python plan, then explicitly confirm installation. This downloads
+   several GB of software into an isolated environment. It never overwrites a
+   personal ComfyUI installation or starts a worker/render/rental. Repairs are
+   allowed only in a folder marked as Commander-managed; changed source files
+   are backed up under `source-backups`, and model/input/output data are retained.
+   Stop that managed ComfyUI before repairing it. Source backups do not roll back
+   Python package changes. After software preparation, download the profile's
+   model set, double-click `Start ComfyUI.cmd` in that runtime folder, then recheck
+   loaded nodes and connect a worker. Do not treat software installation as a
+   successful render test. Driver or Windows wheel incompatibilities may still
+   require manual attention.
 2. Sign in to Commander and select the full ComfyUI folder containing `main.py`
    and `custom_nodes`. A portable parent containing `ComfyUI` also works.
    Enter the host's path even when accessing setup from a phone.
@@ -54,6 +67,16 @@ Restart the controller after changing these settings. Selecting a model-download
 folder in setup does not silently reconfigure an already running worker.
 
 From the activated Commander environment, start one local worker:
+
+For normal daily use, double-click **Start Commander.cmd**, start your configured
+ComfyUI, then double-click **Start Local Worker.cmd**. The worker launcher always
+targets this local Commander and preserves its task checkpoint. It refuses to
+compete with a worker already connected to the same ComfyUI through a different
+dispatcher. Drain and stop that other worker before switching. Existing Windows
+startup entries for another dispatcher should be disabled or changed by their
+owner, otherwise they can reconnect it again after sign-in.
+
+For a manually configured worker instead:
 
 ```powershell
 $env:TENSOR_WORKER_ID = 'local-gpu-1'

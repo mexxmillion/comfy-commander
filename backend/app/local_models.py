@@ -33,16 +33,21 @@ LOCK = Lock()
 STATE = {"status": "idle"}
 
 
-def node_checks(root, model_set):
-    sources = json.loads(LOCK_FILE.with_name("sources.lock.json").read_text(encoding="utf-8"))
+def required_node_packages(model_set):
     names = ["viggle_turbo.py"] if model_set == "qwen" else [
         "h3_beta57.py", "comfyui-kjnodes", "comfyui-videohelpersuite",
         "comfyui-minimaxrefpack", "ComfyUI-PromptDirector", "ComfyUI-H3-NativeAudioLock",
-        "ComfyUI-TensorMaster-Preprocessors"]
+        "ComfyUI-TensorMaster-Preprocessors", "comfyui-fizgig-h3-still", "comfyui-unload-model"]
     if model_set == "sparse":
         names.append("ComfyUI-Ref2VA-VSA")
     if model_set == "isolate":
         names = ["ComfyUI-TensorMaster-Preprocessors"]
+    return names
+
+
+def node_checks(root, model_set):
+    sources = json.loads(LOCK_FILE.with_name("sources.lock.json").read_text(encoding="utf-8"))
+    names = required_node_packages(model_set)
     installed = {path.name.casefold() for path in (root / "custom_nodes").iterdir()}
     rows = []
     for name in names:
@@ -52,7 +57,11 @@ def node_checks(root, model_set):
                      "note": "Requires Commander's runtime patches / overlays" if source.get("patch") or source.get("overlay") or not source else "Install the pinned runtime version",
                      "revision": source.get("revision") or source.get("version")})
     required = {"TextEncodeQwenImage21", "ViggleTurboLora"} if model_set == "qwen" else {
-        "MiniMaxH3ReferenceToVideo", "MiniMaxH3ReferencePack", "MiniMaxH3NativeAudioLock", "ResolutionSelector"}
+        "MiniMaxH3ReferenceToVideo", "MiniMaxH3ReferencePack", "MiniMaxH3NativeAudioLock", "ResolutionSelector",
+        "BasicGuider", "BasicScheduler", "CLIPLoader", "ComfyMathExpression", "KSamplerSelect",
+        "LoraLoaderModelOnly", "MiniMaxChunkFeedForward", "MiniMaxH3SigmaShift", "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend", "PrimitiveFloat", "RandomNoise", "SamplerCustomAdvanced",
+        "UNETLoader", "UnloadAllModels", "VAEDecode", "VAEDecodeAudio", "VAELoader", "VHS_VideoCombine"}
     if model_set == "motion":
         required |= {"SAM3_Detect", "SAM3_VideoTrack", "SAM3_TrackToMask", "TMPrepareVideo"}
     if model_set == "frames":
